@@ -1,0 +1,32 @@
+@inject SettingsService Settings
+@inject NotificationService Notices
+@inject HomeAssistantClient Ha
+@inject UiState Ui
+
+<div class="card" style="max-width:720px">
+    <h2 style="margin-bottom:12px">Reminders</h2>
+    <label class="check"><input type="checkbox" @bind="n.RenewalReminders" /> Renewals — when inside each item's reminder window, the day before, and on the day</label>
+    <label class="check"><input type="checkbox" @bind="n.TaskReminders" /> Tasks — 15 minutes before a timed deadline or planned slot</label>
+    <label class="check"><input type="checkbox" @bind="n.ExpiryReminders" /> Food — once a day (from 9am) when things need using up</label>
+    <label class="check"><input type="checkbox" @bind="n.DailyDigest" /> Daily digest</label>
+    <div class="field" style="max-width:200px"><label>Digest time</label><input type="time" @bind="n.DailyDigestTime" /></div>
+    <p class="small muted">
+        Notifications always appear under the bell. @(Ha.IsConfigured && !string.IsNullOrEmpty(Settings.Current.HomeAssistant.NotifyService)
+            ? $"They're also pushed via {Settings.Current.HomeAssistant.NotifyService}."
+            : "Set a notify service under Home Assistant to get them on your phone.")
+    </p>
+    <div style="display:flex;gap:8px">
+        <button class="btn primary" @onclick="Save">Save</button>
+        <button class="btn" @onclick="SendTest">Send a test notification</button>
+    </div>
+</div>
+
+@code {
+    private NotificationSettings n = new();
+    protected override void OnInitialized() => n = Settings.Current.Notifications;
+
+    private async Task Save() => await Ui.Try(() => Settings.UpdateAsync(s => s.Notifications = n), "Saved");
+
+    private async Task SendTest() =>
+        await Ui.Try(() => Notices.NotifyAsync("LifeHub test", "If you can read this, notifications work.", NoticeLevel.Info), "Sent");
+}

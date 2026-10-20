@@ -1,0 +1,225 @@
+@inject SettingsService Settings
+@inject HomeAssistantClient Ha
+@inject HomeAssistantCatalog Catalog
+@inject HomeAssistantSetup Setup
+@inject HaListSyncService ListSync
+@inject NotificationService Notices
+@inject DataPaths Paths
+@inject UiState Ui
+
+<div class="grid cols-2" style="margin-bottom:16px">
+    <div class="card">
+        <h2 style="margin-bottom:12px">Connection</h2>
+        <label class="check"><input type="checkbox" @bind="h.Enabled" /> Enabled</label>
+        @if (Paths.IsHomeAssistantAddon)
+        {
+            <div class="alert ok small">Running as an add-on — LifeHub talks to Home Assistant directly, no token needed.</div>
+        }
+        else
+        {
+            <div class="field"><label>Home Assistant address</label><input type="url" @bind="h.Url" placeholder="http://homeassistant.local:8123" /></div>
+            <div class="field">
+                <label>Long-lived access token</label>
+                <input type="password" @bind="h.Token" placeholder="Your HA profile → Security → Create token" autocomplete="off" />
+            </div>
+        }
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn primary" @onclick="Connect" disabled="@busy">@(busy ? "Connecting…" : "Save & connect")</button>
+            @if (loaded)
+            {
+                <button class="btn" @onclick="Redetect" disabled="@busy" title="Pick people, calendars, phones, energy sensors and lists again from Home Assistant">Detect again</button>
+            }
+        </div>
+        @if (status is not null) { <div class="alert @(statusOk ? "ok" : "danger") small" style="margin-top:12px">@status</div> }
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:12px">How they work together</h2>
+        <p class="small muted" style="margin-top:0">Home Assistant keeps running your devices and automations. LifeHub reads it (who's home, rooms, energy, calendars), can switch things and run your scenes, shares the shopping list and tasks with it, and sends reminders to your phones through it.</p>
+        <label class="check"><input type="checkbox" @bind="h.PublishSensors" /> Give Home Assistant LifeHub sensors (tasks due, period, food expiring…)</label>
+        <label class="check"><input type="checkbox" @bind="h.NotifyShoppingWhenLeaving" /> When someone leaves home, send them the shopping list</label>
+        <button class="btn" @onclick="Save">Save</button>
+    </div>
+</div>
+
+@if (loaded)
+{
+    <div class="grid cols-2">
+        <div class="card">
+            <h2 style="margin-bottom:10px"><Icon Name="presence" /> People</h2>
+            @if (people.Count == 0) { <p class="small muted">No people in Home Assistant (Settings → People).</p> }
+            @foreach (var p in people)
+            {
+                <label class="check" title="@p.Id"><input type="checkbox" checked="@h.PresenceEntities.Contains(p.Id)" @onchange="e => Toggle(h.PresenceEntities, p.Id, (bool)e.Value!)" /> @p.Name <span class="muted small">· @p.StateText</span></label>
+            }
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom:10px"><Icon Name="bell" /> Phones for reminders</h2>
+            @if (phones.Count == 0) { <p class="small muted">No phones found — install the Home Assistant Companion app on your phone and sign in.</p> }
+            @foreach (var ph in phones)
+            {
+                <label class="check" title="@ph"><input type="checkbox" checked="@h.NotifyServices.Contains(ph)" @onchange="e => Toggle(h.NotifyServices, ph, (bool)e.Value!)" /> @Catalog.NotifyLabel(ph)</label>
+            }
+            @if (phones.Count > 0) { <button class="btn sm" @onclick="TestNotify">Send a test</button> }
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom:10px"><Icon Name="calendar" /> Calendars</h2>
+            <p class="small muted" style="margin-top:0">Ticked calendars set your busy times; work/free periods fill the rest.</p>
+            @foreach (var c in calendars)
+            {
+                <label class="check" title="@c.Id">
+                    <input type="checkbox" checked="@h.CalendarEntities.Contains(c.Id)" @onchange="e => Toggle(h.CalendarEntities, c.Id, (bool)e.Value!)" />
+                    @c.Name @if (HomeAssistantCatalog.CanCreateEvents(c)) { <span class="badge info">can add events</span> }
+                </label>
+            }
+            @{ var writable = calendars.Where(HomeAssistantCatalog.CanCreateEvents).ToList(); }
+            <div class="field" style="margin-top:8px">
+                <label>Put new events in</label>
+                <select @bind="h.DefaultCalendarEntity">
+                    <option value="">— don't add events —</option>
+                    @foreach (var c in writable) { <option value="@c.Id">@c.Name</option> }
+                </select>
+                @if (writable.Count == 0) { <div class="help">None of your calendars accept new events. In HA add <em>Local Calendar</em> (Settings → Devices & services → Add integration) or connect Google Calendar.</div> }
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom:10px"><Icon Name="list" /> Shared lists</h2>
+            <p class="small muted" style="margin-top:0">The same list in both apps — "Add milk to my shopping list" with Assist, or tick things off in the HA app.</p>
+            <div class="field">
+                <label>Shopping list</label>
+                <select @bind="h.ShoppingTodoEntity">
+                    <option value="">— not shared —</option>
+                    @foreach (var t in todos) { <option value="@t.Id">@t.Name</option> }
+                </select>
+            </div>
+            <div class="field">
+                <label>Tasks</label>
+                <select @bind="h.TasksTodoEntity">
+                    <option value="">— not shared —</option>
+                    @foreach (var t in todos.Where(t => t.Id != h.ShoppingTodoEntity)) { <option value="@t.Id">@t.Name</option> }
+                </select>
+                <div class="help">For tasks, create a list in HA first: Settings → Devices & services → Add integration → <em>Local To-do</em> → name it "Tasks". Then press <em>Detect again</em>.</div>
+            </div>
+            @if (ListSync.LastRunUtc is { } lastSync) { <p class="tiny muted">Last sync @Fmt.Ago(lastSync): @ListSync.LastResult</p> }
+        </div>
+
+        <div class="card span-2">
+            <h2 style="margin-bottom:10px"><Icon Name="bolt" /> Energy</h2>
+            <p class="small muted" style="margin-top:0">Shown with 24-hour charts on the Home page and dashboard.</p>
+            <div class="grid cols-2" style="gap:0 16px">
+                @foreach (var e in energySensors)
+                {
+                    <label class="check" title="@e.Id">
+                        <input type="checkbox" checked="@h.EnergySensors.Any(x => x.EntityId == e.Id)" @onchange="ev => ToggleEnergy(e, (bool)ev.Value!)" />
+                        @e.Name <span class="muted small">· @e.StateText@(string.IsNullOrEmpty(e.Area) ? "" : " · " + e.Area)</span>
+                    </label>
+                }
+            </div>
+            @if (energySensors.Count == 0) { <p class="small muted">No power or energy sensors found.</p> }
+        </div>
+    </div>
+    <div style="margin-top:16px"><button class="btn primary" @onclick="Save">Save Home Assistant settings</button></div>
+}
+
+@code {
+    private HomeAssistantSettings h = new();
+    private bool busy, statusOk, loaded;
+    private string? status;
+    private List<HaEntity> people = new(), calendars = new(), todos = new(), energySensors = new();
+    private List<string> phones = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        h = Settings.Current.HomeAssistant;
+        if (Ha.IsConfigured) await LoadAsync();
+    }
+
+    private static void Toggle(List<string> list, string id, bool on)
+    {
+        list.Remove(id);
+        if (on) list.Add(id);
+    }
+
+    private void ToggleEnergy(HaEntity e, bool on)
+    {
+        h.EnergySensors.RemoveAll(x => x.EntityId == e.Id);
+        if (on) h.EnergySensors.Add(new EnergySensor { EntityId = e.Id, Label = e.Name });
+    }
+
+    private async Task Save()
+    {
+        var copy = h;
+        await Ui.Try(() => Settings.UpdateAsync(s =>
+        {
+            // Keep fields this page doesn't edit (e.g. hidden tiles) from the latest settings.
+            copy.HiddenEntities = s.HomeAssistant.HiddenEntities;
+            copy.AutoSetupDone = s.HomeAssistant.AutoSetupDone || copy.AutoSetupDone;
+            s.HomeAssistant = copy;
+        }), "Saved");
+    }
+
+    private async Task Connect()
+    {
+        busy = true;
+        status = null;
+        try
+        {
+            h.Enabled = true;
+            await Save();
+            var msg = await Ha.PingAsync();
+            var setup = Settings.Current.HomeAssistant.AutoSetupDone ? "" : " " + await Setup.AutoConfigureAsync(redo: false);
+            h = Settings.Current.HomeAssistant;
+            statusOk = true;
+            status = $"Connected to Home Assistant.{setup}";
+            await LoadAsync();
+            _ = ListSync.SyncNowAsync();
+        }
+        catch (Exception ex)
+        {
+            statusOk = false;
+            status = Ha.IsConfigured ? ex.Message : "Enter your Home Assistant address and token first.";
+        }
+        finally { busy = false; }
+    }
+
+    private async Task Redetect()
+    {
+        busy = true;
+        try
+        {
+            status = await Setup.AutoConfigureAsync(redo: true);
+            statusOk = true;
+            h = Settings.Current.HomeAssistant;
+            await LoadAsync();
+        }
+        catch (Exception ex) { statusOk = false; status = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var all = await Catalog.GetAsync(refresh: true);
+            people = all.Where(e => e.Domain == "person").OrderBy(e => e.Name).ToList();
+            calendars = all.Where(e => e.Domain == "calendar").OrderBy(e => e.Name).ToList();
+            todos = all.Where(e => e.Domain == "todo").OrderBy(e => e.Name).ToList();
+            energySensors = all.Where(e => e.Domain == "sensor" && (e.DeviceClass is "power" or "energy" || e.Unit is "W" or "kW" or "kWh" or "Wh"))
+                .Where(e => !e.Unavailable).OrderBy(e => e.Area).ThenBy(e => e.Name).ToList();
+            try { phones = (await Ha.GetServicesAsync("notify")).Where(s => s.StartsWith("notify.mobile_app_")).ToList(); }
+            catch { phones = new(); }
+            foreach (var extra in h.NotifyServices.Where(p => !phones.Contains(p))) phones.Add(extra);
+            loaded = true;
+        }
+        catch (Exception ex) { statusOk = false; status = ex.Message; }
+    }
+
+    private async Task TestNotify()
+    {
+        await Save();
+        await Ui.Try(() => Notices.NotifyAsync("LifeHub test", "Reminders from LifeHub will look like this.", NoticeLevel.Info), "Sent");
+    }
+}

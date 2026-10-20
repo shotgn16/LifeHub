@@ -1,0 +1,249 @@
+@page "/renewals"
+@inherits LiveComponent
+@inject RenewalService Renewals
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+
+<PageTitle>Renewals · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Renewals</h1>
+        <div class="sub">Domains, subscriptions & services — dates, costs, usage and price changes</div>
+    </div>
+    <div class="actions">
+        <button class="btn primary" @onclick="New"><Icon Name="plus" Size="15" /> Add</button>
+    </div>
+</div>
+
+<div class="grid cols-4 keep-2" style="margin-bottom:16px">
+    <div class="card stat"><span class="label">Per month</span><span class="value">@Fmt.Money(monthly, currency)</span><span class="hint">@active.Count active</span></div>
+    <div class="card stat"><span class="label">Per year</span><span class="value">@Fmt.Money(monthly * 12, currency)</span><span class="hint">normalised</span></div>
+    <div class="card stat"><span class="label">Due in 30 days</span><span class="value">@dueSoon</span><span class="hint">@Fmt.Money(dueSoonCost, currency) to pay</span></div>
+    <div class="card stat"><span class="label">Price rises (90d)</span><span class="value">@increases.Count</span><span class="hint">@(increases.Count > 0 ? string.Join(", ", increases.Take(2).Select(i => i.Name)) : "none recorded")</span></div>
+</div>
+
+<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+    <div class="chips">
+        <button class="chip @(kind is null ? "on" : "")" @onclick="() => kind = null">All</button>
+        @foreach (var k in all.Select(r => r.Kind).Distinct().OrderBy(k => k))
+        {
+            <button class="chip @(kind == k ? "on" : "")" @onclick="() => kind = k">@k</button>
+        }
+    </div>
+    <label class="check" style="margin:0 0 0 auto"><input type="checkbox" @bind="showCancelled" /> Show cancelled</label>
+</div>
+
+<div class="card flush">
+    <div class="table-wrap">
+        <table class="table responsive">
+            <thead>
+                <tr><th>Name</th><th>Next</th><th class="num">Cost</th><th class="num">/ month</th><th>Usage</th><th>Change</th><th></th></tr>
+            </thead>
+            <tbody>
+                @if (Filtered.Count == 0)
+                {
+                    <tr><td colspan="7" class="empty">Nothing tracked yet — add your domains, hosting, streaming, insurance…</td></tr>
+                }
+                @foreach (var r in Filtered)
+                {
+                    var d = r.DaysUntil(today);
+                    <tr class="clickable" @onclick="() => Edit(r)">
+                        <td data-label="Name"><div class="cell">
+                            <div class="title">@r.Name</div>
+                            <div class="meta"><span>@r.Kind</span>@if (!string.IsNullOrEmpty(r.Provider)) { <span>· @r.Provider</span> }
+                                @if (r.Status != RenewalStatus.Active) { <span class="badge @(r.Status == RenewalStatus.Cancelled ? "" : "warn")">@r.Status</span> }
+                                @if (!r.AutoRenew && r.Status == RenewalStatus.Active) { <span class="badge warn">manual</span> }
+                            </div>
+                        </div></td>
+                        <td data-label="Next" class="nowrap"><div class="cell">
+                            <span class="badge @(r.Status == RenewalStatus.Cancelled ? "" : Fmt.DaysClass(d, 14))">@Fmt.RelDay(r.NextRenewal, today)</span>
+                            <div class="tiny muted">@r.NextRenewal.ToString("d MMM yyyy", Fmt.Culture)</div>
+                        </div></td>
+                        <td data-label="Cost" class="num nowrap"><div class="cell">@Fmt.Money(r.Cost, r.Currency) <span class="tiny muted">@r.CycleLabel</span></div></td>
+                        <td data-label="/ month" class="num nowrap"><div class="cell">@Fmt.Money(r.MonthlyCost, r.Currency)</div></td>
+                        <td data-label="Usage" style="min-width:120px"><div class="cell">
+                            @if (r.UsagePercent is { } pct)
+                            {
+                                <div class="progress @(pct >= 90 ? "danger" : pct >= 75 ? "warn" : "")"><span style="width:@Math.Min(100, pct).ToString("0", CultureInfo.InvariantCulture)%"></span></div>
+                                <div class="tiny muted">@r.UsageCurrent?.ToString("0.##") / @r.UsageLimit?.ToString("0.##") @r.UsageUnit</div>
+                            }
+                            else { <span class="muted">—</span> }
+                        </div></td>
+                        <td data-label="Change"><div class="cell">
+                            @if (r.LastChangePercent is { } ch)
+                            {
+                                <span class="badge @(ch > 0 ? "danger" : "ok")">@(ch > 0 ? "▲" : "▼") @Math.Abs(ch).ToString("0.#")%</span>
+                            }
+                            else { <span class="muted">—</span> }
+                        </div></td>
+                        <td data-label="" @onclick:stopPropagation="true" class="nowrap"><div class="cell">
+                            @if (r.Status != RenewalStatus.Cancelled && d <= 30)
+                            {
+                                <button class="btn sm" @onclick="() => MarkRenewed(r)" title="Paid / renewed — move to next period"><Icon Name="check" Size="14" /> Renewed</button>
+                            }
+                            @if (!string.IsNullOrEmpty(r.Url))
+                            {
+                                <a class="icon-btn" href="@r.Url" target="_blank" rel="noopener" title="Open account page"><Icon Name="link" Size="15" /></a>
+                            }
+                        </div></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<Modal Open="editing is not null" OpenChanged="v => { if (!v) editing = null; }" Title="@(isNew ? "Add renewal" : editing?.Name ?? "")" Wide="true">
+    <ChildContent>
+        @if (editing is not null)
+        {
+            <div class="form-grid three">
+                <div class="field"><label>Name</label><input type="text" @bind="editing.Name" @bind:event="oninput" placeholder="example.co.uk / Netflix" /></div>
+                <div class="field">
+                    <label>Type</label>
+                    <select @bind="editing.Kind">@foreach (var k in Enum.GetValues<RenewalKind>()) { <option value="@k">@k</option> }</select>
+                </div>
+                <div class="field"><label>Provider</label><input type="text" @bind="editing.Provider" placeholder="Registrar / company" /></div>
+
+                <div class="field"><label>Cost per period</label><input type="number" step="0.01" min="0" @bind="editing.Cost" /></div>
+                <div class="field"><label>Currency</label><input type="text" maxlength="3" @bind="editing.Currency" /></div>
+                <div class="field">
+                    <label>Billing cycle</label>
+                    <select @bind="editing.Cycle">@foreach (var c in Enum.GetValues<BillingCycle>()) { <option value="@c">@Fmt.Split(c.ToString())</option> }</select>
+                </div>
+                @if (editing.Cycle == BillingCycle.CustomDays)
+                {
+                    <div class="field"><label>Every N days</label><input type="number" min="1" @bind="editing.CycleDays" /></div>
+                }
+                <div class="field"><label>Next renewal / payment</label><input type="date" @bind="editing.NextRenewal" /></div>
+                <div class="field"><label>Remind me (days before)</label><input type="number" min="0" @bind="editing.RemindDaysBefore" /></div>
+                <div class="field">
+                    <label>Status</label>
+                    <select @bind="editing.Status">@foreach (var s in Enum.GetValues<RenewalStatus>()) { <option value="@s">@s</option> }</select>
+                </div>
+                <div class="field full">
+                    <label class="check"><input type="checkbox" @bind="editing.AutoRenew" /> Renews automatically (date rolls forward on its own)</label>
+                </div>
+
+                <div class="field"><label>Usage now</label><input type="number" step="any" @bind="editing.UsageCurrent" /></div>
+                <div class="field"><label>Usage limit</label><input type="number" step="any" @bind="editing.UsageLimit" /></div>
+                <div class="field"><label>Unit</label><input type="text" @bind="editing.UsageUnit" placeholder="GB, users, mailboxes…" /></div>
+
+                <div class="field"><label>Account / login</label><input type="text" @bind="editing.AccountLogin" /></div>
+                <div class="field"><label>Payment method</label><input type="text" @bind="editing.PaymentMethod" placeholder="Amex ••1234" /></div>
+                <div class="field"><label>Manage URL</label><input type="url" @bind="editing.Url" /></div>
+                <div class="field full"><label>Notes</label><textarea @bind="editing.Notes"></textarea></div>
+            </div>
+
+            @if (editing.PriceHistory.Count > 0)
+            {
+                <h3 style="margin:6px 0 8px">Price history</h3>
+                <table class="table">
+                    <thead><tr><th>Date</th><th class="num">Cost</th><th>Change</th><th>Note</th></tr></thead>
+                    <tbody>
+                        @{ decimal? prev = null; }
+                        @foreach (var p in editing.PriceHistory.OrderBy(p => p.Date))
+                        {
+                            var ch = prev is > 0 ? (double)((p.Cost - prev.Value) / prev.Value * 100) : (double?)null;
+                            <tr>
+                                <td>@p.Date.ToString("d MMM yyyy", Fmt.Culture)</td>
+                                <td class="num">@Fmt.Money(p.Cost, editing.Currency)</td>
+                                <td>@if (ch is { } c && c != 0) { <span class="badge @(c > 0 ? "danger" : "ok")">@(c > 0 ? "+" : "")@c.ToString("0.#")%</span> }</td>
+                                <td class="small muted">@p.Note</td>
+                            </tr>
+                            prev = p.Cost;
+                        }
+                    </tbody>
+                </table>
+                @if (editing.TotalChangePercent is { } tot && editing.PriceHistory.Count > 2)
+                {
+                    <p class="small muted" style="margin-top:6px">Total change since first recorded: <strong>@(tot > 0 ? "+" : "")@tot.ToString("0.#")%</strong></p>
+                }
+            }
+            <p class="tiny muted">Changing the cost automatically records a price point, so increases are tracked over time.</p>
+        }
+    </ChildContent>
+    <Footer>
+        @if (!isNew)
+        {
+            <button class="btn danger left" @onclick="Delete"><Icon Name="trash" Size="15" /> Delete</button>
+        }
+        <button class="btn" @onclick="() => editing = null">Cancel</button>
+        <button class="btn primary" @onclick="Save" disabled="@string.IsNullOrWhiteSpace(editing?.Name)">Save</button>
+    </Footer>
+</Modal>
+
+@code {
+    private List<Renewal> all = new();
+    private List<Renewal> active = new();
+    private List<Renewal> increases = new();
+    private decimal monthly, dueSoonCost;
+    private int dueSoon;
+    private string currency = "GBP";
+    private DateOnly today;
+    private RenewalKind? kind;
+    private bool showCancelled;
+    private Renewal? editing;
+    private bool isNew;
+
+    protected override void OnInitialized()
+    {
+        Watch(Renewals.Repo);
+        Load();
+    }
+
+    protected override void OnDataChanged() => Load();
+
+    private void Load()
+    {
+        today = Clock.Today;
+        currency = Settings.Current.General.Currency;
+        all = Renewals.Repo.All().OrderBy(r => r.Status == RenewalStatus.Cancelled).ThenBy(r => r.NextRenewal).ToList();
+        active = all.Where(r => r.Status != RenewalStatus.Cancelled).ToList();
+        monthly = active.Sum(r => r.MonthlyCost);
+        var soon = active.Where(r => r.DaysUntil(today) <= 30).ToList();
+        dueSoon = soon.Count;
+        dueSoonCost = soon.Sum(r => r.Cost);
+        increases = Renewals.RecentIncreases().ToList();
+    }
+
+    private List<Renewal> Filtered => all
+        .Where(r => showCancelled || r.Status != RenewalStatus.Cancelled)
+        .Where(r => kind is null || r.Kind == kind).ToList();
+
+    private void New()
+    {
+        isNew = true;
+        editing = new Renewal { Currency = currency, NextRenewal = today.AddMonths(1), Kind = kind ?? RenewalKind.Subscription };
+    }
+
+    private void Edit(Renewal r)
+    {
+        isNew = false;
+        editing = Renewals.Repo.Get(r.Id);
+    }
+
+    private async Task Save()
+    {
+        if (editing is null) return;
+        editing.Currency = editing.Currency.ToUpperInvariant();
+        await Ui.Try(() => Renewals.SaveAsync(editing), "Saved");
+        editing = null;
+    }
+
+    private async Task Delete()
+    {
+        if (editing is null) return;
+        await Renewals.Repo.DeleteAsync(editing.Id);
+        editing = null;
+        Ui.Show("Deleted");
+    }
+
+    private async Task MarkRenewed(Renewal r)
+    {
+        await Renewals.MarkRenewedAsync(r.Id);
+        Ui.Show($"{r.Name} renewed — next {Renewals.Repo.Get(r.Id)?.NextRenewal.ToString("d MMM yyyy", Fmt.Culture)}");
+    }
+}

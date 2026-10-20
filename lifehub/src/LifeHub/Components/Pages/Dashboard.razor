@@ -1,0 +1,300 @@
+@page "/"
+@inherits LiveComponent
+@inject TaskService Tasks
+@inject RenewalService Renewals
+@inject KitchenService Kitchen
+@inject ScheduleService Schedule
+@inject CalendarService Calendar
+@inject AiService Ai
+@inject HomeAssistantClient Ha
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+
+<PageTitle>Today · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>@Greeting</h1>
+        <div class="sub">@Clock.Now.ToString("dddd d MMMM", Fmt.Culture)@(period is not null ? $" · {period.Label}" : "")</div>
+    </div>
+    <div class="actions">
+        <a class="btn" href="schedule"><Icon Name="wand" Size="15" /> Plan my day</a>
+    </div>
+</div>
+
+@if (!Settings.Current.HomeAssistant.Enabled && !Settings.Current.Ollama.Enabled && Settings.Current.Email.Accounts.Count == 0)
+{
+    <div class="alert info"><Icon Name="sparkles" /> <div>Welcome! Connect <a href="settings?tab=ha">Home Assistant</a>, <a href="settings?tab=ai">Ollama</a> and your <a href="settings?tab=email">email</a> in Settings — everything else works straight away.</div></div>
+}
+
+<div class="grid cols-4 keep-2" style="margin-bottom:16px">
+    <a class="card stat" href="tasks" style="color:inherit;text-decoration:none">
+        <span class="label">Tasks today</span>
+        <span class="value">@dueToday.Count</span>
+        <span class="hint">@(overdue > 0 ? $"{overdue} overdue" : "none overdue")</span>
+    </a>
+    <a class="card stat" href="renewals" style="color:inherit;text-decoration:none">
+        <span class="label">Renewals ≤ 30d</span>
+        <span class="value">@renewalsSoon.Count</span>
+        <span class="hint">@Fmt.Money(monthly, currency) / month</span>
+    </a>
+    <a class="card stat" href="kitchen" style="color:inherit;text-decoration:none">
+        <span class="label">Food to use</span>
+        <span class="value">@expiring.Count</span>
+        <span class="hint">within @Settings.Current.General.ExpiryWarningDays days</span>
+    </a>
+    <a class="card stat" href="shopping" style="color:inherit;text-decoration:none">
+        <span class="label">Shopping list</span>
+        <span class="value">@shoppingCount</span>
+        <span class="hint">@(aiPending > 0 ? $"{aiPending} AI suggestion(s)" : "items to buy")</span>
+    </a>
+</div>
+
+<div class="grid cols-3">
+    <div class="card flush span-2">
+        <div class="card-head">
+            <h2><Icon Name="tasks" /> Due today & overdue</h2>
+            <a class="right small" href="tasks">All tasks</a>
+        </div>
+        <div style="padding:8px 16px 4px">
+            <div class="inline-form">
+                <input type="text" placeholder="Add a task for today…" @bind="quickTask" @bind:event="oninput" @onkeydown="QuickKey" />
+                <select @bind="quickCategory">
+                    @foreach (var c in Settings.Current.General.TaskCategories) { <option>@c</option> }
+                </select>
+                <button class="btn" @onclick="AddQuick" disabled="@string.IsNullOrWhiteSpace(quickTask)"><Icon Name="plus" Size="15" /></button>
+            </div>
+        </div>
+        <ul class="list">
+            @if (dueToday.Count == 0)
+            {
+                <li class="empty">Nothing due today. 🎉</li>
+            }
+            @foreach (var t in dueToday.Take(12))
+            {
+                <TaskRow Task="t" />
+            }
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h2><Icon Name="calendar" /> Agenda</h2>
+            <a class="right small" href="schedule">Schedule</a>
+        </div>
+        @if (periods.Count > 0)
+        {
+            <div class="period-bar" title="Today's periods">
+                @foreach (var seg in BarSegments())
+                {
+                    <span class="@seg.Css" style="width:@seg.Pct.ToString("0.##", CultureInfo.InvariantCulture)%" title="@seg.Title"></span>
+                }
+            </div>
+            <div class="tiny muted" style="display:flex;justify-content:space-between"><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+        }
+        <ul class="list" style="margin-top:8px">
+            @if (agenda.Count == 0) { <li class="empty small">No events or scheduled tasks today</li> }
+            @foreach (var a in agenda)
+            {
+                <li class="row">
+                    <span class="small muted nowrap" style="width:44px">@a.When</span>
+                    <div class="grow">
+                        <div class="title small">@a.Title</div>
+                        @if (!string.IsNullOrEmpty(a.Meta)) { <div class="meta">@a.Meta</div> }
+                    </div>
+                    <span class="badge @(a.IsTask ? "accent" : "warn")">@(a.IsTask ? "task" : "event")</span>
+                </li>
+            }
+        </ul>
+        @if (Calendar.LastErrors.Count > 0)
+        {
+            <div class="alert warn small" style="margin-top:8px">@string.Join("; ", Calendar.LastErrors)</div>
+        }
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h2><Icon Name="renewals" /> Renewals coming up</h2>
+            <a class="right small" href="renewals">All</a>
+        </div>
+        <ul class="list">
+            @if (renewalsSoon.Count == 0) { <li class="empty small">Nothing in the next 30 days</li> }
+            @foreach (var r in renewalsSoon.Take(6))
+            {
+                var d = r.DaysUntil(today);
+                <li class="row">
+                    <div class="grow">
+                        <div class="title">@r.Name</div>
+                        <div class="meta">@Fmt.Money(r.Cost, r.Currency) @r.CycleLabel @if (!r.AutoRenew) { <span class="badge warn">manual</span> }</div>
+                    </div>
+                    <span class="badge @Fmt.DaysClass(d, 7)">@Fmt.RelDay(r.NextRenewal, today)</span>
+                </li>
+            }
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h2><Icon Name="kitchen" /> Use it up</h2>
+            <a class="right small" href="kitchen">Kitchen</a>
+        </div>
+        <ul class="list">
+            @if (expiring.Count == 0) { <li class="empty small">Nothing about to go off</li> }
+            @foreach (var p in expiring.Take(6))
+            {
+                var d = p.DaysLeft(today);
+                <li class="row">
+                    <div class="grow">
+                        <div class="title">@p.Name</div>
+                        <div class="meta">@p.Location · @Fmt.Qty(p.Quantity, p.Unit)</div>
+                    </div>
+                    <span class="badge @Fmt.DaysClass(d, Settings.Current.General.ExpiryWarningDays)">@Fmt.DaysLeft(d)</span>
+                    @if (p.Location != StorageLocation.Freezer)
+                    {
+                        <button class="icon-btn" title="Freeze" @onclick="() => Kitchen.FreezeAsync(p.Id)"><Icon Name="snow" Size="16" /></button>
+                    }
+                </li>
+            }
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h2><Icon Name="home" /> Home</h2>
+            <a class="right small" href="home">Details</a>
+        </div>
+        @if (!Ha.IsConfigured)
+        {
+            <p class="muted small">Connect Home Assistant in <a href="settings?tab=ha">Settings</a> to see presence, lights and energy here.</p>
+        }
+        else if (haError is not null)
+        {
+            <div class="alert warn small">@haError</div>
+        }
+        else
+        {
+            <ul class="list">
+                @foreach (var p in presence)
+                {
+                    <li class="row"><span class="dot @(p.State == "home" ? "on" : "")"></span><div class="grow">@p.Name</div><span class="muted small">@HomePresence(p.State)</span></li>
+                }
+                <li class="row"><Icon Name="bulb" Size="16" /><div class="grow">Lights on</div><span class="small">@lightsOn</span></li>
+                @foreach (var e in energy)
+                {
+                    <li class="row"><Icon Name="bolt" Size="16" /><div class="grow">@e.Label</div><span class="small">@e.Value</span></li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    private DateOnly today;
+    private List<TaskItem> dueToday = new();
+    private int overdue, shoppingCount, aiPending;
+    private List<Renewal> renewalsSoon = new();
+    private decimal monthly;
+    private string currency = "GBP";
+    private List<PantryItem> expiring = new();
+    private CurrentPeriod? period;
+    private List<DaySegment> periods = new();
+    private List<(string When, string Title, string Meta, bool IsTask)> agenda = new();
+    private string quickTask = "", quickCategory = "";
+    private List<HaState> presence = new();
+    private int lightsOn;
+    private List<(string Label, string Value)> energy = new();
+    private string? haError;
+
+    private string Greeting => Clock.Now.Hour >= 18 ? "Good evening" : Clock.Now.Hour >= 12 ? "Good afternoon" : "Good morning";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Watch(Tasks.Repo); Watch(Renewals.Repo); Watch(Kitchen.Pantry); Watch(Kitchen.Shopping); Watch(Ai.Suggestions);
+        quickCategory = Settings.Current.General.TaskCategories.FirstOrDefault() ?? "Admin";
+        Load();
+        await LoadSlowAsync();
+    }
+
+    protected override void OnDataChanged() => Load();
+
+    private void Load()
+    {
+        today = Clock.Today;
+        dueToday = Tasks.DueToday().ToList();
+        overdue = Tasks.OverdueCount();
+        renewalsSoon = Renewals.DueWithin(Settings.Current.General.RenewalWarningDays).ToList();
+        monthly = Renewals.MonthlyTotal();
+        currency = Settings.Current.General.Currency;
+        expiring = Kitchen.ExpiringWithin(Settings.Current.General.ExpiryWarningDays).ToList();
+        shoppingCount = Kitchen.Shopping.Where(s => !s.Checked).Count;
+        aiPending = Ai.PendingCount;
+    }
+
+    private async Task LoadSlowAsync()
+    {
+        try
+        {
+            period = await Schedule.CurrentAsync();
+            var (p, events) = await Schedule.DayAsync(today);
+            periods = p;
+            var scheduled = Tasks.Open().Where(t => t.ScheduledStart is { } s && DateOnly.FromDateTime(s) == today);
+            agenda = events.Select(e => (e.AllDay ? "all day" : e.Start.ToString("HH:mm"), e.Title, e.Location, false))
+                .Concat(scheduled.Select(t => (t.ScheduledStart!.Value.ToString("HH:mm"), t.Title, t.Category, true)))
+                .OrderBy(a => a.Item1 == "all day" ? "" : a.Item1).ToList();
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+
+        if (Ha.IsConfigured)
+        {
+            try
+            {
+                var s = Settings.Current.HomeAssistant;
+                var states = await Ha.GetStatesAsync();
+                presence = states.Where(x => s.PresenceEntities.Contains(x.EntityId)).ToList();
+                if (presence.Count == 0) presence = states.Where(x => x.Domain == "person").ToList();
+                lightsOn = states.Count(x => x.Domain == "light" && x.State == "on");
+                energy = s.EnergySensors.Select(es =>
+                {
+                    var st = states.FirstOrDefault(x => x.EntityId == es.EntityId);
+                    return (string.IsNullOrEmpty(es.Label) ? st?.Name ?? es.EntityId : es.Label, st is null ? "—" : $"{st.State} {st.Unit}");
+                }).ToList();
+                haError = null;
+            }
+            catch (Exception ex) { haError = "Home Assistant: " + ex.Message; }
+        }
+    }
+
+    private static string HomePresence(string state) => state switch { "home" => "Home", "not_home" => "Away", _ => state };
+
+    private record BarSeg(string Css, double Pct, string Title);
+
+    private IEnumerable<BarSeg> BarSegments()
+    {
+        // 06:00–24:00 window
+        var start = today.ToDateTime(new TimeOnly(6, 0));
+        var total = 18 * 60.0;
+        var cursor = start;
+        foreach (var p in periods.OrderBy(p => p.Start))
+        {
+            var s = p.Start < start ? start : p.Start;
+            var e = p.End > start.AddMinutes(total) ? start.AddMinutes(total) : p.End;
+            if (e <= s) continue;
+            if (s > cursor) yield return new BarSeg("gap", (s - cursor).TotalMinutes / total * 100, "");
+            yield return new BarSeg("k-" + p.Kind, (e - s).TotalMinutes / total * 100, $"{p.Label} {p.Start:HH:mm}–{p.End:HH:mm}");
+            cursor = e;
+        }
+    }
+
+    private async Task QuickKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddQuick();
+    }
+
+    private async Task AddQuick()
+    {
+        if (string.IsNullOrWhiteSpace(quickTask)) return;
+        await Tasks.QuickAddAsync(quickTask, quickCategory, today);
+        quickTask = "";
+    }
+}

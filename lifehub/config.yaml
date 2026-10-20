@@ -1,0 +1,23 @@
+name: LifeHub
+version: "1.2.1"
+slug: lifehub
+description: Renewals, tasks, kitchen stock, schedule and a local-AI email assistant
+url: https://github.com/Shotgn16/LifeHub
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:view-dashboard-variant-outline
+panel_title: LifeHub
+homeassistant_api: true
+ports:
+  8099/tcp: null
+ports_description:
+  8099/tcp: "Direct access from other devices (optional; uses the LifeHub login)"
+backup: hot
+options: {}
+schema: {}

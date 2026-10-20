@@ -1,0 +1,90 @@
+@inject SettingsService Settings
+@inject DataPaths Paths
+@inject NavigationManager Nav
+@inject UiState Ui
+
+<div class="grid cols-2">
+    <div class="card">
+        <h2 style="margin-bottom:12px">Sign-in</h2>
+        <div class="field"><label>Username</label><input type="text" @bind="username" /></div>
+        @if (Settings.Current.Auth.IsConfigured)
+        {
+            <div class="field"><label>Current password</label><input type="password" @bind="current" autocomplete="current-password" /></div>
+        }
+        <div class="field"><label>New password (min 8)</label><input type="password" @bind="password" autocomplete="new-password" /></div>
+        <div class="field"><label>Confirm new password</label><input type="password" @bind="confirm" autocomplete="new-password" /></div>
+        <button class="btn primary" @onclick="SaveLogin">@(Settings.Current.Auth.IsConfigured ? "Change" : "Set") login</button>
+        @if (Paths.IsHomeAssistantAddon)
+        {
+            <hr />
+            <label class="check"><input type="checkbox" checked="@trustIngress" @onchange="ToggleIngress" /> Trust Home Assistant sign-in when opened from the HA sidebar (ingress)</label>
+            <p class="small muted">Direct access on the add-on's port always needs the LifeHub login@(Settings.Current.Auth.IsConfigured ? "" : " — set one above before exposing that port").</p>
+        }
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:12px">REST API</h2>
+        <p class="small muted">For Home Assistant automations, voice assistants, iOS Shortcuts etc. Send the key as <code>X-Api-Key</code> or <code>Authorization: Bearer …</code>.</p>
+        <div class="field">
+            <label>API key</label>
+            <div style="display:flex;gap:6px">
+                <input type="@(showKey ? "text" : "password")" value="@apiKey" readonly class="mono" />
+                <button class="btn" @onclick="() => showKey = !showKey">@(showKey ? "Hide" : "Show")</button>
+            </div>
+        </div>
+        <button class="btn" @onclick="Regenerate"><Icon Name="refresh" Size="15" /> @(string.IsNullOrEmpty(apiKey) ? "Create key" : "Regenerate")</button>
+        <details style="margin-top:14px">
+            <summary class="small" style="cursor:pointer">Home Assistant examples</summary>
+            <pre class="mono tiny" style="white-space:pre-wrap;background:var(--surface-2);padding:12px;border-radius:8px">@Example</pre>
+        </details>
+        <p class="tiny muted" style="margin-top:8px">Endpoints: GET /api/v1/summary · GET /api/v1/period · GET|POST /api/v1/tasks · POST /api/v1/tasks/{id}/complete · GET|POST /api/v1/shopping · POST /api/v1/capture</p>
+    </div>
+</div>
+
+@code {
+    private string username = "", current = "", password = "", confirm = "", apiKey = "";
+    private bool trustIngress, showKey;
+
+    protected override void OnInitialized()
+    {
+        var a = Settings.Current.Auth;
+        username = a.Username;
+        apiKey = a.ApiKey;
+        trustIngress = a.TrustHomeAssistantIngress;
+    }
+
+    private string BaseUrl => Nav.BaseUri.TrimEnd('/');
+
+    private string Example => ApiExamples.HomeAssistant(Paths.IsHomeAssistantAddon ? "http://<home-assistant-ip>:8099" : BaseUrl);
+
+    private async Task SaveLogin()
+    {
+        var a = Settings.Current.Auth;
+        if (a.IsConfigured && !PasswordHash.Verify(current, a.PasswordHash)) { Ui.Show("Current password is wrong", true); return; }
+        if (string.IsNullOrWhiteSpace(username)) { Ui.Show("Enter a username", true); return; }
+        if (!string.IsNullOrEmpty(password) || !a.IsConfigured)
+        {
+            if (password.Length < 8 || password != confirm) { Ui.Show("Passwords must match and be at least 8 characters", true); return; }
+        }
+        var newHash = string.IsNullOrEmpty(password) ? a.PasswordHash : PasswordHash.Create(password);
+        await Settings.UpdateAsync(s => { s.Auth.Username = username.Trim(); s.Auth.PasswordHash = newHash; });
+        current = password = confirm = "";
+        Ui.Show("Login updated");
+    }
+
+    private async Task ToggleIngress(ChangeEventArgs e)
+    {
+        trustIngress = (bool)e.Value!;
+        await Settings.UpdateAsync(s => s.Auth.TrustHomeAssistantIngress = trustIngress);
+        Ui.Show("Saved");
+    }
+
+    private async Task Regenerate()
+    {
+        apiKey = PasswordHash.NewApiKey();
+        var k = apiKey;
+        await Settings.UpdateAsync(s => s.Auth.ApiKey = k);
+        showKey = true;
+        Ui.Show("New API key created — update anything using the old one");
+    }
+}

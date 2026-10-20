@@ -1,0 +1,307 @@
+@implements IDisposable
+@inject SettingsService Settings
+@inject IEnumerable<IEmailProvider> Providers
+@inject MicrosoftGraphClient Graph
+@inject EmailSyncService Sync
+@inject UiState Ui
+
+<div class="grid cols-3" style="margin-bottom:16px">
+    <div class="card span-2">
+        <div class="card-head">
+            <h2>Mailboxes</h2>
+            <div class="right"><button class="btn sm primary" @onclick="Add"><Icon Name="plus" Size="14" /> Add mailbox</button></div>
+        </div>
+        <ul class="list">
+            @if (accounts.Count == 0) { <li class="empty small">No mailboxes yet.</li> }
+            @foreach (var a in accounts)
+            {
+                <li class="row clickable" @onclick="() => Edit(a)">
+                    <span class="dot @(!a.Enabled ? "" : string.IsNullOrEmpty(a.LastError) ? "on" : "danger")"></span>
+                    <div class="grow">
+                        <div class="title">@a.Name <span class="badge">@KindLabel(a.Kind)</span></div>
+                        <div class="meta">
+                            <span>@a.Address</span>
+                            <span>· last sync @(a.LastSyncUtc is { } t ? Fmt.Ago(t) : "never")</span>
+                            @if (a.UseForCalendar) { <span class="badge info">calendar</span> }
+                        </div>
+                        @if (!string.IsNullOrEmpty(a.LastError)) { <div class="meta" style="color:var(--danger)">@a.LastError</div> }
+                    </div>
+                    <Icon Name="right" Size="16" />
+                </li>
+            }
+        </ul>
+    </div>
+    <div class="card">
+        <h2 style="margin-bottom:12px">Polling</h2>
+        <div class="field"><label>Check every (minutes)</label><input type="number" min="2" @bind="pollMinutes" /></div>
+        <div class="field"><label>Max emails per check, per mailbox</label><input type="number" min="1" max="100" @bind="maxPerPoll" /></div>
+        <div class="field"><label>First sync looks back (days)</label><input type="number" min="0" max="30" @bind="lookback" /></div>
+        <hr />
+        <label class="check"><input type="checkbox" @bind="keepPromotions" /> Keep deals from marketing emails in a Promotions list</label>
+        <label class="check"><input type="checkbox" @bind="deleteEmailWithTask" /> Deleting a task from an email moves the email to the bin</label>
+        <label class="check"><input type="checkbox" @bind="deleteTasksWithEmail" /> Deleting an email (here or in my mail app) removes its open tasks</label>
+        <p class="tiny muted">Emails are only ever moved to Bin / Deleted Items, never permanently deleted. Archived emails don't affect tasks.</p>
+        <button class="btn primary" @onclick="SavePolling">Save</button>
+        <p class="small muted" style="margin-top:10px">Last run: @(Sync.LastRunUtc is { } r ? Fmt.Ago(r) : "not yet") — @Sync.LastRunSummary</p>
+    </div>
+</div>
+
+<Modal Open="editing is not null" OpenChanged="v => { if (!v) editing = null; }" Title="@(isNew ? "Add mailbox" : editing?.Name ?? "")" Wide="true">
+    <ChildContent>
+        @if (editing is not null)
+        {
+            <div class="form-grid">
+                <div class="field"><label>Name</label><input type="text" @bind="editing.Name" @bind:event="oninput" placeholder="Personal Gmail" /></div>
+                <div class="field">
+                    <label>Type</label>
+                    <select @bind="editing.Kind">
+                        <option value="@EmailAccountKind.Imap">IMAP (Gmail, iCloud, Fastmail, Yahoo…)</option>
+                        <option value="@EmailAccountKind.MicrosoftGraph">Microsoft 365 / Outlook.com</option>
+                        <option value="@EmailAccountKind.ExchangeEws">Exchange on-premises (EWS)</option>
+                    </select>
+                </div>
+                <div class="field full"><label class="check"><input type="checkbox" @bind="editing.Enabled" /> Enabled</label></div>
+
+                @if (editing.Kind == EmailAccountKind.Imap)
+                {
+                    <div class="field full">
+                        <label>Presets</label>
+                        <div class="chips">
+                            <button class="chip" @onclick='() => Preset("imap.gmail.com")'>Gmail</button>
+                            <button class="chip" @onclick='() => Preset("outlook.office365.com")'>Outlook.com (IMAP)</button>
+                            <button class="chip" @onclick='() => Preset("imap.mail.me.com")'>iCloud</button>
+                            <button class="chip" @onclick='() => Preset("imap.mail.yahoo.com")'>Yahoo</button>
+                            <button class="chip" @onclick='() => Preset("imap.fastmail.com")'>Fastmail</button>
+                        </div>
+                    </div>
+                    <div class="field"><label>Email address</label><input type="email" @bind="editing.Address" /></div>
+                    <div class="field"><label>Username (if different)</label><input type="text" @bind="editing.Username" /></div>
+                    <div class="field"><label>Password / app password</label><input type="password" @bind="editing.Password" autocomplete="new-password" /></div>
+                    <div class="field"><label>Folder</label><input type="text" @bind="editing.Folder" /></div>
+                    <div class="field"><label>IMAP server</label><input type="text" @bind="editing.ImapHost" /></div>
+                    <div class="field">
+                        <label>Port</label>
+                        <div style="display:flex;gap:8px;align-items:center"><input type="number" @bind="editing.ImapPort" style="width:100px" /><label class="check" style="margin:0"><input type="checkbox" @bind="editing.ImapSsl" /> SSL/TLS</label></div>
+                    </div>
+                    <div class="field full help">Gmail: turn on 2-Step Verification, then create an <strong>App password</strong> (Google Account → Security → App passwords) and use it here. LifeHub never marks mail as read; the only change it makes is moving an email to the Bin when you delete its task (you can turn that off at the top of this page).</div>
+                }
+                else if (editing.Kind == EmailAccountKind.MicrosoftGraph)
+                {
+                    <div class="field"><label>Application (client) ID</label><input type="text" @bind="editing.GraphClientId" placeholder="00000000-0000-0000-0000-000000000000" /></div>
+                    <div class="field"><label>Tenant</label><input type="text" @bind="editing.GraphTenant" placeholder="common / consumers / your-tenant-id" /></div>
+                    <div class="field full"><label class="check"><input type="checkbox" @bind="editing.UseForCalendar" /> Also read this calendar for my schedule (and write events here if no HA calendar is set)</label></div>
+                    <div class="field full help">
+                        One-time setup: in <a href="https://entra.microsoft.com" target="_blank" rel="noopener">Entra admin centre</a> → App registrations → New registration
+                        (supported accounts: <em>personal and work</em> for Outlook.com, or your org only), then Authentication → <strong>Allow public client flows: Yes</strong>.
+                        API permissions (delegated): <code>Mail.ReadWrite</code> (only used to move an email to Deleted Items when you delete its task), <code>Calendars.ReadWrite</code>, <code>User.Read</code>, <code>offline_access</code>. Use tenant <code>consumers</code> for Outlook.com/Hotmail.
+                    </div>
+                    <div class="field full">
+                        @if (!isNew && !string.IsNullOrEmpty(editing.GraphRefreshToken))
+                        {
+                            <div class="alert ok small">Signed in@(string.IsNullOrEmpty(editing.Address) ? "" : " as " + editing.Address).</div>
+                        }
+                        @if (Graph.LoginStatus.TryGetValue(editing.Id, out var status))
+                        {
+                            <div class="alert info small">@status</div>
+                        }
+                        @if (device is not null)
+                        {
+                            <div class="card" style="text-align:center;margin-bottom:10px">
+                                <div class="small muted">Open <a href="@device.VerificationUri" target="_blank" rel="noopener">@device.VerificationUri</a> and enter</div>
+                                <div style="font-size:1.8rem;font-weight:700;letter-spacing:.12em;font-family:var(--mono)">@device.UserCode</div>
+                            </div>
+                        }
+                        <button class="btn" @onclick="SignIn" disabled="@busy"><Icon Name="user" Size="15" /> @(string.IsNullOrEmpty(editing.GraphRefreshToken) ? "Save & sign in with Microsoft" : "Sign in again")</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="field full"><label>EWS URL</label><input type="url" @bind="editing.EwsUrl" placeholder="https://mail.example.com/EWS/Exchange.asmx" /></div>
+                    <div class="field"><label>Email address</label><input type="email" @bind="editing.Address" /></div>
+                    <div class="field"><label>Username</label><input type="text" @bind="editing.Username" placeholder="jsmith or jsmith@example.com" /></div>
+                    <div class="field"><label>Domain (optional)</label><input type="text" @bind="editing.EwsDomain" placeholder="CORP" /></div>
+                    <div class="field"><label>Password</label><input type="password" @bind="editing.Password" autocomplete="new-password" /></div>
+                    <div class="field full help">Works with Exchange 2013/2016/2019/SE using NTLM or Basic auth. For Exchange Online use the Microsoft 365 type instead.</div>
+                }
+                <div class="field full">
+                    <label>Ignore senders containing (comma separated)</label>
+                    <input type="text" @bind="ignore" placeholder="noreply@linkedin.com, newsletter, @@marketing." />
+                    <div class="help">Matching emails are logged but never sent to the AI.</div>
+                </div>
+            </div>
+            @if (testResult is not null) { <div class="alert @(testOk ? "ok" : "danger") small">@testResult</div> }
+        }
+    </ChildContent>
+    <Footer>
+        @if (!isNew)
+        {
+            <button class="btn danger left" @onclick="Remove"><Icon Name="trash" Size="15" /> Remove</button>
+        }
+        <button class="btn" @onclick="Test" disabled="@busy">Test</button>
+        <button class="btn" @onclick="() => editing = null">Cancel</button>
+        <button class="btn primary" @onclick="Save" disabled="@string.IsNullOrWhiteSpace(editing?.Name)">Save</button>
+    </Footer>
+</Modal>
+
+@code {
+    private List<EmailAccount> accounts = new();
+    private int pollMinutes, maxPerPoll, lookback;
+    private bool keepPromotions, deleteEmailWithTask, deleteTasksWithEmail;
+    private EmailAccount? editing;
+    private bool isNew, busy, testOk;
+    private string ignore = "";
+    private string? testResult;
+    private DeviceCodeInfo? device;
+    private Timer? refresh;
+
+    protected override void OnInitialized()
+    {
+        Load();
+        Settings.Changed += OnChanged;
+        // While a Microsoft sign-in is in progress, refresh its status line.
+        refresh = new Timer(_ => { if (device is not null) InvokeAsync(StateHasChanged); }, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    private void Load()
+    {
+        var e = Settings.Current.Email;
+        accounts = e.Accounts;
+        pollMinutes = e.PollMinutes;
+        maxPerPoll = e.MaxPerPoll;
+        lookback = e.InitialLookbackDays;
+        keepPromotions = e.KeepPromotions;
+        deleteEmailWithTask = e.DeleteEmailWithTask;
+        deleteTasksWithEmail = e.DeleteTasksWithEmail;
+    }
+
+    private void OnChanged() => InvokeAsync(() => { accounts = Settings.Current.Email.Accounts; StateHasChanged(); });
+
+    private static string KindLabel(EmailAccountKind k) => k switch
+    {
+        EmailAccountKind.MicrosoftGraph => "Microsoft 365",
+        EmailAccountKind.ExchangeEws => "Exchange",
+        _ => "IMAP"
+    };
+
+    private async Task SavePolling() => await Ui.Try(() => Settings.UpdateAsync(s =>
+    {
+        s.Email.PollMinutes = Math.Max(2, pollMinutes);
+        s.Email.MaxPerPoll = Math.Clamp(maxPerPoll, 1, 100);
+        s.Email.InitialLookbackDays = Math.Clamp(lookback, 0, 30);
+        s.Email.KeepPromotions = keepPromotions;
+        s.Email.DeleteEmailWithTask = deleteEmailWithTask;
+        s.Email.DeleteTasksWithEmail = deleteTasksWithEmail;
+    }), "Saved");
+
+    private void Add()
+    {
+        isNew = true;
+        testResult = null;
+        device = null;
+        ignore = "";
+        editing = new EmailAccount { Name = "Email" };
+    }
+
+    private void Edit(EmailAccount a)
+    {
+        isNew = false;
+        testResult = null;
+        device = null;
+        editing = Json.Clone(a);
+        ignore = string.Join(", ", a.IgnoreSenders);
+    }
+
+    private void Preset(string host)
+    {
+        if (editing is null) return;
+        editing.ImapHost = host;
+        editing.ImapPort = 993;
+        editing.ImapSsl = true;
+        if (editing.Name is "" or "Email") editing.Name = host switch
+        {
+            "imap.gmail.com" => "Gmail", "imap.mail.me.com" => "iCloud", "outlook.office365.com" => "Outlook",
+            "imap.mail.yahoo.com" => "Yahoo", _ => "Fastmail"
+        };
+    }
+
+    private async Task PersistAsync()
+    {
+        if (editing is null) return;
+        editing.IgnoreSenders = ignore.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        var e = editing;
+        await Settings.UpdateAsync(s =>
+        {
+            var existing = s.Email.Accounts.FirstOrDefault(x => x.Id == e.Id);
+            if (existing is null) { s.Email.Accounts.Add(e); return; }
+            // Copy configuration only — keep sync state/tokens the background job may have updated.
+            existing.Name = e.Name; existing.Kind = e.Kind; existing.Enabled = e.Enabled; existing.Address = e.Address;
+            existing.ImapHost = e.ImapHost; existing.ImapPort = e.ImapPort; existing.ImapSsl = e.ImapSsl;
+            existing.Username = e.Username; existing.Password = e.Password; existing.Folder = e.Folder;
+            existing.GraphClientId = e.GraphClientId; existing.GraphTenant = e.GraphTenant; existing.UseForCalendar = e.UseForCalendar;
+            existing.EwsUrl = e.EwsUrl; existing.EwsDomain = e.EwsDomain; existing.IgnoreSenders = e.IgnoreSenders;
+        });
+        isNew = false;
+    }
+
+    private async Task Save()
+    {
+        await Ui.Try(PersistAsync, "Mailbox saved");
+        editing = null;
+    }
+
+    private async Task Test()
+    {
+        if (editing is null) return;
+        busy = true;
+        try
+        {
+            var provider = Providers.First(p => p.Kind == editing.Kind);
+            if (editing.Kind == EmailAccountKind.MicrosoftGraph) await PersistAsync();
+            testResult = await provider.TestAsync(editing, CancellationToken.None);
+            testOk = true;
+        }
+        catch (Exception ex) { testResult = ex.Message; testOk = false; }
+        finally { busy = false; }
+    }
+
+    private async Task SignIn()
+    {
+        if (editing is null) return;
+        busy = true;
+        try
+        {
+            await PersistAsync();
+            device = await Graph.StartDeviceLoginAsync(editing);
+            var id = editing.Id;
+            var info = device;
+            _ = Task.Run(async () =>
+            {
+                try { await Graph.CompleteDeviceLoginAsync(id, info); }
+                catch (Exception ex) { Graph.LoginStatus[id] = "Sign-in failed: " + ex.Message; }
+                await InvokeAsync(() =>
+                {
+                    device = null;
+                    if (editing?.Id == id) editing.GraphRefreshToken = Settings.Current.Email.Accounts.FirstOrDefault(a => a.Id == id)?.GraphRefreshToken ?? "";
+                    StateHasChanged();
+                });
+            });
+        }
+        catch (Exception ex) { testResult = ex.Message; testOk = false; }
+        finally { busy = false; }
+    }
+
+    private async Task Remove()
+    {
+        if (editing is null) return;
+        var id = editing.Id;
+        await Settings.UpdateAsync(s => s.Email.Accounts.RemoveAll(a => a.Id == id));
+        editing = null;
+        Ui.Show("Mailbox removed");
+    }
+
+    public void Dispose()
+    {
+        refresh?.Dispose();
+        Settings.Changed -= OnChanged;
+    }
+}

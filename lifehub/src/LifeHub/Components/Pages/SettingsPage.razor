@@ -1,0 +1,40 @@
+@page "/settings"
+@inject DataPaths Paths
+
+<PageTitle>Settings · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Settings</h1>
+        <div class="sub">Data folder: <code>@Paths.Root</code>@(Paths.IsHomeAssistantAddon ? " · running as Home Assistant add-on" : "")</div>
+    </div>
+</div>
+
+<div class="tabs">
+    @foreach (var (key, label) in Tabs)
+    {
+        <a class="tab @(Current == key ? "on" : "")" href="settings?tab=@key" style="text-decoration:none">@label</a>
+    }
+</div>
+
+@switch (Current)
+{
+    case "ha": <SettingsHomeAssistant /> break;
+    case "ai": <SettingsAi /> break;
+    case "email": <SettingsEmail /> break;
+    case "notifications": <SettingsNotifications /> break;
+    case "security": <SettingsSecurity /> break;
+    case "backup": <SettingsBackup /> break;
+    default: <SettingsGeneral /> break;
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+    private string Current => Tab ?? "general";
+
+    private static readonly (string, string)[] Tabs =
+    {
+        ("general", "General"), ("ha", "Home Assistant"), ("ai", "AI"), ("email", "Email"),
+        ("notifications", "Notifications"), ("security", "Security & API"), ("backup", "Backup")
+    };
+}

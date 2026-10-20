@@ -1,0 +1,203 @@
+@inject TaskService Tasks
+@inject SettingsService Settings
+@inject CalendarService Calendar
+@inject UiState Ui
+@inject EmailLinkService EmailLinks
+
+<Modal Open="Item is not null" OpenChanged="v => { if (!v) Close(); }" Title="@(isNew ? "New task" : "Edit task")" Wide="true">
+    <ChildContent>
+        @if (Item is not null)
+        {
+            <div class="form-grid">
+                <div class="field full">
+                    <label>Title</label>
+                    <input type="text" @bind="Item.Title" @bind:event="oninput" />
+                </div>
+                <div class="field">
+                    <label>Category</label>
+                    <select @bind="Item.Category">
+                        @foreach (var c in Categories) { <option>@c</option> }
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Priority</label>
+                    <select @bind="Item.Priority">
+                        @foreach (var p in Enum.GetValues<TaskPriority>()) { <option value="@p">@p</option> }
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Due date</label>
+                    <input type="date" @bind="Item.DueDate" />
+                </div>
+                <div class="field">
+                    <label>Due time (optional)</label>
+                    <input type="time" @bind="Item.DueTime" />
+                </div>
+                <div class="field">
+                    <label>Status</label>
+                    <select @bind="Item.State">
+                        @foreach (var s in Enum.GetValues<TaskState>()) { <option value="@s">@Fmt.Split(s.ToString())</option> }
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Estimate (minutes)</label>
+                    <input type="number" min="5" step="5" @bind="Item.EstimatedMinutes" />
+                </div>
+                <div class="field">
+                    <label>Planned for</label>
+                    <input type="datetime-local" @bind="Item.ScheduledStart" />
+                    <div class="help">Set by "Plan my day", or pick a time yourself.</div>
+                </div>
+                <div class="field">
+                    <label>Repeats</label>
+                    <div style="display:flex;gap:8px">
+                        <select @bind="Item.Recurrence.Kind">
+                            @foreach (var r in Enum.GetValues<RecurrenceKind>()) { <option value="@r">@(r == RecurrenceKind.EveryNDays ? "Every N days" : r.ToString())</option> }
+                        </select>
+                        @if (Item.Recurrence.Kind is not (RecurrenceKind.None or RecurrenceKind.Weekdays))
+                        {
+                            <input type="number" min="1" style="width:90px" @bind="Item.Recurrence.Interval" title="Interval" />
+                        }
+                    </div>
+                </div>
+                <div class="field full">
+                    <label>Notes</label>
+                    <textarea @bind="Item.Notes"></textarea>
+                </div>
+                <div class="field full">
+                    <label>Tags (comma separated)</label>
+                    <input type="text" @bind="tags" />
+                </div>
+                <div class="field full">
+                    <label>Checklist</label>
+                    <ul class="list">
+                        @foreach (var c in Item.Checklist)
+                        {
+                            <li class="row">
+                                <button class="tick square @(c.Done ? "done" : "")" @onclick="() => c.Done = !c.Done"><Icon Name="check" Size="12" Stroke="3" /></button>
+                                <input type="text" @bind="c.Text" style="flex:1" />
+                                <button class="icon-btn" @onclick="() => Item.Checklist.Remove(c)"><Icon Name="x" Size="15" /></button>
+                            </li>
+                        }
+                    </ul>
+                    <div class="inline-form" style="margin-top:6px">
+                        <input type="text" placeholder="Add a step…" @bind="newStep" @bind:event="oninput" @onkeydown="StepKey" />
+                        <button class="btn" @onclick="AddStep">Add</button>
+                    </div>
+                </div>
+            </div>
+            @if (linkedEmails.Count > 0)
+            {
+                <div class="alert info small" style="flex-direction:column;gap:6px">
+                    <div><Icon Name="mail" Size="16" /> <strong>@(linkedEmails.Count == 1 ? "From email" : $"From {linkedEmails.Count} emails (stacked ×{Item.Occurrences})")</strong></div>
+                    @foreach (var le in linkedEmails.Take(8))
+                    {
+                        <div style="display:flex;gap:8px;align-items:center;width:100%">
+                            <div style="flex:1;min-width:0">@le.Subject<span class="muted"> · @le.From · @le.ReceivedUtc.ToLocalTime().ToString("d MMM HH:mm")</span>
+                                @if (le.DeletedUtc is not null) { <span class="badge">in bin</span> }</div>
+                            @if (!string.IsNullOrEmpty(le.WebLink)) { <a class="btn sm" href="@le.WebLink" target="_blank" rel="noopener">Open</a> }
+                        </div>
+                    }
+                    @if (linkedEmails.Count > 8) { <div class="muted">+@(linkedEmails.Count - 8) more</div> }
+                </div>
+            }
+            else if (!string.IsNullOrEmpty(Item.Source) && Item.Source != "manual" && Item.Source != "email")
+            {
+                <p class="tiny muted">Created via @Item.Source@(Item.CreatedUtc != default ? $" on {Item.CreatedUtc.ToLocalTime():d MMM yyyy}" : "")</p>
+            }
+        }
+    </ChildContent>
+    <Footer>
+        @if (!isNew)
+        {
+            <button class="btn danger left" @onclick="Delete" title="@(deleteAlsoEmail ? "The email it came from will be moved to your mailbox's bin" : "")">
+                <Icon Name="trash" Size="15" /> @(confirmDelete ? "Tap again to confirm" : deleteAlsoEmail ? (linkedEmails.Count > 1 ? "Delete task + emails" : "Delete task + email") : "Delete")
+            </button>
+        }
+        @if (Calendar.CanCreateEvents && Item?.ScheduledStart is not null)
+        {
+            <button class="btn" @onclick="SendToCalendar"><Icon Name="calendar" Size="15" /> Add to calendar</button>
+        }
+        <button class="btn" @onclick="Close">Cancel</button>
+        <button class="btn primary" @onclick="Save" disabled="@string.IsNullOrWhiteSpace(Item?.Title)">Save</button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter] public TaskItem? Item { get; set; }
+    [Parameter] public EventCallback<TaskItem?> ItemChanged { get; set; }
+
+    private bool isNew;
+    private string tags = "";
+    private string newStep = "";
+    private Guid? loadedId;
+    private List<EmailRecord> linkedEmails = new();
+    private bool deleteAlsoEmail, confirmDelete;
+
+    private IEnumerable<string> Categories
+    {
+        get
+        {
+            var cats = Settings.Current.General.TaskCategories.ToList();
+            if (Item is not null && !cats.Contains(Item.Category)) cats.Add(Item.Category);
+            return cats;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Item is not null && loadedId != Item.Id)
+        {
+            loadedId = Item.Id;
+            isNew = Tasks.Repo.Get(Item.Id) is null;
+            tags = string.Join(", ", Item.Tags);
+            linkedEmails = EmailLinks.EmailsFor(Item);
+            deleteAlsoEmail = !isNew && EmailLinks.WillDeleteEmail(Item);
+            confirmDelete = false;
+        }
+        if (Item is null) loadedId = null;
+    }
+
+    private Task Close() => ItemChanged.InvokeAsync(null);
+
+    private async Task Save()
+    {
+        if (Item is null) return;
+        Item.Tags = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (!string.IsNullOrWhiteSpace(newStep)) AddStep();
+        await Ui.Try(() => Tasks.SaveAsync(Item), isNew ? "Task added" : "Saved");
+        await Close();
+    }
+
+    private async Task Delete()
+    {
+        if (Item is null) return;
+        if (deleteAlsoEmail && !confirmDelete) { confirmDelete = true; return; }
+        Ui.Show(await EmailLinks.DeleteTaskAsync(Item.Id));
+        await Close();
+    }
+
+    private async Task SendToCalendar()
+    {
+        if (Item?.ScheduledStart is not { } start) return;
+        var end = start.AddMinutes(Item.EstimatedMinutes ?? Settings.Current.Schedule.DefaultTaskMinutes);
+        await Ui.Try(async () =>
+        {
+            var where = await Calendar.CreateEventAsync(Item.Title, start, end, Item.Notes);
+            Item.CalendarEventRef = where;
+            await Tasks.SaveAsync(Item);
+        }, "Added to calendar");
+    }
+
+    private void AddStep()
+    {
+        if (Item is null || string.IsNullOrWhiteSpace(newStep)) return;
+        Item.Checklist.Add(new ChecklistItem { Text = newStep.Trim() });
+        newStep = "";
+    }
+
+    private void StepKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddStep();
+    }
+}

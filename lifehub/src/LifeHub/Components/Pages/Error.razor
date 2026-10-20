@@ -1,0 +1,18 @@
+@page "/Error"
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@using System.Diagnostics
+
+<PageTitle>Error</PageTitle>
+<div class="auth-wrap">
+    <div class="card auth-card">
+        <h1>Something went wrong</h1>
+        <p class="muted">The error has been logged. <a href="" target="_top">Back to LifeHub</a></p>
+        @if (!string.IsNullOrEmpty(RequestId)) { <p class="tiny muted">Request: <code>@RequestId</code></p> }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    private string? RequestId => Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

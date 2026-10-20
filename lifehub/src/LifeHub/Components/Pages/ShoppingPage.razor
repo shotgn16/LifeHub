@@ -1,0 +1,125 @@
+@page "/shopping"
+@inherits LiveComponent
+@inject KitchenService Kitchen
+@inject SettingsService Settings
+@inject UiState Ui
+
+<PageTitle>Shopping · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Shopping list</h1>
+        <div class="sub">@items.Count(i => !i.Checked) to buy · @items.Count(i => i.Checked) in the basket</div>
+    </div>
+    <div class="actions">
+        <a class="btn" href="scan?mode=shopping"><Icon Name="barcode" Size="15" /> Scan</a>
+        <button class="btn" @onclick="Refresh" title="Add staples that are low or about to run out"><Icon Name="refresh" Size="15" /> Suggest</button>
+        <button class="btn primary" @onclick="PutAway" disabled="@(!items.Any(i => i.Checked))"><Icon Name="box" Size="15" /> Put away ticked</button>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:14px">
+    <div class="inline-form">
+        <input type="text" placeholder="Add items — comma separated, press Enter" @bind="text" @bind:event="oninput" @onkeydown="Key" list="shop-staples" />
+        <button class="btn" @onclick="Add" disabled="@string.IsNullOrWhiteSpace(text)"><Icon Name="plus" Size="15" /> Add</button>
+    </div>
+    <datalist id="shop-staples">@foreach (var s in Kitchen.Staples.All()) { <option value="@s.Name"></option> }</datalist>
+</div>
+
+<div class="card flush">
+    @if (items.Count == 0)
+    {
+        <div class="empty"><div class="icon"><Icon Name="cart" Size="32" /></div>The list is empty.</div>
+    }
+    @foreach (var g in items.Where(i => !i.Checked).GroupBy(i => i.Category).OrderBy(g => CategoryOrder(g.Key)))
+    {
+        <div class="group-title">@g.Key</div>
+        <ul class="list">@foreach (var i in g.OrderBy(i => i.Name)) { @Row(i) }</ul>
+    }
+    @if (items.Any(i => i.Checked))
+    {
+        <div class="group-title">In the basket</div>
+        <ul class="list">@foreach (var i in items.Where(i => i.Checked).OrderBy(i => i.Name)) { @Row(i) }</ul>
+    }
+</div>
+@if (items.Count > 0)
+{
+    <div style="margin-top:12px;display:flex;justify-content:flex-end">
+        <button class="btn sm danger" @onclick="ClearAll">@(confirmClear ? $"Tap again to remove all {items.Count}" : "Clear whole list")</button>
+    </div>
+}
+<p class="small muted" style="margin-top:10px">"Put away ticked" moves ticked items into your kitchen stock (fridge/freezer/cupboard from the staple or category), records the purchase for predictions, and clears them from the list.</p>
+
+@code {
+    private List<ShoppingItem> items = new();
+    private string text = "";
+
+    protected override void OnInitialized()
+    {
+        Watch(Kitchen.Shopping);
+        Load();
+    }
+
+    protected override void OnDataChanged() => Load();
+    private void Load() => items = Kitchen.Shopping.All().ToList();
+
+    private int CategoryOrder(string c)
+    {
+        var i = Settings.Current.General.FoodCategories.IndexOf(c);
+        return i < 0 ? 999 : i;
+    }
+
+    private RenderFragment Row(ShoppingItem i) => __builder =>
+    {
+        <li class="row">
+            <button class="tick square @(i.Checked ? "done" : "")" @onclick="() => Kitchen.ToggleAsync(i.Id)"><Icon Name="check" Size="13" Stroke="3" /></button>
+            <div class="grow">
+                <div class="title @(i.Checked ? "strike" : "")">@i.Name @if (i.Quantity != 1 || !string.IsNullOrEmpty(i.Unit)) { <span class="muted small">× @Fmt.Qty(i.Quantity, i.Unit)</span> }</div>
+                @if (i.Reason != "Manual") { <div class="meta"><span class="badge @(i.Reason is "Low stock" or "Expired" ? "warn" : "info")">@i.Reason</span></div> }
+            </div>
+            <button class="icon-btn" title="−" @onclick="() => Bump(i, -1)" disabled="@(i.Quantity <= 1)"><Icon Name="down" Size="15" /></button>
+            <button class="icon-btn" title="+" @onclick="() => Bump(i, 1)"><Icon Name="up" Size="15" /></button>
+            <button class="icon-btn" title="Remove" @onclick="() => Kitchen.Shopping.DeleteAsync(i.Id)"><Icon Name="x" Size="15" /></button>
+        </li>
+    };
+
+    private async Task Bump(ShoppingItem i, int by)
+    {
+        i.Quantity = Math.Max(1, i.Quantity + by);
+        await Kitchen.Shopping.UpsertAsync(i);
+    }
+
+    private async Task Key(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Add();
+    }
+
+    private async Task Add()
+    {
+        foreach (var part in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            await Kitchen.AddToShoppingAsync(part);
+        text = "";
+    }
+
+    private bool confirmClear;
+
+    private async Task ClearAll()
+    {
+        if (!confirmClear) { confirmClear = true; return; }
+        confirmClear = false;
+        await Kitchen.Shopping.DeleteManyAsync(items.Select(i => i.Id));
+        Ui.Show("Shopping list cleared");
+    }
+
+    private async Task Refresh()
+    {
+        var n = await Kitchen.RefreshAutoShoppingAsync();
+        Ui.Show(n == 0 ? "Nothing new needed" : $"Added {n} item(s)");
+    }
+
+    private async Task PutAway()
+    {
+        var n = await Kitchen.PutAwayCheckedAsync();
+        Ui.Show($"{n} item(s) put away");
+    }
+}

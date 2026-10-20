@@ -1,0 +1,472 @@
+@page "/scan"
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject BarcodeService Barcodes
+@inject KitchenService Kitchen
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+
+<PageTitle>Scan · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Scan</h1>
+        <div class="sub">@ModeHint</div>
+    </div>
+</div>
+
+<div class="segmented" role="tablist">
+    @foreach (var (m, label, icon) in Modes)
+    {
+        <button class="@(mode == m ? "on" : "")" role="tab" aria-selected="@(mode == m)" @onclick="() => SetMode(m)"><Icon Name="@icon" Size="16" Class="seg-icon" /> @label</button>
+    }
+</div>
+
+<div class="scan-view @(flash ? "flash" : "")">
+    <video @ref="video" playsinline muted></video>
+    @if (cameraOn)
+    {
+        <div class="scan-frame"><span></span></div>
+        <div class="scan-controls">
+            @if (torchAvailable)
+            {
+                <button class="icon-btn @(torchOn ? "on" : "")" title="Torch" @onclick="ToggleTorch"><Icon Name="flash" /></button>
+            }
+            <button class="icon-btn" title="Stop camera" @onclick="StopCamera"><Icon Name="x" /></button>
+        </div>
+        @if (busy) { <div class="scan-status">Looking up…</div> }
+    }
+    else
+    {
+        <div class="scan-overlay">
+            <div>
+                <Icon Name="barcode" Size="40" Stroke="1.5" />
+                @if (cameraError is not null)
+                {
+                    <p>@cameraError</p>
+                }
+                else if (caps is { Secure: false })
+                {
+                    <p>The live camera needs LifeHub to be opened over HTTPS (e.g. through the Home Assistant app or your Plesk domain).<br />You can still <strong>take a photo</strong> of a barcode below.</p>
+                }
+                else if (caps is { Camera: false })
+                {
+                    <p>No camera available in this browser. Take a photo or type the number below.</p>
+                }
+                else
+                {
+                    <p>Point the camera at a barcode — it scans automatically.</p>
+                }
+                @if (caps is { Secure: true, Camera: true })
+                {
+                    <button class="btn primary" @onclick="StartCamera" disabled="@starting"><Icon Name="camera" Size="16" /> @(starting ? "Starting…" : "Start camera")</button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<div class="scan-alt">
+    <label class="btn">
+        <Icon Name="camera" Size="16" /> Take photo
+        <input type="file" accept="image/*" capture="environment" @ref="photoInput" style="display:none" />
+    </label>
+    <input type="text" inputmode="numeric" placeholder="Type barcode / use a USB scanner" @bind="manual" @bind:event="oninput" @onkeydown="ManualKey" aria-label="Barcode number" />
+    <button class="btn" @onclick="SubmitManual" disabled="@string.IsNullOrWhiteSpace(manual)">Go</button>
+</div>
+
+@if (notInStock is not null)
+{
+    <div class="alert warn" style="margin-top:14px;align-items:center;flex-wrap:wrap">
+        <Icon Name="alert" />
+        <div style="flex:1 1 160px">@notInStock.Name isn't in your kitchen stock.</div>
+        <button class="btn sm" @onclick="() => AddMissingToShopping(notInStock)">Add to shopping list</button>
+        <button class="icon-btn" @onclick="() => notInStock = null"><Icon Name="x" Size="15" /></button>
+    </div>
+}
+
+@if (pending is not null)
+{
+    <div class="card scan-card">
+        <div class="card-head">
+            <h2>@(pendingIsNew ? "New product" : "Check the details")</h2>
+            <span class="right tiny muted mono">@pending.Barcode</span>
+        </div>
+        @if (pending.Source == "openfoodfacts" && !pending.Confirmed)
+        {
+            <p class="small muted" style="margin-top:-6px">Found on Open Food Facts@(string.IsNullOrEmpty(pending.Brand) ? "" : $" · {pending.Brand}")@(string.IsNullOrEmpty(pending.PackSize) ? "" : $" · {pending.PackSize}"). Tidy the name if you like — it's remembered next time.</p>
+        }
+        <div class="form-grid">
+            <div class="field full">
+                <label>Name</label>
+                <input type="text" @bind="pending.Name" @bind:event="oninput" placeholder="e.g. Semi-skimmed milk 2L" />
+            </div>
+            <div class="field">
+                <label>Counts as staple</label>
+                <select @bind="pendingStaple">
+                    <option value="">— none —</option>
+                    @foreach (var s in Kitchen.Staples.All().OrderBy(s => s.Name)) { <option value="@s.Id">@s.Name</option> }
+                </select>
+            </div>
+            <div class="field">
+                <label>Category</label>
+                <select @bind="pending.Category">
+                    @foreach (var c in Settings.Current.General.FoodCategories) { <option>@c</option> }
+                </select>
+            </div>
+            @if (mode == ScanMode.Add)
+            {
+                <div class="field full">
+                    <label>Where does it go?</label>
+                    <div class="segmented small">
+                        @foreach (var l in new[] { StorageLocation.Fridge, StorageLocation.Freezer, StorageLocation.Cupboard, StorageLocation.Pantry })
+                        {
+                            <button class="@(pendingLocation == l ? "on" : "")" @onclick="() => SetLocation(l)">@l</button>
+                        }
+                    </div>
+                </div>
+                <div class="field">
+                    <label>How many</label>
+                    <div class="stepper">
+                        <button class="icon-btn" @onclick="() => pendingQty = Math.Max(1, pendingQty - 1)" aria-label="Fewer"><Icon Name="down" /></button>
+                        <span>@pendingQty</span>
+                        <button class="icon-btn" @onclick="() => pendingQty++" aria-label="More"><Icon Name="up" /></button>
+                    </div>
+                </div>
+                @if (pendingLocation != StorageLocation.Freezer)
+                {
+                    <div class="field">
+                        <label>Use by</label>
+                        <input type="date" @bind="pendingUseBy" />
+                        <div class="chips" style="margin-top:6px">
+                            @foreach (var (label, days) in UseByChips)
+                            {
+                                <button class="chip" style="padding:3px 10px" @onclick="() => pendingUseBy = days is null ? null : Clock.Today.AddDays(days.Value)">@label</button>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="field"><label>Use by</label><p class="small muted" style="margin:6px 0 0">Freezer items get @Settings.Current.General.FreezerShelfLifeDays days automatically.</p></div>
+                }
+            }
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+            <button class="btn" @onclick="CancelPending">Cancel</button>
+            <button class="btn primary" @onclick="ConfirmPending" disabled="@string.IsNullOrWhiteSpace(pending.Name)">
+                <Icon Name="check" Size="15" /> @(mode switch { ScanMode.Use => "Save & use one", ScanMode.Shopping => "Add to list", _ => $"Add {pendingQty} to {pendingLocation.ToString().ToLower()}" })
+            </button>
+        </div>
+    </div>
+}
+
+<div class="card flush" style="margin-top:14px">
+    <div class="card-head">
+        <h2>This session</h2>
+        <label class="check right" style="margin:0;font-size:.82rem" title="Products you've confirmed before are added straight away">
+            <input type="checkbox" checked="@instant" @onchange="ToggleInstant" /> Instant for known items
+        </label>
+    </div>
+    <ul class="list">
+        @if (log.Count == 0) { <li class="empty small">Scanned items will appear here, each with an undo.</li> }
+        @foreach (var e in log)
+        {
+            <li class="row">
+                <span class="badge @(e.Undone ? "" : e.Mode == ScanMode.Use ? "warn" : e.Mode == ScanMode.Shopping ? "info" : "ok")">@(e.Mode switch { ScanMode.Use => "used", ScanMode.Shopping => "list", _ => "added" })</span>
+                <div class="grow">
+                    <div class="small @(e.Undone ? "strike" : "")">@e.Text</div>
+                    <div class="meta">@e.At.ToString("HH:mm")@(e.Undone ? " · undone" : "")</div>
+                </div>
+                @if (e.Undo is not null && !e.Undone)
+                {
+                    <button class="btn sm" @onclick="() => UndoEntry(e)"><Icon Name="undo" Size="14" /> Undo</button>
+                }
+            </li>
+        }
+    </ul>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "mode")] public string? ModeParam { get; set; }
+
+    private static readonly (ScanMode, string, string)[] Modes =
+    {
+        (ScanMode.Add, "Stock in", "plus"), (ScanMode.Use, "Use up", "check"), (ScanMode.Shopping, "To buy", "cart")
+    };
+
+    private static readonly (string, int?)[] UseByChips = { ("3 days", 3), ("1 week", 7), ("2 weeks", 14), ("1 month", 30), ("6 months", 182), ("None", null) };
+
+    private sealed class LogEntry
+    {
+        public DateTime At { get; init; }
+        public ScanMode Mode { get; init; }
+        public string Text { get; init; } = "";
+        public Func<Task>? Undo { get; init; }
+        public bool Undone { get; set; }
+    }
+
+    private record Caps(bool Secure, bool Camera, bool Native);
+
+    private ScanMode mode = ScanMode.Add;
+    private ElementReference video, photoInput;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<ScanPage>? self;
+    private Caps? caps;
+    private bool cameraOn, starting, torchAvailable, torchOn, busy, flash, instant = true;
+    private string? cameraError;
+    private string manual = "";
+
+    private ProductInfo? pending;
+    private bool pendingIsNew;
+    private StorageLocation pendingLocation = StorageLocation.Fridge;
+    private decimal pendingQty = 1;
+    private DateOnly? pendingUseBy;
+    private string pendingStaple = "";
+    private ProductInfo? notInStock;
+    private readonly List<LogEntry> log = new();
+
+    private string ModeHint => mode switch
+    {
+        ScanMode.Use => "Scan things as you use or finish them — the soonest-to-expire one is used first.",
+        ScanMode.Shopping => "Scan empty packets to put them on the shopping list.",
+        _ => "Scan shopping as you put it away. New products ask once, then they're remembered."
+    };
+
+    protected override void OnInitialized()
+    {
+        mode = ModeParam?.ToLowerInvariant() switch { "use" => ScanMode.Use, "shopping" => ScanMode.Shopping, _ => ScanMode.Add };
+        instant = Settings.Current.General.ScanInstantKnown;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            // Scheme-relative URL: behind Cloudflare/HA the server may think it's on http:// while the
+            // browser is on https://, and an http:// script would be blocked as mixed content.
+            var baseUri = new Uri(Nav.BaseUri);
+            module = await JS.InvokeAsync<IJSObjectReference>("import", $"//{baseUri.Authority}{baseUri.AbsolutePath}js/scanner.js?v=3");
+            self = DotNetObjectReference.Create(this);
+            caps = await module.InvokeAsync<Caps>("capabilities");
+            await module.InvokeVoidAsync("bindPhoto", photoInput, self);
+            StateHasChanged();
+            if (caps is { Secure: true, Camera: true }) await StartCamera();
+        }
+        catch (Exception ex) { cameraError = "Scanner couldn't load: " + ex.Message; StateHasChanged(); }
+    }
+
+    private void SetMode(ScanMode m)
+    {
+        mode = m;
+        pending = null;
+        notInStock = null;
+        Nav.NavigateTo("scan?mode=" + m.ToString().ToLowerInvariant(), replace: true);
+    }
+
+    private record StartResult(bool Torch, string Decoder);
+
+    private async Task StartCamera()
+    {
+        if (module is null || self is null) return;
+        starting = true;
+        cameraError = null;
+        StateHasChanged();
+        try
+        {
+            var r = await module.InvokeAsync<StartResult>("start", video, self);
+            torchAvailable = r.Torch;
+            cameraOn = true;
+        }
+        catch (JSException ex)
+        {
+            cameraError = ex.Message.Contains("Permission", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("NotAllowed")
+                ? "Camera permission was refused. Allow camera access for this site in your browser settings, then try again."
+                : "Couldn't start the camera: " + ex.Message.Split('\n')[0];
+        }
+        finally { starting = false; }
+    }
+
+    private async Task StopCamera()
+    {
+        if (module is not null) await module.InvokeVoidAsync("stop");
+        cameraOn = false;
+        torchOn = false;
+    }
+
+    private async Task ToggleTorch()
+    {
+        if (module is null) return;
+        torchOn = await module.InvokeAsync<bool>("setTorch", !torchOn);
+    }
+
+    [JSInvokable]
+    public Task OnScanned(string code) => InvokeAsync(() => HandleCodeAsync(code));
+
+    [JSInvokable]
+    public Task OnPhotoFailed(string _) => InvokeAsync(() =>
+    {
+        Ui.Show("No barcode found in that photo — try closer, flatter and in good light.", true);
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task OnCameraStopped() => InvokeAsync(() => { cameraOn = false; StateHasChanged(); });
+
+    private async Task ManualKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SubmitManual();
+    }
+
+    private async Task SubmitManual()
+    {
+        var code = manual.Trim();
+        manual = "";
+        if (code.Length > 0) await HandleCodeAsync(code);
+    }
+
+    private async Task HandleCodeAsync(string code)
+    {
+        if (busy) return;
+        if (pending is not null)
+        {
+            if (BarcodeService.Normalize(code) != pending.Barcode) Ui.Show("Finish the item above first");
+            return;
+        }
+        busy = true;
+        notInStock = null;
+        _ = Flash();
+        StateHasChanged();
+        try
+        {
+            var product = await Barcodes.LookupAsync(code);
+            if (product is null)
+            {
+                OpenPending(Barcodes.NewUnknown(code), isNew: true);
+                return;
+            }
+            var needsCheck = mode == ScanMode.Add && (!product.Confirmed || !instant);
+            if (needsCheck)
+            {
+                OpenPending(product, isNew: false);
+                return;
+            }
+            await Run(product, mode switch
+            {
+                ScanMode.Use => Barcodes.UseAsync(product),
+                ScanMode.Shopping => Barcodes.AddToShoppingAsync(product),
+                _ => Barcodes.AddAsync(product, 1, product.DefaultLocation, Barcodes.DefaultUseBy(product, product.DefaultLocation), learn: false)
+            });
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally
+        {
+            busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Flash()
+    {
+        flash = true;
+        StateHasChanged();
+        await Task.Delay(350);
+        flash = false;
+        StateHasChanged();
+    }
+
+    private void OpenPending(ProductInfo p, bool isNew)
+    {
+        pending = p;
+        pendingIsNew = isNew;
+        pendingQty = 1;
+        pendingStaple = p.StapleId?.ToString() ?? "";
+        pendingLocation = p.DefaultLocation is StorageLocation.Other ? StorageLocation.Cupboard : p.DefaultLocation;
+        pendingUseBy = Barcodes.DefaultUseBy(p, pendingLocation);
+    }
+
+    private void SetLocation(StorageLocation l)
+    {
+        pendingLocation = l;
+        if (pending is not null && pendingUseBy is null) pendingUseBy = Barcodes.DefaultUseBy(pending, l);
+    }
+
+    private void CancelPending() => pending = null;
+
+    private async Task ConfirmPending()
+    {
+        if (pending is null) return;
+        var p = pending;
+        p.StapleId = Guid.TryParse(pendingStaple, out var sid) ? sid : null;
+        if (mode == ScanMode.Add) p.DefaultLocation = pendingLocation;
+        if (p.StapleId is { } id && Kitchen.Staples.Get(id) is { } staple && p.Category == "Other") p.Category = staple.Category;
+        try
+        {
+            await Barcodes.SaveAsync(p);
+            pending = null;
+            await Run(p, mode switch
+            {
+                ScanMode.Use => Barcodes.UseAsync(p),
+                ScanMode.Shopping => Barcodes.AddToShoppingAsync(p),
+                _ => Barcodes.AddAsync(p, pendingQty, pendingLocation, pendingLocation == StorageLocation.Freezer ? null : pendingUseBy, learn: true)
+            });
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+    }
+
+    private async Task Run(ProductInfo p, Task<ScanOutcome> action)
+    {
+        var outcome = await action;
+        if (outcome.NotInStock)
+        {
+            notInStock = p;
+            return;
+        }
+        Ui.Show(outcome.Message, !outcome.Success);
+        if (outcome.Success)
+            log.Insert(0, new LogEntry { At = Clock.Now, Mode = mode, Text = outcome.Message, Undo = outcome.Undo });
+    }
+
+    private async Task AddMissingToShopping(ProductInfo p)
+    {
+        notInStock = null;
+        var outcome = await Barcodes.AddToShoppingAsync(p);
+        Ui.Show(outcome.Message);
+        log.Insert(0, new LogEntry { At = Clock.Now, Mode = ScanMode.Shopping, Text = outcome.Message, Undo = outcome.Undo });
+    }
+
+    private async Task UndoEntry(LogEntry e)
+    {
+        if (e.Undo is null) return;
+        try
+        {
+            await e.Undo();
+            e.Undone = true;
+            Ui.Show("Undone");
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+    }
+
+    private async Task ToggleInstant(ChangeEventArgs e)
+    {
+        instant = (bool)e.Value!;
+        await Settings.UpdateAsync(s => s.General.ScanInstantKnown = instant);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (module is not null)
+            {
+                await module.InvokeVoidAsync("stop");
+                await module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
+        self?.Dispose();
+    }
+}

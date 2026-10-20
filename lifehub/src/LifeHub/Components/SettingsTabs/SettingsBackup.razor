@@ -1,0 +1,32 @@
+@inject BackupService Backups
+@inject DataPaths Paths
+@inject UiState Ui
+
+<div class="card" style="max-width:760px">
+    <h2 style="margin-bottom:8px">Backups</h2>
+    <p class="small muted">A backup is made automatically every night (the latest 14 are kept) in <code>@Paths.Backups</code>. It contains all data, settings and the encryption keys that protect saved passwords — keep downloaded copies somewhere safe.
+        @if (Paths.IsHomeAssistantAddon) { <span>The add-on's data is also included in Home Assistant's own backups.</span> }
+    </p>
+    <button class="btn primary" @onclick="Create"><Icon Name="download" Size="15" /> Back up now</button>
+    <ul class="list" style="margin-top:12px">
+        @foreach (var f in Backups.List())
+        {
+            <li class="row">
+                <Icon Name="box" Size="16" />
+                <div class="grow"><div class="title small">@f.Name</div><div class="meta">@((f.Length / 1024.0).ToString("0.#")) KB · @f.LastWriteTime.ToString("d MMM yyyy HH:mm", Fmt.Culture)</div></div>
+                <a class="btn sm" href="backup/@f.Name" target="_top" download>Download</a>
+            </li>
+        }
+    </ul>
+    <hr />
+    <h3 style="margin-bottom:6px">Restore</h3>
+    <p class="small muted">Stop LifeHub, unzip a backup into the data folder (replacing <code>db/</code>, <code>settings.json</code> and <code>keys/</code>), then start it again.</p>
+</div>
+
+@code {
+    private void Create()
+    {
+        try { var f = Backups.Create(); Ui.Show("Backup created: " + Path.GetFileName(f)); }
+        catch (Exception ex) { Ui.Error(ex); }
+    }
+}

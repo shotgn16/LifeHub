@@ -1,0 +1,59 @@
+@inject SettingsService Settings
+@inject UiState Ui
+
+<div class="card" style="max-width:820px">
+    <div class="form-grid">
+        <div class="field"><label>Household / app name</label><input type="text" @bind="g.HouseholdName" /></div>
+        <div class="field"><label>LifeHub web address (optional)</label><input type="url" @bind="g.PublicUrl" placeholder="https://lifehub.example.com" /><div class="help">Tapping a phone notification opens this. Leave empty to open LifeHub inside the Home Assistant app.</div></div>
+        <div class="field">
+            <label>Time zone</label>
+            <select @bind="g.TimeZone">
+                @if (Zones.All(z => z.Id != g.TimeZone)) { <option value="@g.TimeZone">@g.TimeZone</option> }
+                @foreach (var z in Zones) { <option value="@z.Id">@z.Id</option> }
+            </select>
+        </div>
+        <div class="field"><label>Default currency (ISO)</label><input type="text" maxlength="3" @bind="g.Currency" /></div>
+        <div class="field">
+            <label>Date & number format</label>
+            <select @bind="g.Culture">
+                @foreach (var c in new[] { "en-GB", "en-US", "en-IE", "en-AU", "de-DE", "fr-FR", "nl-NL" }) { <option>@c</option> }
+            </select>
+        </div>
+        <div class="field"><label>Warn about food (days before use-by)</label><input type="number" min="0" @bind="g.ExpiryWarningDays" /></div>
+        <div class="field"><label>Show renewals due within (days)</label><input type="number" min="1" @bind="g.RenewalWarningDays" /></div>
+        <div class="field"><label>Freezer shelf life (days)</label><input type="number" min="1" @bind="g.FreezerShelfLifeDays" /></div>
+        <div class="field"><label>Defrosted food keeps (days)</label><input type="number" min="0" @bind="g.DefrostedShelfLifeDays" /></div>
+        <div class="field full">
+            <label class="check"><input type="checkbox" @bind="g.BarcodeLookupOnline" /> Look up unknown barcodes on Open Food Facts (only the barcode number is sent)</label>
+            <label class="check"><input type="checkbox" @bind="g.ScanInstantKnown" /> Scanning a product I've confirmed before adds/uses it straight away (with undo)</label>
+        </div>
+        <div class="field full"><label>Open Food Facts server</label><input type="url" @bind="g.BarcodeLookupUrl" /><div class="help">Default <code>https://world.openfoodfacts.org</code> — the free, open product database.</div></div>
+        <div class="field full"><label>Task categories</label><input type="text" @bind="taskCats" /><div class="help">Comma separated. Order is used in menus.</div></div>
+        <div class="field full"><label>Food categories</label><input type="text" @bind="foodCats" /><div class="help">Comma separated. Also the aisle order of the shopping list.</div></div>
+    </div>
+    <button class="btn primary" @onclick="Save">Save</button>
+</div>
+
+@code {
+    private GeneralSettings g = new();
+    private string taskCats = "", foodCats = "";
+    private static readonly IReadOnlyList<TimeZoneInfo> Zones = TimeZoneInfo.GetSystemTimeZones().OrderBy(z => z.Id).ToList();
+
+    protected override void OnInitialized()
+    {
+        g = Settings.Current.General;
+        taskCats = string.Join(", ", g.TaskCategories);
+        foodCats = string.Join(", ", g.FoodCategories);
+    }
+
+    private async Task Save()
+    {
+        g.TaskCategories = Split(taskCats);
+        g.FoodCategories = Split(foodCats);
+        if (!g.FoodCategories.Contains("Other")) g.FoodCategories.Add("Other");
+        g.Currency = g.Currency.ToUpperInvariant();
+        await Ui.Try(() => Settings.UpdateAsync(s => s.General = g), "Saved");
+    }
+
+    private static List<string> Split(string s) => s.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList();
+}

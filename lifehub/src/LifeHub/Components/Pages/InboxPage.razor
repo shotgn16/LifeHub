@@ -1,0 +1,361 @@
+@page "/inbox"
+@inherits LiveComponent
+@inject AiService Ai
+@inject EmailSyncService EmailSync
+@inject IRepository<EmailRecord> Emails
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+@inject EmailLinkService EmailLinks
+@inject IRepository<Promotion> Promotions
+@inject KitchenService Kitchen
+
+<PageTitle>AI Inbox · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>AI Inbox</h1>
+        <div class="sub">Suggestions from your email and quick captures, made by @(Ai.IsAvailable ? Settings.Current.Ollama.Model : "Ollama (not configured)")</div>
+    </div>
+    <div class="actions">
+        <button class="btn" @onclick="CheckMail" disabled="@checking"><Icon Name="mail" Size="15" /> @(checking ? "Checking…" : "Check mail now")</button>
+    </div>
+</div>
+
+@if (!Ai.IsAvailable)
+{
+    <div class="alert warn"><Icon Name="alert" /> <div>AI is off. Install <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a> on a machine on your network, pull a model (e.g. <code>ollama pull qwen2.5:7b</code>) and enable it in <a href="settings?tab=ai">Settings → AI</a>.</div></div>
+}
+@if (Settings.Current.Email.Accounts.Count == 0)
+{
+    <div class="alert info"><Icon Name="mail" /> <div>No mailboxes yet — add Gmail/IMAP, Microsoft 365 or Exchange in <a href="settings?tab=email">Settings → Email</a>.</div></div>
+}
+
+@if (Ai.IsAvailable)
+{
+    var auto = Settings.Current.Ollama.AutoApplyTypes;
+    <p class="small muted" style="margin:-6px 0 12px">
+        @(auto.Count == 0 ? "Everything waits here for your approval." : $"Applied automatically: {string.Join(", ", Ai.Handlers.Where(h => auto.Contains(h.Type)).Select(h => h.Label.ToLower()))} (undo from History). Everything else waits here.")
+        <a href="settings?tab=ai">Change</a>
+    </p>
+}
+<div class="card capture" style="margin-bottom:16px">
+    <label>Tell LifeHub something</label>
+    <textarea @bind="capture" @bind:event="oninput" placeholder="e.g. Dentist next Thursday 9:15, my Plex Pass renews 12 Jan for £39.99, need bin bags and coffee"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <span class="tiny muted">Tip: also available from HA via <code>POST /api/v1/capture</code></span>
+        <button class="btn primary right" @onclick="Capture" disabled="@(busy || !Ai.IsAvailable || string.IsNullOrWhiteSpace(capture))"><Icon Name="sparkles" Size="15" /> @(busy ? "Thinking…" : "Capture")</button>
+    </div>
+</div>
+
+<div class="tabs">
+    <button class="tab @(tab == "pending" ? "on" : "")" @onclick='() => tab = "pending"'>To review @if (pending.Count > 0) { <span class="badge accent">@pending.Count</span> }</button>
+    <button class="tab @(tab == "history" ? "on" : "")" @onclick='() => tab = "history"'>History</button>
+    <button class="tab @(tab == "promotions" ? "on" : "")" @onclick='() => tab = "promotions"'>Promotions @if (promotions.Count > 0) { <span class="badge">@promotions.Count</span> }</button>
+    <button class="tab @(tab == "emails" ? "on" : "")" @onclick='() => tab = "emails"'>Emails read</button>
+</div>
+
+@if (tab == "pending")
+{
+    @if (pending.Count == 0)
+    {
+        <div class="card empty"><div class="icon"><Icon Name="inbox" Size="32" /></div>All caught up.</div>
+    }
+    else
+    {
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button class="btn sm" @onclick="ApproveAll"><Icon Name="check" Size="14" /> Approve all</button>
+            <button class="btn sm danger" @onclick="RejectAll"><Icon Name="x" Size="14" /> Dismiss all</button>
+        </div>
+        @foreach (var s in pending)
+        {
+            <div class="suggestion">
+                <div class="src">
+                    <Icon Name="@(s.Origin == "email" ? "mail" : "sparkles")" Size="13" /> @s.OriginText
+                    <span class="right">· @Fmt.Ago(s.CreatedUtc) · confidence @((s.Confidence * 100).ToString("0"))%</span>
+                </div>
+                <div class="form-grid three" style="grid-template-columns:140px 1fr 1fr">
+                    <div class="field">
+                        <label>Action</label>
+                        <select @bind="s.Type">@foreach (var h in Ai.Handlers) { <option value="@h.Type">@h.Label</option> }</select>
+                    </div>
+                    <div class="field" style="grid-column:span 2"><label>Title</label><input type="text" @bind="s.Title" /></div>
+                    <div class="field"><label>Date</label><input type="date" @bind="s.Date" /></div>
+                    <div class="field"><label>Time</label><input type="time" @bind="s.Time" /></div>
+                    @if (s.Type is "task" or "event")
+                    {
+                        <div class="field"><label>Minutes</label><input type="number" min="0" @bind="s.DurationMinutes" /></div>
+                    }
+                    @if (s.Type is "renewal" or "shopping" or "pantry")
+                    {
+                        <div class="field"><label>@(s.Type == "renewal" ? "Amount" : "Quantity")</label><input type="number" step="any" @bind="s.Amount" /></div>
+                    }
+                    @if (s.Type is "task" or "pantry")
+                    {
+                        <div class="field"><label>Category</label><input type="text" @bind="s.Category" list="cats-@s.Type" /></div>
+                    }
+                    <div class="field full"><label>Details</label><input type="text" @bind="s.Description" /></div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end">
+                    <button class="btn sm danger" @onclick="() => Reject(s)">Dismiss</button>
+                    <button class="btn sm primary" @onclick="() => Approve(s)"><Icon Name="check" Size="14" /> Approve</button>
+                </div>
+            </div>
+        }
+        <datalist id="cats-task">@foreach (var c in Settings.Current.General.TaskCategories) { <option value="@c"></option> }</datalist>
+        <datalist id="cats-pantry">@foreach (var c in Settings.Current.General.FoodCategories) { <option value="@c"></option> }</datalist>
+    }
+}
+else if (tab == "history")
+{
+    var undoable = Ai.UndoableCounts(autoOnly: true);
+    @if (undoable.Count > 0)
+    {
+        <div class="card" style="margin-bottom:14px">
+            <div class="card-head"><h2><Icon Name="undo" /> Clean up things the AI added from emails</h2></div>
+            <p class="small muted" style="margin-top:-6px">Removes them from your lists — handy if adverts or newsletters slipped through. Things you've since changed by hand may be removed too.</p>
+            <div class="chips">
+                @foreach (var (type, count) in undoable.OrderByDescending(kv => kv.Value))
+                {
+                    var label = Ai.Handlers.FirstOrDefault(h => h.Type == type)?.Label ?? type;
+                    <button class="chip" @onclick="() => UndoAll(type, label)">@(confirmUndoType == type ? $"Tap again to remove {count}" : $"Undo {count} × {label.ToLower()}")</button>
+                }
+            </div>
+        </div>
+    }
+    <div class="card flush">
+        <ul class="list">
+            @if (history.Count == 0) { <li class="empty">No history yet.</li> }
+            @foreach (var s in history)
+            {
+                <li class="row">
+                    <span class="badge @(s.Status == SuggestionStatus.Applied ? "ok" : s.Status == SuggestionStatus.Failed ? "danger" : "")">@s.Status@(s.AutoApplied ? " (auto)" : "")</span>
+                    <div class="grow">
+                        <div class="title small">@s.Title <span class="muted">· @s.Type</span></div>
+                        <div class="meta">@s.Result@(string.IsNullOrEmpty(s.OriginText) ? "" : " · " + s.OriginText)</div>
+                    </div>
+                    <span class="small muted nowrap">@Fmt.Ago(s.UpdatedUtc)</span>
+                    @if (AiService.CanUndo(s))
+                    {
+                        <button class="btn sm" @onclick="() => Undo(s)"><Icon Name="undo" Size="14" /> Undo</button>
+                    }
+                    @if (s.Status is SuggestionStatus.Failed or SuggestionStatus.Rejected or SuggestionStatus.Undone)
+                    {
+                        <button class="btn sm" @onclick="() => Requeue(s)">Review again</button>
+                    }
+                </li>
+            }
+        </ul>
+    </div>
+}
+else if (tab == "promotions")
+{
+    <p class="small muted">Deals and adverts from marketing emails. They're never added to your shopping list or tasks unless you choose to.@(Settings.Current.Email.KeepPromotions ? "" : " (Collecting promotions is switched off in Settings → Email.)")</p>
+    <div class="card flush">
+        <ul class="list">
+            @if (promotions.Count == 0) { <li class="empty">No promotions right now.</li> }
+            @foreach (var p in promotions)
+            {
+                <li class="row">
+                    <Icon Name="sparkles" Size="16" />
+                    <div class="grow">
+                        <div class="title small">@p.Title @if (p.Saved) { <span class="badge ok">saved</span> }</div>
+                        <div class="meta">
+                            @if (!string.IsNullOrEmpty(p.Merchant)) { <span>@p.Merchant</span> }
+                            @if (p.Price is { } price) { <span>· @Fmt.Money(price, string.IsNullOrEmpty(p.Currency) ? Settings.Current.General.Currency : p.Currency)</span> }
+                            @if (p.EndsOn is { } ends) { <span class="badge @(ends.DayNumber - Clock.Today.DayNumber <= 2 ? "warn" : "")">ends @Fmt.RelDay(ends, Clock.Today).ToLower()</span> }
+                        </div>
+                        @if (!string.IsNullOrEmpty(p.Description)) { <div class="meta">@p.Description</div> }
+                    </div>
+                    @if (!string.IsNullOrEmpty(p.WebLink)) { <a class="btn sm" href="@p.WebLink" target="_blank" rel="noopener">Open</a> }
+                    <button class="btn sm" title="Keep it — won't be cleared when it expires" @onclick="() => SavePromo(p)">@(p.Saved ? "Unsave" : "Save")</button>
+                    <button class="btn sm" title="I want this — add to the shopping list" @onclick="() => PromoToShopping(p)"><Icon Name="cart" Size="14" /></button>
+                    <button class="icon-btn" title="Dismiss" @onclick="() => DismissPromo(p)"><Icon Name="x" Size="15" /></button>
+                </li>
+            }
+        </ul>
+    </div>
+}
+else
+{
+    <p class="small muted">Last check: @(EmailSync.LastRunUtc is { } t ? Fmt.Ago(t) : "not yet") — @EmailSync.LastRunSummary. Email bodies are never stored; only the subject, sender and AI summary.</p>
+    <div class="chips" style="margin-bottom:12px">
+        @foreach (var (key, label) in EmailFilters)
+        {
+            <button class="chip @(emailFilter == key ? "on" : "")" @onclick="() => emailFilter = key">@label</button>
+        }
+    </div>
+    <div class="card flush">
+        <ul class="list">
+            @{ var shown = FilteredEmails().ToList(); }
+            @if (shown.Count == 0) { <li class="empty">Nothing here.</li> }
+            @foreach (var e in shown)
+            {
+                var taskCount = EmailLinks.TasksFor(e.Id).Count(t => t.IsOpen);
+                <li class="row">
+                    <span class="dot @(e.Importance == "high" ? "danger" : e.SuggestionCount > 0 ? "on" : "")"></span>
+                    <div class="grow">
+                        <div class="title small @(e.DeletedUtc is not null ? "strike" : "")">@e.Subject</div>
+                        <div class="meta">
+                            @if (!string.IsNullOrEmpty(e.Category)) { <span class="badge @(EmailCategories.IsMarketing(e.Category) ? "" : e.Category is "action_needed" or "bill" ? "warn" : "info")">@EmailCategories.Label(e.Category)</span> }
+                            <span>@e.From</span><span>· @e.AccountName</span>
+                            @if (taskCount > 0) { <span class="badge accent">@taskCount task(s)</span> }
+                            @if (e.DeletedUtc is not null) { <span class="badge">in bin</span> }
+                        </div>
+                        <div class="meta">@(string.IsNullOrEmpty(e.Error) ? e.Summary : "⚠ " + e.Error)</div>
+                    </div>
+                    <span class="small muted nowrap desktop-only">@Clock.ToLocal(e.ReceivedUtc).ToString("d MMM HH:mm", Fmt.Culture)</span>
+                    @if (!string.IsNullOrEmpty(e.WebLink)) { <a class="icon-btn" href="@e.WebLink" target="_blank" rel="noopener" title="Open in your mail app"><Icon Name="link" Size="15" /></a> }
+                    @if (e.DeletedUtc is null && !string.IsNullOrEmpty(e.ProviderRef))
+                    {
+                        <button class="btn sm danger" title="Move to the bin@(taskCount > 0 ? " and remove its tasks" : "")" @onclick="() => DeleteEmail(e)">
+                            <Icon Name="trash" Size="14" /> @(confirmEmail == e.Id ? "Confirm" : "")
+                        </button>
+                    }
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    private string tab = "pending";
+    private string capture = "";
+    private bool busy, checking;
+    private List<AiSuggestion> pending = new();
+    private List<AiSuggestion> history = new();
+    private List<EmailRecord> emails = new();
+    private List<Promotion> promotions = new();
+    private string emailFilter = "all";
+    private Guid? confirmEmail;
+
+    private static readonly (string, string)[] EmailFilters =
+        { ("all", "All"), ("action", "Needs action"), ("tasks", "With tasks"), ("promotion", "Promotions"), ("other", "Receipts & updates") };
+
+    private IEnumerable<EmailRecord> FilteredEmails() => emailFilter switch
+    {
+        "action" => emails.Where(e => e.Category is "action_needed" or "bill" or "booking" || e.SuggestionCount > 0 && !EmailCategories.IsMarketing(e.Category)),
+        "tasks" => emails.Where(e => EmailLinks.TasksFor(e.Id).Count > 0),
+        "promotion" => emails.Where(e => EmailCategories.IsMarketing(e.Category)),
+        "other" => emails.Where(e => e.Category is "receipt" or "delivery" or "notification" or "account" or "other"),
+        _ => emails
+    };
+
+    private string? confirmUndoType;
+
+    private async Task UndoAll(string type, string label)
+    {
+        if (confirmUndoType != type) { confirmUndoType = type; return; }
+        confirmUndoType = null;
+        var n = await Ai.UndoAllAsync(type);
+        Ui.Show($"Removed {n} × {label.ToLower()}");
+    }
+
+    private async Task DeleteEmail(EmailRecord e)
+    {
+        if (confirmEmail != e.Id) { confirmEmail = e.Id; return; }
+        confirmEmail = null;
+        try { Ui.Show(await EmailLinks.DeleteEmailAsync(e.Id)); }
+        catch (Exception ex) { Ui.Error(ex); }
+    }
+
+    private async Task SavePromo(Promotion p)
+    {
+        p.Saved = !p.Saved;
+        await Promotions.UpsertAsync(p);
+    }
+
+    private async Task DismissPromo(Promotion p)
+    {
+        p.Dismissed = true;
+        await Promotions.UpsertAsync(p);
+    }
+
+    private async Task PromoToShopping(Promotion p)
+    {
+        await Kitchen.AddToShoppingAsync(p.Title, 1, "", "Promotion", "Other");
+        Ui.Show($"\"{p.Title}\" added to the shopping list");
+    }
+
+    protected override void OnInitialized()
+    {
+        Watch(Ai.Suggestions);
+        Watch(Emails);
+        Watch(Promotions);
+        Load();
+    }
+
+    protected override void OnDataChanged() => Load();
+
+    private void Load()
+    {
+        // Keep edits the user is making to pending cards when a refresh arrives.
+        var edits = pending.ToDictionary(p => p.Id);
+        pending = Ai.Suggestions.Where(s => s.Status == SuggestionStatus.Pending).OrderByDescending(s => s.CreatedUtc)
+            .Select(s => edits.TryGetValue(s.Id, out var e) ? e : s).ToList();
+        history = Ai.Suggestions.Where(s => s.Status != SuggestionStatus.Pending).OrderByDescending(s => s.UpdatedUtc).Take(150).ToList();
+        emails = Emails.All().OrderByDescending(e => e.ReceivedUtc).Take(200).ToList();
+        promotions = Promotions.Where(p => !p.Dismissed).OrderBy(p => p.EndsOn ?? DateOnly.MaxValue).ThenByDescending(p => p.CreatedUtc).ToList();
+    }
+
+    private async Task Capture()
+    {
+        busy = true;
+        try
+        {
+            var list = await Ai.CaptureAsync(capture);
+            var applied = list.Count(s => s.Status == SuggestionStatus.Applied);
+            Ui.Show(list.Count == 0 ? "Nothing to do found in that" : $"{list.Count} suggestion(s){(applied > 0 ? $", {applied} applied automatically" : "")}");
+            capture = "";
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task Approve(AiSuggestion s)
+    {
+        await Ai.Suggestions.UpsertAsync(s); // save edits first
+        var result = await Ai.ApplyAsync(s.Id);
+        pending.RemoveAll(p => p.Id == s.Id);
+        if (result?.Status == SuggestionStatus.Failed) Ui.Show("Failed: " + result.Result, true);
+        else Ui.Show(result?.Result ?? "Done");
+    }
+
+    private async Task Reject(AiSuggestion s)
+    {
+        pending.RemoveAll(p => p.Id == s.Id);
+        await Ai.RejectAsync(s.Id);
+    }
+
+    private async Task ApproveAll()
+    {
+        foreach (var s in pending.ToList()) await Approve(s);
+    }
+
+    private async Task RejectAll()
+    {
+        foreach (var s in pending.ToList()) await Reject(s);
+    }
+
+    private async Task Undo(AiSuggestion s)
+    {
+        await Ui.Try(() => Ai.UndoAsync(s.Id), "Undone");
+    }
+
+    private async Task Requeue(AiSuggestion s)
+    {
+        s.Extra.Remove("undo");
+        s.Status = SuggestionStatus.Pending;
+        s.Result = "";
+        await Ai.Suggestions.UpsertAsync(s);
+        tab = "pending";
+    }
+
+    private async Task CheckMail()
+    {
+        checking = true;
+        try { Ui.Show(await EmailSync.SyncAllAsync()); }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { checking = false; }
+    }
+}

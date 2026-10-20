@@ -1,0 +1,134 @@
+@inject AiService Ai
+@inject TaskService Tasks
+@inject KitchenService Kitchen
+@inject SettingsService Settings
+@inject UiState Ui
+
+<Modal Open="Open" OpenChanged="OpenChanged" Title="Quick capture">
+    <ChildContent>
+        <div class="capture">
+            <textarea @bind="text" @bind:event="oninput" placeholder="@(Ai.IsAvailable ? "e.g. Renew example.co.uk before 3 Nov, buy milk and eggs, dentist Tuesday 2:30pm" : "Type a task or item…")" autofocus></textarea>
+        </div>
+        @if (Ai.IsAvailable)
+        {
+            <p class="small muted" style="margin-top:8px">The local AI turns this into tasks, events, renewals and shopping items. Anything not set to auto-apply waits in the AI Inbox.</p>
+        }
+        else
+        {
+            <div class="form-grid" style="margin-top:10px">
+                <div class="field">
+                    <label>Category (for tasks)</label>
+                    <select @bind="category">
+                        @foreach (var c in Settings.Current.General.TaskCategories) { <option>@c</option> }
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Due (optional)</label>
+                    <input type="date" @bind="due" />
+                </div>
+            </div>
+            <p class="small muted">Tip: enable Ollama in Settings → AI to capture in plain English.</p>
+        }
+
+        @if (results is not null)
+        {
+            <hr />
+            @if (results.Count == 0) { <p class="muted">The AI didn't find anything to do in that.</p> }
+            <ul class="list">
+                @foreach (var s in results)
+                {
+                    <li class="row">
+                        <span class="badge accent">@s.Type</span>
+                        <div class="grow">
+                            <div class="title">@s.Title</div>
+                            <div class="meta">
+                                @if (s.Date is { } d) { <span>@d.ToString("ddd d MMM", Fmt.Culture)</span> }
+                                @if (s.Time is { } tm) { <span>@tm.ToString("HH:mm")</span> }
+                                <span>@s.Status@(string.IsNullOrEmpty(s.Result) ? "" : " — " + s.Result)</span>
+                            </div>
+                        </div>
+                        @if (s.Status == SuggestionStatus.Pending)
+                        {
+                            <button class="btn sm primary" @onclick="() => Apply(s)">Apply</button>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </ChildContent>
+    <Footer>
+        @if (Ai.IsAvailable)
+        {
+            @if (results?.Any(r => r.Status == SuggestionStatus.Pending) == true)
+            {
+                <button class="btn left" @onclick="ApplyAll">Apply all</button>
+            }
+            <button class="btn primary" disabled="@(busy || string.IsNullOrWhiteSpace(text))" @onclick="Capture">
+                <Icon Name="sparkles" Size="15" /> @(busy ? "Thinking…" : "Capture")
+            </button>
+        }
+        else
+        {
+            <button class="btn" disabled="@string.IsNullOrWhiteSpace(text)" @onclick="AddShopping"><Icon Name="cart" Size="15" /> Shopping item</button>
+            <button class="btn primary" disabled="@string.IsNullOrWhiteSpace(text)" @onclick="AddTask"><Icon Name="tasks" Size="15" /> Add task</button>
+        }
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    private string text = "";
+    private string category = "";
+    private DateOnly? due;
+    private bool busy;
+    private List<AiSuggestion>? results;
+
+    protected override void OnParametersSet()
+    {
+        if (!Open) { results = null; }
+        if (string.IsNullOrEmpty(category)) category = Settings.Current.General.TaskCategories.FirstOrDefault() ?? "Admin";
+    }
+
+    private async Task Capture()
+    {
+        busy = true;
+        try
+        {
+            results = await Ai.CaptureAsync(text);
+            text = "";
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task Apply(AiSuggestion s)
+    {
+        var updated = await Ai.ApplyAsync(s.Id);
+        if (updated is not null && results is not null) results[results.FindIndex(r => r.Id == s.Id)] = updated;
+    }
+
+    private async Task ApplyAll()
+    {
+        foreach (var s in results!.Where(r => r.Status == SuggestionStatus.Pending).ToList()) await Apply(s);
+    }
+
+    private async Task AddTask()
+    {
+        foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            await Tasks.QuickAddAsync(line, category, due);
+        Ui.Show("Task added");
+        text = "";
+        await OpenChanged.InvokeAsync(false);
+    }
+
+    private async Task AddShopping()
+    {
+        foreach (var line in text.Split(new[] { '\n', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            await Kitchen.AddToShoppingAsync(line);
+        Ui.Show("Added to shopping list");
+        text = "";
+        await OpenChanged.InvokeAsync(false);
+    }
+}

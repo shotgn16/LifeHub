@@ -1,0 +1,371 @@
+@page "/kitchen"
+@inherits LiveComponent
+@inject KitchenService Kitchen
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+
+<PageTitle>Kitchen · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Kitchen</h1>
+        <div class="sub">@items.Count items · @items.Count(i => i.Location == StorageLocation.Freezer) in the freezer · @expiringCount to use soon</div>
+    </div>
+    <div class="actions">
+        <a class="btn primary" href="scan?mode=add"><Icon Name="barcode" Size="15" /> Scan in</a>
+        <a class="btn" href="scan?mode=use"><Icon Name="barcode" Size="15" /> Scan used</a>
+        <a class="btn" href="shopping"><Icon Name="cart" Size="15" /> Shopping list</a>
+    </div>
+</div>
+
+<div class="tabs">
+    <button class="tab @(tab == "stock" ? "on" : "")" @onclick='() => tab = "stock"'>In the house</button>
+    <button class="tab @(tab == "staples" ? "on" : "")" @onclick='() => tab = "staples"'>Always have (staples)</button>
+    <button class="tab @(tab == "products" ? "on" : "")" @onclick='() => tab = "products"'>Barcodes</button>
+    <button class="tab @(tab == "stats" ? "on" : "")" @onclick='() => tab = "stats"'>History</button>
+</div>
+
+@if (tab == "stock")
+{
+    <div class="card" style="margin-bottom:14px">
+        <div class="form-grid three" style="grid-template-columns:2fr 1fr 1fr">
+            <div class="field"><label>Add item</label><input type="text" placeholder="e.g. Chicken breasts" @bind="add.Name" @bind:event="oninput" @onkeydown="AddKey" list="staple-names" /></div>
+            <div class="field"><label>Quantity</label>
+                <div style="display:flex;gap:6px"><input type="number" step="any" min="0" @bind="add.Quantity" style="width:80px" /><input type="text" placeholder="unit" @bind="add.Unit" /></div>
+            </div>
+            <div class="field"><label>Where</label>
+                <select @bind="add.Location">@foreach (var l in Enum.GetValues<StorageLocation>()) { <option value="@l">@l</option> }</select>
+            </div>
+            <div class="field"><label>Category</label>
+                <select @bind="add.Category">@foreach (var c in Settings.Current.General.FoodCategories) { <option>@c</option> }</select>
+            </div>
+            <div class="field"><label>Use by</label><input type="date" @bind="add.UseBy" /></div>
+            <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" style="width:100%" @onclick="Add" disabled="@string.IsNullOrWhiteSpace(add.Name)"><Icon Name="plus" Size="15" /> Add</button></div>
+        </div>
+        <datalist id="staple-names">@foreach (var s in staples) { <option value="@s.Staple.Name"></option> }</datalist>
+        <div class="help small muted">Leave use-by empty for staples with a shelf life and it's filled in for you. Freezer items get @Settings.Current.General.FreezerShelfLifeDays days.</div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <div class="chips">
+            <button class="chip @(location is null ? "on" : "")" @onclick="() => location = null">All</button>
+            @foreach (var l in Enum.GetValues<StorageLocation>())
+            {
+                var n = items.Count(i => i.Location == l);
+                if (n == 0 && l == StorageLocation.Other) continue;
+                <button class="chip @(location == l ? "on" : "")" @onclick="() => location = l">@l <span class="muted">· @n</span></button>
+            }
+        </div>
+        <input type="search" placeholder="Search…" @bind="search" @bind:event="oninput" style="max-width:200px;margin-left:auto" />
+    </div>
+
+    <div class="card flush">
+        <ul class="list">
+            @if (Visible.Count == 0) { <li class="empty">Nothing here.</li> }
+            @foreach (var p in Visible)
+            {
+                var d = p.DaysLeft(today);
+                <li class="row">
+                    <div class="grow">
+                        <div class="title">@p.Name <span class="muted small">× @Fmt.Qty(p.Quantity, p.Unit)</span></div>
+                        <div class="meta">
+                            <span>@p.Location</span><span>· @p.Category</span>
+                            @if (p.FrozenOn is { } f && p.Location == StorageLocation.Freezer) { <span>· frozen @Fmt.RelDay(f, today).ToLower()</span> }
+                            @if (p.OpenedOn is { } o) { <span>· opened @Fmt.RelDay(o, today).ToLower()</span> }
+                        </div>
+                    </div>
+                    <span class="badge @Fmt.DaysClass(d, warnDays)">@Fmt.DaysLeft(d)</span>
+                    <button class="btn sm" title="Used one (or all if only one left)" @onclick="() => Kitchen.UseAsync(p.Id, p.Quantity > 1 ? 1 : null)">Use 1</button>
+                    <button class="icon-btn desktop-only" title="Finished it" @onclick="() => Kitchen.UseAsync(p.Id)"><Icon Name="check" Size="16" /></button>
+                    @if (p.Location == StorageLocation.Freezer)
+                    {
+                        <button class="icon-btn" title="Defrost (moves to fridge)" @onclick="() => Kitchen.DefrostAsync(p.Id)"><Icon Name="thaw" Size="16" /></button>
+                    }
+                    else
+                    {
+                        <button class="icon-btn" title="Freeze" @onclick="() => Kitchen.FreezeAsync(p.Id)"><Icon Name="snow" Size="16" /></button>
+                    }
+                    <button class="icon-btn" title="Edit" @onclick="() => editItem = Kitchen.Pantry.Get(p.Id)"><Icon Name="edit" Size="16" /></button>
+                </li>
+            }
+        </ul>
+    </div>
+}
+else if (tab == "staples")
+{
+    <div class="card" style="margin-bottom:14px">
+        <p class="small muted">Staples are things you always want in. When stock drops below the minimum, only expired stock is left, or your usual buying gap says you're about to run out, they're added to the shopping list automatically.</p>
+        <button class="btn primary" @onclick="NewStaple"><Icon Name="plus" Size="15" /> Add staple</button>
+        <button class="btn" @onclick="RefreshList"><Icon Name="refresh" Size="15" /> Check now</button>
+    </div>
+    <div class="card flush">
+        <div class="table-wrap">
+            <table class="table responsive">
+                <thead><tr><th>Item</th><th class="num">In stock</th><th class="num">Min</th><th>Usually buy every</th><th>Last bought</th><th>Runs out ~</th></tr></thead>
+                <tbody>
+                    @if (staples.Count == 0) { <tr><td colspan="6" class="empty">No staples yet — add milk, bread, coffee, loo roll…</td></tr> }
+                    @foreach (var s in staples)
+                    {
+                        <tr class="clickable" @onclick="() => editStaple = Kitchen.Staples.Get(s.Staple.Id)">
+                            <td data-label="Item"><div class="cell"><span class="title">@s.Staple.Name</span> <span class="tiny muted">@s.Staple.DefaultLocation</span></div></td>
+                            <td data-label="In stock" class="num"><div class="cell"><span class="badge @(s.Low ? "danger" : "ok")">@Fmt.Qty(s.InStock, s.Staple.Unit)</span></div></td>
+                            <td data-label="Min" class="num"><div class="cell">@Fmt.Qty(s.Staple.MinQuantity, s.Staple.Unit)</div></td>
+                            <td data-label="Every"><div class="cell">@(s.AvgDaysBetweenBuys is { } a ? $"{a:0.#} days" : "learning…")</div></td>
+                            <td data-label="Last bought"><div class="cell">@(s.LastBought is { } lb ? Fmt.RelDay(lb, today) : "—")</div></td>
+                            <td data-label="Runs out"><div class="cell">@(s.PredictedRunOut is { } r ? Fmt.RelDay(r, today) : "—")</div></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else if (tab == "products")
+{
+    <div class="card" style="margin-bottom:14px">
+        <p class="small muted" style="margin:0">Products LifeHub has learned from your scans. Fix a name, link a product to a staple (so any brand of milk counts as "Milk"), or set where it's stored and how long it keeps.</p>
+    </div>
+    <div class="card flush">
+        <div class="table-wrap">
+            <table class="table responsive">
+                <thead><tr><th>Product</th><th>Barcode</th><th>Staple</th><th>Kept in</th><th>Keeps</th><th class="num">Scans</th></tr></thead>
+                <tbody>
+                    @{ var products = Kitchen.Products.All().OrderByDescending(p => p.LastScannedUtc).ToList(); }
+                    @if (products.Count == 0) { <tr><td colspan="6" class="empty">Nothing scanned yet — try <a href="scan">Scan</a>.</td></tr> }
+                    @foreach (var p in products)
+                    {
+                        <tr class="clickable" @onclick="() => editProduct = Kitchen.Products.Get(p.Id)">
+                            <td data-label="Product"><div class="cell"><span class="title">@p.Name</span> @if (!p.Confirmed) { <span class="badge warn">unchecked</span> }<div class="tiny muted">@p.Brand @p.PackSize</div></div></td>
+                            <td data-label="Barcode"><div class="cell mono small">@p.Barcode</div></td>
+                            <td data-label="Staple"><div class="cell">@(p.StapleId is { } sid ? Kitchen.Staples.Get(sid)?.Name ?? "—" : "—")</div></td>
+                            <td data-label="Kept in"><div class="cell">@p.DefaultLocation</div></td>
+                            <td data-label="Keeps"><div class="cell">@(p.ShelfLifeDays is { } d ? $"{d} days" : "—")</div></td>
+                            <td data-label="Scans" class="num"><div class="cell">@p.ScanCount</div></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else
+{
+    var s30 = Kitchen.StatsSince(today.AddDays(-30));
+    <div class="grid cols-3" style="margin-bottom:16px">
+        <div class="card stat"><span class="label">Bought (30d)</span><span class="value">@s30.Purchased</span></div>
+        <div class="card stat"><span class="label">Used up (30d)</span><span class="value">@s30.Used</span></div>
+        <div class="card stat"><span class="label">Binned (30d)</span><span class="value">@s30.Wasted</span><span class="hint">@WastePct(s30)</span></div>
+    </div>
+    <div class="card flush">
+        <div class="card-head"><h2>Recent activity</h2></div>
+        <ul class="list">
+            @foreach (var e in Kitchen.Events.All().OrderByDescending(e => e.CreatedUtc).Take(60))
+            {
+                <li class="row">
+                    <span class="badge @(e.Kind == FoodEventKind.Wasted ? "danger" : e.Kind == FoodEventKind.Purchased ? "ok" : e.Kind == FoodEventKind.Frozen ? "info" : "")">@e.Kind</span>
+                    <div class="grow">@e.Name <span class="muted small">× @Fmt.Qty(e.Quantity, "")</span></div>
+                    <span class="small muted">@Fmt.RelDay(e.Date, today)</span>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+<Modal Open="editItem is not null" OpenChanged="v => { if (!v) editItem = null; }" Title="@(editItem?.Name ?? "")">
+    <ChildContent>
+        @if (editItem is not null)
+        {
+            <div class="form-grid">
+                <div class="field full"><label>Name</label><input type="text" @bind="editItem.Name" /></div>
+                <div class="field"><label>Quantity</label><input type="number" step="any" @bind="editItem.Quantity" /></div>
+                <div class="field"><label>Unit</label><input type="text" @bind="editItem.Unit" /></div>
+                <div class="field"><label>Where</label><select @bind="editItem.Location">@foreach (var l in Enum.GetValues<StorageLocation>()) { <option value="@l">@l</option> }</select></div>
+                <div class="field"><label>Category</label><select @bind="editItem.Category">@foreach (var c in Settings.Current.General.FoodCategories) { <option>@c</option> }</select></div>
+                <div class="field"><label>Use by</label><input type="date" @bind="editItem.UseBy" /></div>
+                <div class="field"><label>Opened</label><input type="date" @bind="editItem.OpenedOn" /></div>
+                <div class="field"><label>Frozen on</label><input type="date" @bind="editItem.FrozenOn" /></div>
+                <div class="field"><label>Added</label><input type="date" @bind="editItem.AddedOn" /></div>
+                <div class="field full"><label>Notes</label><input type="text" @bind="editItem.Notes" /></div>
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <button class="btn danger left" @onclick="Bin"><Icon Name="trash" Size="15" /> Binned it</button>
+        <button class="btn" @onclick="() => editItem = null">Cancel</button>
+        <button class="btn primary" @onclick="SaveItem">Save</button>
+    </Footer>
+</Modal>
+
+<Modal Open="editStaple is not null" OpenChanged="v => { if (!v) editStaple = null; }" Title="@(string.IsNullOrEmpty(editStaple?.Name) ? "New staple" : editStaple!.Name)">
+    <ChildContent>
+        @if (editStaple is not null)
+        {
+            <div class="form-grid">
+                <div class="field full"><label>Name</label><input type="text" @bind="editStaple.Name" @bind:event="oninput" /></div>
+                <div class="field"><label>Keep at least</label><input type="number" step="any" min="0" @bind="editStaple.MinQuantity" /></div>
+                <div class="field"><label>Unit</label><input type="text" @bind="editStaple.Unit" placeholder="pints, loaves, packs…" /></div>
+                <div class="field"><label>Buy this many</label><input type="number" step="any" min="0" @bind="editStaple.BuyQuantity" /></div>
+                <div class="field"><label>Shelf life (days)</label><input type="number" min="0" @bind="editStaple.ShelfLifeDays" /></div>
+                <div class="field"><label>Stored in</label><select @bind="editStaple.DefaultLocation">@foreach (var l in Enum.GetValues<StorageLocation>()) { <option value="@l">@l</option> }</select></div>
+                <div class="field"><label>Category</label><select @bind="editStaple.Category">@foreach (var c in Settings.Current.General.FoodCategories) { <option>@c</option> }</select></div>
+                <div class="field full"><label>Also matches (comma separated)</label><input type="text" @bind="aliases" placeholder="semi-skimmed milk, whole milk" /></div>
+                <div class="field full"><label class="check"><input type="checkbox" @bind="editStaple.PredictFromHistory" /> Predict when I'll run out from my buying history</label></div>
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        @if (editStaple is not null && Kitchen.Staples.Get(editStaple.Id) is not null)
+        {
+            <button class="btn danger left" @onclick="DeleteStaple"><Icon Name="trash" Size="15" /> Delete</button>
+        }
+        <button class="btn" @onclick="() => editStaple = null">Cancel</button>
+        <button class="btn primary" @onclick="SaveStaple" disabled="@string.IsNullOrWhiteSpace(editStaple?.Name)">Save</button>
+    </Footer>
+</Modal>
+
+<Modal Open="editProduct is not null" OpenChanged="v => { if (!v) editProduct = null; }" Title="@(editProduct?.Name ?? "")">
+    <ChildContent>
+        @if (editProduct is not null)
+        {
+            <div class="form-grid">
+                <div class="field full"><label>Name</label><input type="text" @bind="editProduct.Name" @bind:event="oninput" /></div>
+                <div class="field"><label>Brand</label><input type="text" @bind="editProduct.Brand" /></div>
+                <div class="field"><label>Barcode</label><input type="text" value="@editProduct.Barcode" readonly class="mono" /></div>
+                <div class="field">
+                    <label>Counts as staple</label>
+                    <select value="@(editProduct.StapleId?.ToString() ?? "")" @onchange="e => editProduct.StapleId = Guid.TryParse(e.Value?.ToString(), out var g) ? g : null">
+                        <option value="">— none —</option>
+                        @foreach (var st in Kitchen.Staples.All().OrderBy(x => x.Name)) { <option value="@st.Id">@st.Name</option> }
+                    </select>
+                </div>
+                <div class="field"><label>Category</label><select @bind="editProduct.Category">@foreach (var c in Settings.Current.General.FoodCategories) { <option>@c</option> }</select></div>
+                <div class="field"><label>Kept in</label><select @bind="editProduct.DefaultLocation">@foreach (var l in Enum.GetValues<StorageLocation>()) { <option value="@l">@l</option> }</select></div>
+                <div class="field"><label>Keeps for (days)</label><input type="number" min="0" @bind="editProduct.ShelfLifeDays" /></div>
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <button class="btn danger left" @onclick="DeleteProduct"><Icon Name="trash" Size="15" /> Forget</button>
+        <button class="btn" @onclick="() => editProduct = null">Cancel</button>
+        <button class="btn primary" @onclick="SaveProduct" disabled="@string.IsNullOrWhiteSpace(editProduct?.Name)">Save</button>
+    </Footer>
+</Modal>
+
+@code {
+    private string tab = "stock";
+    private ProductInfo? editProduct;
+
+    private async Task SaveProduct()
+    {
+        if (editProduct is null) return;
+        editProduct.Confirmed = true;
+        await Kitchen.Products.UpsertAsync(editProduct);
+        editProduct = null;
+    }
+
+    private async Task DeleteProduct()
+    {
+        if (editProduct is null) return;
+        await Kitchen.Products.DeleteAsync(editProduct.Id);
+        editProduct = null;
+    }
+    private List<PantryItem> items = new();
+    private List<StapleStatus> staples = new();
+    private int expiringCount;
+    private DateOnly today;
+    private StorageLocation? location;
+    private string search = "";
+    private PantryItem add = new();
+    private PantryItem? editItem;
+    private StapleItem? _editStaple;
+    private string aliases = "";
+
+    private StapleItem? editStaple
+    {
+        get => _editStaple;
+        set { _editStaple = value; aliases = value is null ? "" : string.Join(", ", value.Aliases); }
+    }
+
+    protected override void OnInitialized()
+    {
+        Watch(Kitchen.Pantry); Watch(Kitchen.Staples); Watch(Kitchen.Events); Watch(Kitchen.Products);
+        ResetAdd();
+        Load();
+    }
+
+    protected override void OnDataChanged() => Load();
+
+    private int warnDays = 3;
+
+    private void Load()
+    {
+        today = Clock.Today;
+        warnDays = Settings.Current.General.ExpiryWarningDays;
+        items = Kitchen.Pantry.All().ToList();
+        staples = Kitchen.StapleStatuses().ToList();
+        expiringCount = Kitchen.ExpiringWithin(Settings.Current.General.ExpiryWarningDays).Count;
+    }
+
+    private List<PantryItem> Visible => items
+        .Where(i => location is null || i.Location == location)
+        .Where(i => string.IsNullOrWhiteSpace(search) || i.Name.Contains(search, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(i => i.UseBy ?? DateOnly.MaxValue).ThenBy(i => i.Name).ToList();
+
+    private void ResetAdd() => add = new PantryItem { Location = location ?? StorageLocation.Fridge, Category = "Other", Quantity = 1 };
+
+    private async Task AddKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Add();
+    }
+
+    private async Task Add()
+    {
+        if (string.IsNullOrWhiteSpace(add.Name)) return;
+        var item = await Kitchen.AddToPantryAsync(add);
+        Ui.Show($"{item.Name} added to {item.Location.ToString().ToLower()}");
+        ResetAdd();
+    }
+
+    private async Task SaveItem()
+    {
+        if (editItem is null) return;
+        await Kitchen.SavePantryAsync(editItem);
+        editItem = null;
+    }
+
+    private async Task Bin()
+    {
+        if (editItem is null) return;
+        await Kitchen.UseAsync(editItem.Id, wasted: true);
+        Ui.Show("Logged as waste");
+        editItem = null;
+    }
+
+    private void NewStaple() => editStaple = new StapleItem { MinQuantity = 1, BuyQuantity = 1 };
+
+    private async Task SaveStaple()
+    {
+        if (editStaple is null) return;
+        editStaple.Aliases = aliases.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        await Kitchen.Staples.UpsertAsync(editStaple);
+        editStaple = null;
+        await Kitchen.RefreshAutoShoppingAsync();
+    }
+
+    private async Task DeleteStaple()
+    {
+        if (editStaple is null) return;
+        await Kitchen.Staples.DeleteAsync(editStaple.Id);
+        editStaple = null;
+    }
+
+    private async Task RefreshList()
+    {
+        var n = await Kitchen.RefreshAutoShoppingAsync();
+        Ui.Show(n == 0 ? "Nothing new needed" : $"{n} item(s) added to the shopping list");
+    }
+
+    private static string WastePct((int Purchased, int Used, int Wasted) s) =>
+        s.Used + s.Wasted == 0 ? "" : $"{(double)s.Wasted / (s.Used + s.Wasted) * 100:0}% of what was finished";
+}

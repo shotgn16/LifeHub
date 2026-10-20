@@ -1,0 +1,117 @@
+@using System.Text.Json
+@inject SettingsService Settings
+@inject OllamaClient Ollama
+@inject AiService Ai
+@inject UiState Ui
+
+<div class="grid cols-2">
+    <div class="card">
+        <h2 style="margin-bottom:12px">Ollama</h2>
+        <label class="check"><input type="checkbox" @bind="o.Enabled" /> Enabled</label>
+        <div class="field">
+            <label>Ollama URL</label>
+            <input type="url" @bind="o.Url" placeholder="http://192.168.1.50:11434" />
+            <div class="help">Where Ollama runs. If it's on another machine, start it with <code>OLLAMA_HOST=0.0.0.0</code>. From the HA add-on, <code>localhost</code> is the container itself — use the machine's IP.</div>
+        </div>
+        <div class="field">
+            <label>Model</label>
+            <div style="display:flex;gap:6px">
+                <input type="text" @bind="o.Model" list="ollama-models" />
+                <button class="btn" @onclick="LoadModels" disabled="@busy">List</button>
+            </div>
+            <datalist id="ollama-models">@foreach (var m in models) { <option value="@m"></option> }</datalist>
+            <div class="help">Good choices: <code>qwen2.5:7b</code>, <code>llama3.1:8b</code>, <code>mistral-nemo</code> (structured output needs Ollama 0.5+). Bigger = better at dates, slower on CPU.</div>
+        </div>
+        <div class="form-grid">
+            <div class="field"><label>Timeout (seconds)</label><input type="number" min="10" @bind="o.TimeoutSeconds" /></div>
+            <div class="field"><label>Temperature</label><input type="number" min="0" max="1" step="0.05" @bind="o.Temperature" /></div>
+            <div class="field"><label>Max email characters sent</label><input type="number" min="500" step="500" @bind="o.MaxEmailChars" /></div>
+        </div>
+        @if (models.Count > 0 || modelsError is not null)
+        {
+            <div class="alert @(modelsError is null ? "ok" : "danger") small">@(modelsError ?? $"Connected — {models.Count} model(s) installed.")</div>
+        }
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:12px">What the AI may do</h2>
+        <p class="small muted">Every action the AI suggests goes to the AI Inbox for review, unless its type is ticked here and the model is confident enough.</p>
+        @foreach (var h in Ai.Handlers)
+        {
+            <label class="check">
+                <input type="checkbox" checked="@o.AutoApplyTypes.Contains(h.Type)" @onchange="e => ToggleAuto(h.Type, (bool)e.Value!)" />
+                Auto-apply <strong>@h.Label</strong> <code class="tiny muted">@h.Type</code>
+            </label>
+        }
+        <div class="field"><label>Minimum confidence to auto-apply</label><input type="number" min="0" max="1" step="0.05" @bind="o.AutoApplyMinConfidence" /></div>
+        <div class="field">
+            <label>Extra rules for the AI</label>
+            <textarea @bind="o.ExtraInstructions" placeholder="e.g. Emails from @@mycompany.com are Work. Ignore anything from LinkedIn. Treat 'bins' reminders as Home DIY tasks."></textarea>
+        </div>
+    </div>
+</div>
+<div style="margin:16px 0;display:flex;gap:8px"><button class="btn primary" @onclick="Save">Save AI settings</button></div>
+
+<div class="card">
+    <h2 style="margin-bottom:10px">Try it</h2>
+    <textarea @bind="sample" placeholder="Paste an email or type a note…"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn" @onclick="TryIt" disabled="@(busy || string.IsNullOrWhiteSpace(sample))"><Icon Name="sparkles" Size="15" /> @(busy ? "Thinking…" : "Analyse (nothing is saved)")</button>
+        <button class="btn ghost" @onclick="() => showPrompt = !showPrompt">@(showPrompt ? "Hide" : "Show") prompt</button>
+    </div>
+    @if (tryResult is not null)
+    {
+        <pre class="mono small" style="white-space:pre-wrap;background:var(--surface-2);padding:12px;border-radius:8px;margin-top:12px">@tryResult</pre>
+    }
+    @if (showPrompt)
+    {
+        <pre class="mono tiny" style="white-space:pre-wrap;background:var(--surface-2);padding:12px;border-radius:8px;margin-top:12px">@Ai.BuildSystemPrompt()</pre>
+    }
+</div>
+
+@code {
+    private OllamaSettings o = new();
+    private List<string> models = new();
+    private string? modelsError, tryResult;
+    private bool busy, showPrompt;
+    private string sample = "Hi, your annual renewal for example.co.uk is due on 3 November 2026 at £12.99 (was £9.99). Also, can you send me the Q3 report by Friday? Thanks";
+
+    protected override void OnInitialized() => o = Settings.Current.Ollama;
+
+    private void ToggleAuto(string type, bool on)
+    {
+        o.AutoApplyTypes.Remove(type);
+        if (on) o.AutoApplyTypes.Add(type);
+    }
+
+    private async Task Save() => await Ui.Try(() => Settings.UpdateAsync(s => s.Ollama = o), "Saved");
+
+    private async Task LoadModels()
+    {
+        busy = true;
+        await Save();
+        try { models = await Ollama.ListModelsAsync(); modelsError = null; }
+        catch (Exception ex) { modelsError = "Couldn't reach Ollama: " + ex.Message; models = new(); }
+        finally { busy = false; }
+    }
+
+    private async Task TryIt()
+    {
+        busy = true;
+        await Save();
+        try
+        {
+            if (!Ai.IsAvailable) throw new InvalidOperationException("Enable Ollama and set a URL and model first.");
+            var r = await Ai.AnalyzeAsync(sample, "test");
+            tryResult = $"Summary: {r.Summary}\nImportance: {r.Importance}\n\n" + string.Join("\n", r.Suggestions.Select(s =>
+                $"• [{s.Type}] {s.Title}" +
+                (s.Date is { } d ? $" | date {d:yyyy-MM-dd}" : "") + (s.Time is { } t ? $" {t:HH:mm}" : "") +
+                (s.Amount is { } a ? $" | amount {a}" + (s.Currency is null ? "" : " " + s.Currency) : "") +
+                (string.IsNullOrEmpty(s.Category) ? "" : $" | {s.Category}") + $" | confidence {s.Confidence:0.00}" +
+                (string.IsNullOrEmpty(s.Description) ? "" : $"\n    {s.Description}")));
+            if (r.Suggestions.Count == 0) tryResult += "(no actions)";
+        }
+        catch (Exception ex) { tryResult = "Error: " + ex.Message; }
+        finally { busy = false; }
+    }
+}

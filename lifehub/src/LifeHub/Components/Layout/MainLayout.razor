@@ -1,0 +1,183 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject TaskService Tasks
+@inject KitchenService Kitchen
+@inject AiService Ai
+@inject NotificationService Notices
+@inject ScheduleService Schedule
+@inject SettingsService Settings
+@inject UiState UiState
+@inject NavigationManager Nav
+
+<div class="shell">
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" @bind="menuOpen" />
+    <label for="nav-toggle" class="nav-scrim"></label>
+    <aside class="sidebar" @onclick="CloseMenu">
+        <div class="brand"><span class="brand-mark">L</span> @householdName</div>
+        <NavLink class="nav-link" href="" Match="NavLinkMatch.All"><Icon Name="today" /> Today</NavLink>
+        <NavLink class="nav-link" href="tasks"><Icon Name="tasks" /> Tasks @if (tasksDue > 0) { <span class="count">@tasksDue</span> }</NavLink>
+        <NavLink class="nav-link" href="schedule"><Icon Name="calendar" /> Schedule</NavLink>
+        <div class="nav-section">Life admin</div>
+        <NavLink class="nav-link" href="renewals"><Icon Name="renewals" /> Renewals</NavLink>
+        <NavLink class="nav-link" href="kitchen"><Icon Name="kitchen" /> Kitchen</NavLink>
+        <NavLink class="nav-link" href="scan"><Icon Name="barcode" /> Scan</NavLink>
+        <NavLink class="nav-link" href="shopping"><Icon Name="cart" /> Shopping @if (shopping > 0) { <span class="count">@shopping</span> }</NavLink>
+        <div class="nav-section">Connected</div>
+        <NavLink class="nav-link" href="home"><Icon Name="home" /> Home</NavLink>
+        <NavLink class="nav-link" href="inbox"><Icon Name="inbox" /> AI Inbox @if (aiPending > 0) { <span class="count">@aiPending</span> }</NavLink>
+        <NavLink class="nav-link" href="settings"><Icon Name="settings" /> Settings</NavLink>
+        <div class="sidebar-foot">
+            <AuthorizeView>
+                <Authorized>
+                    <div style="display:flex;align-items:center;gap:6px"><Icon Name="user" Size="14" /> @context.User.Identity?.Name</div>
+                    @if (context.User.Identity?.AuthenticationType != "Ingress")
+                    {
+                        <a href="auth/logout" target="_top" class="small">Sign out</a>
+                    }
+                    else
+                    {
+                        <span class="tiny">via Home Assistant</span>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </aside>
+
+    <div class="main">
+        <header class="topbar">
+            <label for="nav-toggle" class="icon-btn mobile-only" aria-label="Menu"><Icon Name="menu" /></label>
+            @if (period is not null)
+            {
+                <span class="badge @(period.Event is not null ? "warn" : period.Kind == PeriodKind.Work ? "info" : period.Kind == PeriodKind.Free ? "ok" : "")" title="Current period">
+                    <Icon Name="clock" Size="12" /> @period.Label@(period.Until is { } u ? $" · until {u:HH:mm}" : "")
+                </span>
+            }
+            <div class="right" style="display:flex;gap:4px;align-items:center">
+                <button class="btn sm primary" @onclick="() => captureOpen = true"><Icon Name="plus" Size="15" /> <span class="desktop-only">Capture</span></button>
+                <div class="dropdown">
+                    <button class="icon-btn" @onclick="ToggleNotices" aria-label="Notifications">
+                        <Icon Name="bell" />
+                        @if (unread > 0) { <span class="pip">@unread</span> }
+                    </button>
+                    @if (noticesOpen)
+                    {
+                        <div class="dropdown-panel">
+                            <div class="card-head" style="padding:12px 14px 0">
+                                <h3>Notifications</h3>
+                                <button class="btn ghost sm right" @onclick="MarkRead">Mark all read</button>
+                            </div>
+                            <ul class="list">
+                                @if (recent.Count == 0) { <li class="empty small">Nothing yet</li> }
+                                @foreach (var n in recent)
+                                {
+                                    <li class="row clickable" @onclick="() => OpenNotice(n)">
+                                        <span class="dot @(n.Level == NoticeLevel.Alert ? "danger" : n.Level == NoticeLevel.Warning ? "warn" : "on")"></span>
+                                        <div class="grow">
+                                            <div class="title small" style="@(n.Read ? "font-weight:500" : "")">@n.Title</div>
+                                            <div class="meta notice-msg">@n.Message</div>
+                                            <div class="meta">@Fmt.Ago(n.CreatedUtc)</div>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            </div>
+        </header>
+        <main class="content">
+            @Body
+        </main>
+    </div>
+
+    <nav class="bottom-nav">
+        <NavLink href="" Match="NavLinkMatch.All"><Icon Name="today" Size="21" />Today</NavLink>
+        <NavLink href="tasks"><Icon Name="tasks" Size="21" />Tasks @if (tasksDue > 0) { <span class="count">@tasksDue</span> }</NavLink>
+        <NavLink href="scan" class="scan-fab"><span class="fab"><Icon Name="barcode" Size="22" /></span>Scan</NavLink>
+        <NavLink href="shopping"><Icon Name="cart" Size="21" />Shopping @if (shopping > 0) { <span class="count">@shopping</span> }</NavLink>
+        <label for="nav-toggle"><Icon Name="menu" Size="21" />More @if (aiPending > 0) { <span class="count" title="AI suggestions waiting">@aiPending</span> }</label>
+    </nav>
+</div>
+
+<QuickCapture @bind-Open="captureOpen" />
+
+<div class="toast-stack">
+    @foreach (var t in UiState.Toasts)
+    {
+        <div class="toast @(t.Error ? "error" : "")">@t.Message</div>
+    }
+</div>
+
+<div id="blazor-error-ui" class="toast error" style="display:none;position:fixed;left:16px;right:16px;bottom:16px;max-width:none;z-index:300">
+    Something went wrong. <a href="" class="reload" style="color:inherit;text-decoration:underline">Reload</a>
+</div>
+
+@code {
+    private bool menuOpen, captureOpen, noticesOpen;
+    private int tasksDue, shopping, aiPending, unread;
+    private string householdName = "LifeHub";
+    private CurrentPeriod? period;
+    private List<Notice> recent = new();
+    private Timer? timer;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        Tasks.Repo.Changed += OnChanged;
+        Kitchen.Shopping.Changed += OnChanged;
+        Ai.Suggestions.Changed += OnChanged;
+        Notices.Repo.Changed += OnChanged;
+        Settings.Changed += OnChanged;
+        UiState.Changed += OnUi;
+        Nav.LocationChanged += OnLocation;
+        timer = new Timer(_ => _ = InvokeAsync(LoadPeriodAsync), null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
+    }
+
+    private void Refresh()
+    {
+        tasksDue = Tasks.DueToday().Count;
+        shopping = Kitchen.Shopping.Where(s => !s.Checked).Count;
+        aiPending = Ai.PendingCount;
+        unread = Notices.UnreadCount;
+        recent = Notices.Recent(25).ToList();
+        householdName = Settings.Current.General.HouseholdName;
+        Fmt.Culture = CultureInfo.GetCultureInfo(Settings.Current.General.Culture);
+    }
+
+    private async Task LoadPeriodAsync()
+    {
+        try { period = await Schedule.CurrentAsync(); } catch { period = null; }
+        StateHasChanged();
+    }
+
+    private void OnChanged() => InvokeAsync(() => { Refresh(); StateHasChanged(); });
+    private void OnUi() => InvokeAsync(StateHasChanged);
+    private void OnLocation(object? s, LocationChangedEventArgs e) => InvokeAsync(() => { menuOpen = false; noticesOpen = false; StateHasChanged(); });
+
+    private void CloseMenu() => menuOpen = false;
+    private void ToggleNotices() => noticesOpen = !noticesOpen;
+
+    private async Task MarkRead()
+    {
+        await Notices.MarkAllReadAsync();
+    }
+
+    private async Task OpenNotice(Notice n)
+    {
+        noticesOpen = false;
+        if (!n.Read) { n.Read = true; await Notices.Repo.UpsertAsync(n); }
+        if (!string.IsNullOrEmpty(n.Link)) Nav.NavigateTo(n.Link);
+    }
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+        Tasks.Repo.Changed -= OnChanged;
+        Kitchen.Shopping.Changed -= OnChanged;
+        Ai.Suggestions.Changed -= OnChanged;
+        Notices.Repo.Changed -= OnChanged;
+        Settings.Changed -= OnChanged;
+        UiState.Changed -= OnUi;
+        Nav.LocationChanged -= OnLocation;
+    }
+}

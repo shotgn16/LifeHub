@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  dotnet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore LifeHub.sln
+      - name: Build
+        run: dotnet build LifeHub.sln -c Release --no-restore
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build add-on image
+        run: docker build -t lifehub:ci ./lifehub
+      - name: Smoke test
+        run: |
+          docker run -d --name lifehub -p 8099:8099 lifehub:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8099/health; then exit 0; fi
+            sleep 2
+          done
+          docker logs lifehub
+          exit 1
+
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add-on and app versions match
+        run: |
+          addon=$(grep -E '^version:' lifehub/config.yaml | sed -E 's/version: *"?([^"]+)"?/\1/')
+          app=$(grep -oP '(?<=<Version>)[^<]+' lifehub/src/LifeHub/LifeHub.csproj)
+          echo "config.yaml=$addon csproj=$app"
+          test "$addon" = "$app"

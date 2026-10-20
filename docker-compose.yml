@@ -1,0 +1,15 @@
+# Plain Docker / Plesk (Linux) / any VM:
+#   docker compose up -d --build
+# then browse to http://<server>:8099 and create your login.
+services:
+  lifehub:
+    build: ./lifehub
+    image: lifehub:latest
+    container_name: lifehub
+    restart: unless-stopped
+    ports:
+      - "8099:8099"          # change the left side if 8099 is taken
+    volumes:
+      - ./data:/data         # all data, settings, keys and backups
+    environment:
+      - TZ=Europe/London

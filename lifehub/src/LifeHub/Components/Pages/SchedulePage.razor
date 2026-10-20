@@ -1,0 +1,354 @@
+@page "/schedule"
+@inherits LiveComponent
+@inject ScheduleService Schedule
+@inject PlannerService Planner
+@inject CalendarService Calendar
+@inject TaskService Tasks
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+@inject AutomationService Automation
+
+<PageTitle>Schedule · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Schedule</h1>
+        <div class="sub">@date.ToString("dddd d MMMM yyyy", Fmt.Culture)@(dayOff ? " · day off" : "")</div>
+    </div>
+    <div class="actions">
+        <button class="icon-btn" @onclick="() => Go(-1)" title="Previous day"><Icon Name="left" /></button>
+        <button class="btn sm" @onclick="() => GoTo(Clock.Today)">Today</button>
+        <button class="icon-btn" @onclick="() => Go(1)" title="Next day"><Icon Name="right" /></button>
+        <input type="date" value="@date.ToString("yyyy-MM-dd")" @onchange="DatePicked" style="width:auto" />
+    </div>
+</div>
+
+<div class="tabs">
+    <button class="tab @(tab == "day" ? "on" : "")" @onclick='() => tab = "day"'>Day</button>
+    <button class="tab @(tab == "template" ? "on" : "")" @onclick='() => tab = "template"'>Weekly template</button>
+</div>
+
+@if (tab == "day")
+{
+    <div class="grid cols-3">
+        <div class="card span-2">
+            <div class="card-head">
+                <h2><Icon Name="clock" /> Timeline</h2>
+                <div class="right">
+                    <button class="btn sm" @onclick="Reload"><Icon Name="refresh" Size="14" /></button>
+                </div>
+            </div>
+            @if (loading) { <p class="muted">Loading calendar…</p> }
+            @foreach (var e in events.Where(e => e.AllDay))
+            {
+                <div class="tl-item event" style="margin-left:72px">All day · <strong>@e.Title</strong> <span class="tiny muted">@e.Source</span></div>
+            }
+            <div class="timeline">
+                @foreach (var item in Timeline())
+                {
+                    <div class="tl-row">
+                        <div class="tl-time">@item.Start.ToString("HH:mm")</div>
+                        <div class="tl-item @item.Css @(item.IsNow ? "now" : "")">
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <strong>@item.Title</strong>
+                                <span class="tiny muted right">@item.Start.ToString("HH:mm")–@item.End.ToString("HH:mm")</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(item.Meta)) { <div class="tiny muted">@item.Meta</div> }
+                        </div>
+                    </div>
+                }
+            </div>
+            @if (Calendar.LastErrors.Count > 0)
+            {
+                <div class="alert warn small">@string.Join("; ", Calendar.LastErrors)</div>
+            }
+            <p class="tiny muted" style="margin-top:8px">
+                <span class="badge info">Work</span> <span class="badge ok">Free</span> periods come from your weekly template;
+                <span class="badge warn">events</span> from your calendars; <span class="badge accent">tasks</span> planned by you or "Plan my day".
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h2><Icon Name="wand" /> Plan this day</h2></div>
+            <p class="small muted">Slots open tasks into free gaps: @string.Join(", ", Settings.Current.Schedule.CategoryPeriods.Select(kv => $"{kv.Key} → {kv.Value}")) and everything else into Free time. Overdue and high-priority first.</p>
+            <button class="btn primary" style="width:100%" @onclick="Propose" disabled="@busy"><Icon Name="wand" Size="15" /> @(plan is null ? "Suggest a plan" : "Re-plan")</button>
+            @if (plan is not null)
+            {
+                <ul class="list" style="margin-top:12px">
+                    @if (plan.Planned.Count == 0) { <li class="empty small">Nothing to plan — or no free gaps left.</li> }
+                    @foreach (var p in plan.Planned)
+                    {
+                        <li class="row">
+                            <span class="small nowrap muted">@p.Start.ToString("HH:mm")</span>
+                            <div class="grow"><div class="title small">@p.Title</div><div class="meta">@p.Category · @((int)(p.End - p.Start).TotalMinutes) min</div></div>
+                            <button class="icon-btn" title="Skip" @onclick="() => plan.Planned.Remove(p)"><Icon Name="x" Size="14" /></button>
+                        </li>
+                    }
+                </ul>
+                @if (plan.Unplanned.Count > 0)
+                {
+                    <div class="alert warn small" style="margin-top:10px">Didn't fit today: @string.Join(", ", plan.Unplanned.Select(t => t.Title))</div>
+                }
+                @if (plan.Planned.Count > 0)
+                {
+                    @if (Calendar.CanCreateEvents)
+                    {
+                        <label class="check" style="margin-top:10px"><input type="checkbox" @bind="addToCalendar" /> Also add as calendar events</label>
+                    }
+                    <button class="btn primary" style="width:100%" @onclick="Apply" disabled="@busy"><Icon Name="check" Size="15" /> Apply plan</button>
+                }
+            }
+            @if (scheduledToday.Count > 0)
+            {
+                <hr />
+                <h3 style="margin-bottom:6px">Already planned</h3>
+                <ul class="list">
+                    @foreach (var t in scheduledToday)
+                    {
+                        <li class="row">
+                            <span class="small nowrap muted">@t.ScheduledStart!.Value.ToString("HH:mm")</span>
+                            <div class="grow small">@t.Title</div>
+                            <button class="icon-btn" title="Unplan" @onclick="() => Unplan(t)"><Icon Name="x" Size="14" /></button>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
+            <h2>Weekly periods</h2>
+            <div class="right"><button class="btn sm" @onclick="AddBlock"><Icon Name="plus" Size="14" /> Add period</button></div>
+        </div>
+        <p class="small muted">The time that's assumed to be work or free unless your calendar says otherwise. Calendar events always win; an all-day event containing a day-off word turns that day's work periods into free time.</p>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Days</th><th>From</th><th>To</th><th>Type</th><th>Label</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var b in blocks)
+                    {
+                        <tr>
+                            <td>
+                                <div class="chips">
+                                    @foreach (var d in WeekOrder)
+                                    {
+                                        <button class="chip @(b.Days.Contains(d) ? "on" : "")" style="padding:3px 8px" @onclick="() => ToggleDay(b, d)">@d.ToString()[..2]</button>
+                                    }
+                                </div>
+                            </td>
+                            <td><input type="time" @bind="b.Start" style="width:auto" /></td>
+                            <td><input type="time" @bind="b.End" style="width:auto" /></td>
+                            <td><select @bind="b.Kind" style="width:auto">@foreach (var k in Enum.GetValues<PeriodKind>()) { <option value="@k">@k</option> }</select></td>
+                            <td><input type="text" @bind="b.Label" /></td>
+                            <td><button class="icon-btn" @onclick="() => blocks.Remove(b)"><Icon Name="trash" Size="15" /></button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="grid cols-3">
+        <div class="card">
+            <h2 style="margin-bottom:10px">Which tasks go where</h2>
+            @foreach (var c in Settings.Current.General.TaskCategories)
+            {
+                <div class="row">
+                    <div class="grow">@c</div>
+                    <select style="width:auto" value="@(categoryMap.TryGetValue(c, out var k) ? k.ToString() : "Free")" @onchange="e => categoryMap[c] = Enum.Parse<PeriodKind>(e.Value!.ToString()!)">
+                        @foreach (var kind in Enum.GetValues<PeriodKind>()) { <option value="@kind">@kind</option> }
+                    </select>
+                </div>
+            }
+        </div>
+        <div class="card">
+            <h2 style="margin-bottom:10px">Automatic planning</h2>
+            <label class="check"><input type="checkbox" @bind="autoEvening" /> Plan tomorrow every evening at</label>
+            <input type="time" @bind="autoEveningTime" style="width:auto;margin:-4px 0 12px 26px" />
+            <label class="check"><input type="checkbox" @bind="autoMorning" /> Fit in anything new each morning at</label>
+            <input type="time" @bind="autoMorningTime" style="width:auto;margin:-4px 0 12px 26px" />
+            <div class="form-grid">
+                <div class="field"><label>Max tasks planned per day</label><input type="number" min="1" max="30" @bind="autoMax" /></div>
+                <div class="field" style="display:flex;align-items:flex-end"><label class="check"><input type="checkbox" @bind="autoCalendar" /> Also add them to my calendar</label></div>
+            </div>
+            <p class="small muted">Only tasks without a time are planned, overdue and high priority first; you get a notification with the plan. Anything you plan by hand is left alone.</p>
+            <button class="btn sm" @onclick="RunAutoPlanNow"><Icon Name="wand" Size="14" /> Run for tomorrow now</button>
+            @if (!string.IsNullOrEmpty(Automation.LastAutoPlan)) { <p class="tiny muted" style="margin-top:8px">Last run: @Automation.LastAutoPlan</p> }
+        </div>
+        <div class="card">
+            <h2 style="margin-bottom:10px">Planning</h2>
+            <div class="field"><label>Day-off keywords</label><input type="text" @bind="dayOffWords" /><div class="help">Comma separated, matched against all-day calendar events.</div></div>
+            <div class="form-grid">
+                <div class="field"><label>Default task length (min)</label><input type="number" min="5" @bind="defaultMinutes" /></div>
+                <div class="field"><label>Gap between items (min)</label><input type="number" min="0" @bind="bufferMinutes" /></div>
+            </div>
+        </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="btn primary" @onclick="SaveTemplate">Save template</button>
+        <button class="btn" @onclick="ResetTemplate">Reset to defaults</button>
+    </div>
+}
+
+@code {
+    private string tab = "day";
+    private DateOnly date;
+    private List<DaySegment> periods = new();
+    private List<CalendarEvent> events = new();
+    private List<TaskItem> scheduledToday = new();
+    private DayPlan? plan;
+    private bool loading, busy, addToCalendar, dayOff;
+
+    private List<PeriodBlock> blocks = new();
+    private Dictionary<string, PeriodKind> categoryMap = new();
+    private string dayOffWords = "";
+    private int defaultMinutes, bufferMinutes, autoMax;
+    private bool autoEvening, autoMorning, autoCalendar;
+    private TimeOnly autoEveningTime, autoMorningTime;
+
+    private static readonly DayOfWeek[] WeekOrder = { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
+
+    private record TlItem(DateTime Start, DateTime End, string Title, string Meta, string Css, bool IsNow);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Watch(Tasks.Repo);
+        date = Clock.Today;
+        LoadTemplate();
+        await LoadDayAsync();
+    }
+
+    protected override void OnDataChanged() => LoadTasks();
+
+    private void LoadTasks() =>
+        scheduledToday = Tasks.Open().Where(t => t.ScheduledStart is { } s && DateOnly.FromDateTime(s) == date).OrderBy(t => t.ScheduledStart).ToList();
+
+    private async Task LoadDayAsync(bool bypass = false)
+    {
+        loading = true;
+        try
+        {
+            events = await Calendar.GetEventsAsync(date, date, bypass);
+            periods = Schedule.Periods(date, events);
+            dayOff = Schedule.IsDayOff(date, events);
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { loading = false; }
+        LoadTasks();
+    }
+
+    private Task Reload() => LoadDayAsync(true);
+
+    private async Task Go(int days) => await GoTo(date.AddDays(days));
+
+    private async Task GoTo(DateOnly d)
+    {
+        date = d;
+        plan = null;
+        await LoadDayAsync();
+    }
+
+    private async Task DatePicked(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, out var d)) await GoTo(d);
+    }
+
+    private IEnumerable<TlItem> Timeline()
+    {
+        var now = Clock.Now;
+        var items = new List<TlItem>();
+        items.AddRange(periods.Select(p => new TlItem(p.Start, p.End, p.Label, p.Kind.ToString()!, "k-" + p.Kind, p.Start <= now && p.End > now)));
+        items.AddRange(events.Where(e => !e.AllDay).Select(e => new TlItem(e.Start, e.End, e.Title, string.Join(" · ", new[] { e.Location, e.Source }.Where(x => !string.IsNullOrEmpty(x))), "event", e.Start <= now && e.End > now)));
+        var minutes = Settings.Current.Schedule.DefaultTaskMinutes;
+        items.AddRange(scheduledToday.Select(t => new TlItem(t.ScheduledStart!.Value, t.ScheduledStart!.Value.AddMinutes(t.EstimatedMinutes ?? minutes), t.Title, t.Category, "task", false)));
+        if (plan is not null)
+            items.AddRange(plan.Planned.Select(p => new TlItem(p.Start, p.End, p.Title, $"proposed · {p.Category}", "task proposed", false)));
+        return items.OrderBy(i => i.Start).ThenBy(i => i.Css.StartsWith("k-") ? 0 : 1);
+    }
+
+    private async Task Propose()
+    {
+        busy = true;
+        try { plan = await Planner.ProposeAsync(date); }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task Apply()
+    {
+        if (plan is null) return;
+        busy = true;
+        try
+        {
+            var n = await Planner.ApplyAsync(plan, addToCalendar);
+            Ui.Show($"Planned {n} task(s)");
+            plan = null;
+            await LoadDayAsync(addToCalendar);
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task Unplan(TaskItem t)
+    {
+        t.ScheduledStart = null;
+        await Tasks.SaveAsync(t);
+    }
+
+    // ----- template -----
+
+    private void LoadTemplate()
+    {
+        var s = Settings.Current.Schedule;
+        blocks = s.Blocks.OrderBy(b => b.Days.Select(d => ((int)d + 6) % 7).DefaultIfEmpty(9).Min()).ThenBy(b => b.Start).ToList();
+        categoryMap = new Dictionary<string, PeriodKind>(s.CategoryPeriods);
+        dayOffWords = string.Join(", ", s.DayOffKeywords);
+        defaultMinutes = s.DefaultTaskMinutes;
+        bufferMinutes = s.BufferMinutes;
+        autoEvening = s.AutoPlanEvening; autoEveningTime = s.AutoPlanEveningTime;
+        autoMorning = s.AutoPlanMorning; autoMorningTime = s.AutoPlanMorningTime;
+        autoCalendar = s.AutoPlanAddToCalendar; autoMax = s.AutoPlanMaxTasks;
+    }
+
+    private async Task RunAutoPlanNow()
+    {
+        await SaveTemplate();
+        try { Ui.Show(await Automation.RunPlanAsync(Clock.Today.AddDays(1), "Tomorrow", Settings.Current.Schedule)); }
+        catch (Exception ex) { Ui.Error(ex); }
+    }
+
+    private void ToggleDay(PeriodBlock b, DayOfWeek d)
+    {
+        if (!b.Days.Remove(d)) b.Days.Add(d);
+    }
+
+    private void AddBlock() => blocks.Add(new PeriodBlock { Days = WeekOrder.Take(5).ToList(), Start = new(9, 0), End = new(17, 0), Kind = PeriodKind.Work, Label = "Work" });
+
+    private async Task SaveTemplate()
+    {
+        var map = categoryMap.Where(kv => kv.Value != PeriodKind.Free).ToDictionary(kv => kv.Key, kv => kv.Value);
+        await Settings.UpdateAsync(s =>
+        {
+            s.Schedule.Blocks = blocks;
+            s.Schedule.CategoryPeriods = map;
+            s.Schedule.DayOffKeywords = dayOffWords.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            s.Schedule.DefaultTaskMinutes = Math.Max(5, defaultMinutes);
+            s.Schedule.BufferMinutes = Math.Max(0, bufferMinutes);
+            s.Schedule.AutoPlanEvening = autoEvening; s.Schedule.AutoPlanEveningTime = autoEveningTime;
+            s.Schedule.AutoPlanMorning = autoMorning; s.Schedule.AutoPlanMorningTime = autoMorningTime;
+            s.Schedule.AutoPlanAddToCalendar = autoCalendar; s.Schedule.AutoPlanMaxTasks = Math.Clamp(autoMax, 1, 30);
+        });
+        Ui.Show("Template saved");
+        await LoadDayAsync();
+    }
+
+    private void ResetTemplate()
+    {
+        blocks = ScheduleSettings.DefaultBlocks();
+        categoryMap = new() { ["Work"] = PeriodKind.Work };
+    }
+}

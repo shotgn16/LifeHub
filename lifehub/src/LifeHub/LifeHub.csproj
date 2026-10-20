@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>LifeHub</RootNamespace>
+    <AssemblyName>LifeHub</AssemblyName>
+    <Version>1.2.1</Version>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- IMAP / MIME parsing (Gmail, generic IMAP, on-prem Exchange with IMAP enabled) -->
+    <PackageReference Include="MailKit" Version="4.8.0" />
+  </ItemGroup>
+
+</Project>

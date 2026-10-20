@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <base href="@BaseHref" />
+    <link rel="stylesheet" href="app.css?v=6" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <HeadOutlet @rendermode="PageRenderMode" />
+</head>
+<body>
+    <Routes @rendermode="PageRenderMode" />
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    // Works at "/" and under Home Assistant ingress ("/api/hassio_ingress/<token>/").
+    private string BaseHref => (HttpContext.Request.PathBase.Value ?? "").TrimEnd('/') + "/";
+
+    // Login/setup are plain server-rendered forms (they set cookies); everything else is interactive.
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext.Request.Path.StartsWithSegments("/login") || HttpContext.Request.Path.StartsWithSegments("/setup")
+            ? null : InteractiveServer;
+}

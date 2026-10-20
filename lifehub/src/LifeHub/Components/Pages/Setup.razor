@@ -1,0 +1,46 @@
+@page "/setup"
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@inject SettingsService Settings
+@inject NavigationManager Nav
+
+<PageTitle>Set up · LifeHub</PageTitle>
+
+<div class="auth-wrap">
+    <div class="card auth-card">
+        <div class="brand"><span class="brand-mark">L</span> LifeHub</div>
+        @if (Settings.Current.Auth.IsConfigured)
+        {
+            <p class="center">Already set up. <a href="login">Sign in</a></p>
+        }
+        else
+        {
+            <p class="muted center small">Create the account you'll sign in with.</p>
+            @if (!string.IsNullOrEmpty(Error))
+            {
+                <div class="alert danger">Enter a username and a password of at least 8 characters (both password boxes must match).</div>
+            }
+            <form method="post" action="auth/setup">
+                <AntiforgeryToken />
+                <div class="field">
+                    <label for="u">Username</label>
+                    <input id="u" type="text" name="username" autocomplete="username" required autofocus />
+                </div>
+                <div class="field">
+                    <label for="p">Password</label>
+                    <input id="p" type="password" name="password" autocomplete="new-password" minlength="8" required />
+                </div>
+                <div class="field">
+                    <label for="c">Confirm password</label>
+                    <input id="c" type="password" name="confirm" autocomplete="new-password" minlength="8" required />
+                </div>
+                <button class="btn primary" style="width:100%" type="submit">Create account</button>
+            </form>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+}

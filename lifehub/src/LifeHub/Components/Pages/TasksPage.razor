@@ -1,0 +1,164 @@
+@page "/tasks"
+@inherits LiveComponent
+@inject TaskService Tasks
+@inject SettingsService Settings
+@inject Clock Clock
+@inject NavigationManager Nav
+@inject UiState Ui
+
+<PageTitle>Tasks · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Tasks</h1>
+        <div class="sub">@open.Count open · @overdueCount overdue · @doneThisWeek done this week</div>
+    </div>
+    <div class="actions">
+        @if (duplicateCount > 0)
+        {
+            <button class="btn" @onclick="Merge" title="Stack tasks that are the same issue onto one, with a ×N count"><Icon Name="box" Size="15" /> Merge @duplicateCount duplicate(s)</button>
+        }
+        <button class="btn primary" @onclick="New"><Icon Name="plus" Size="15" /> New task</button>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+    <div class="inline-form">
+        <input type="text" placeholder="Quick add — press Enter" @bind="quick" @bind:event="oninput" @onkeydown="QuickKey" />
+        <select @bind="quickCategory">
+            @foreach (var c in Settings.Current.General.TaskCategories) { <option>@c</option> }
+        </select>
+        <input type="date" @bind="quickDue" />
+        <button class="btn" @onclick="AddQuick" disabled="@string.IsNullOrWhiteSpace(quick)">Add</button>
+    </div>
+</div>
+
+<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+    <div class="chips">
+        @foreach (var v in new[] { "Open", "Today", "Upcoming", "Waiting", "Done" })
+        {
+            <button class="chip @(view == v ? "on" : "")" @onclick="() => view = v">@v</button>
+        }
+    </div>
+    <input type="search" placeholder="Search…" @bind="search" @bind:event="oninput" style="max-width:220px;margin-left:auto" />
+</div>
+<div class="chips" style="margin-bottom:16px">
+    <button class="chip @(category is null ? "on" : "")" @onclick="() => category = null">All categories</button>
+    @foreach (var c in AllCategories)
+    {
+        var count = open.Count(t => t.Category == c);
+        <button class="chip @(category == c ? "on" : "")" @onclick="() => category = c">@c @if (count > 0) { <span class="muted">· @count</span> }</button>
+    }
+</div>
+
+<div class="card flush">
+    @{ var groups = Grouped().ToList(); }
+    @if (groups.Count == 0)
+    {
+        <div class="empty"><div class="icon"><Icon Name="tasks" Size="32" /></div>No tasks here.</div>
+    }
+    @foreach (var g in groups)
+    {
+        <div class="group-title">@g.Key <span class="badge">@g.Count()</span></div>
+        <ul class="list">
+            @foreach (var t in g) { <TaskRow Task="t" OnOpen="Edit" /> }
+        </ul>
+    }
+</div>
+
+<TaskEditor @bind-Item="editing" />
+
+@code {
+    private List<TaskItem> all = new();
+    private List<TaskItem> open = new();
+    private int overdueCount, doneThisWeek, duplicateCount;
+    private string view = "Open";
+    private string? category;
+    private string search = "";
+    private string quick = "", quickCategory = "";
+    private DateOnly? quickDue;
+    private TaskItem? editing;
+
+    [SupplyParameterFromQuery(Name = "edit")] public Guid? EditId { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Watch(Tasks.Repo);
+        quickCategory = Settings.Current.General.TaskCategories.FirstOrDefault() ?? "Admin";
+        Load();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (EditId is { } id && Tasks.Repo.Get(id) is { } t) editing = t;
+    }
+
+    protected override void OnDataChanged() => Load();
+
+    private void Load()
+    {
+        all = Tasks.Repo.All().ToList();
+        open = all.Where(t => t.IsOpen).ToList();
+        var now = Clock.Now;
+        overdueCount = open.Count(t => t.IsOverdue(now));
+        doneThisWeek = all.Count(t => t.CompletedUtc > DateTime.UtcNow.AddDays(-7));
+        var seen = new List<TaskItem>();
+        duplicateCount = 0;
+        foreach (var t in open.OrderBy(t => t.CreatedUtc))
+        {
+            if (seen.Any(k => k.Category == t.Category && TaskService.IsSameIssue(k.Title, t.Title))) duplicateCount++;
+            else seen.Add(t);
+        }
+    }
+
+    private IEnumerable<string> AllCategories =>
+        Settings.Current.General.TaskCategories.Concat(all.Select(t => t.Category)).Distinct();
+
+    private IEnumerable<IGrouping<string, TaskItem>> Grouped()
+    {
+        var today = Clock.Today;
+        var now = Clock.Now;
+        IEnumerable<TaskItem> q = view switch
+        {
+            "Done" => all.Where(t => !t.IsOpen).OrderByDescending(t => t.CompletedUtc),
+            "Today" => Tasks.DueToday(),
+            "Upcoming" => open.Where(t => t.DueDate > today),
+            "Waiting" => open.Where(t => t.State == TaskState.Waiting),
+            _ => open
+        };
+        if (category is not null) q = q.Where(t => t.Category == category);
+        if (!string.IsNullOrWhiteSpace(search))
+            q = q.Where(t => t.Title.Contains(search, StringComparison.OrdinalIgnoreCase) || t.Notes.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                             t.Tags.Any(x => x.Contains(search, StringComparison.OrdinalIgnoreCase)));
+        if (view == "Done") return q.Take(200).GroupBy(t => "Completed");
+
+        return Tasks.Ordered(q).GroupBy(t =>
+            t.IsOverdue(now) ? "Overdue" :
+            t.DueDate == today ? "Today" :
+            t.DueDate == today.AddDays(1) ? "Tomorrow" :
+            t.DueDate is { } d && d <= today.AddDays(7) ? "This week" :
+            t.DueDate is not null ? "Later" : "No date");
+    }
+
+    private async Task Merge()
+    {
+        var n = await Tasks.MergeDuplicatesAsync();
+        Ui.Show(n == 0 ? "No duplicates found" : $"Stacked {n} duplicate task(s)");
+    }
+
+    private void New() => editing = new TaskItem { Category = category ?? quickCategory };
+
+    private void Edit(TaskItem t) => editing = Tasks.Repo.Get(t.Id);
+
+    private async Task QuickKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddQuick();
+    }
+
+    private async Task AddQuick()
+    {
+        if (string.IsNullOrWhiteSpace(quick)) return;
+        await Tasks.QuickAddAsync(quick, quickCategory, quickDue);
+        quick = "";
+    }
+}

@@ -1,0 +1,39 @@
+@page "/login"
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@inject SettingsService Settings
+
+<PageTitle>Sign in · LifeHub</PageTitle>
+
+<div class="auth-wrap">
+    <div class="card auth-card">
+        <div class="brand"><span class="brand-mark">L</span> @Settings.Current.General.HouseholdName</div>
+        <p class="muted center small">Sign in to continue</p>
+        @if (Error == "locked")
+        {
+            <div class="alert danger">Too many attempts. Try again in a few minutes.</div>
+        }
+        else if (!string.IsNullOrEmpty(Error))
+        {
+            <div class="alert danger">Wrong username or password.</div>
+        }
+        <form method="post" action="auth/login">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            <div class="field">
+                <label for="u">Username</label>
+                <input id="u" type="text" name="username" autocomplete="username" required autofocus />
+            </div>
+            <div class="field">
+                <label for="p">Password</label>
+                <input id="p" type="password" name="password" autocomplete="current-password" required />
+            </div>
+            <button class="btn primary" style="width:100%" type="submit">Sign in</button>
+        </form>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+}

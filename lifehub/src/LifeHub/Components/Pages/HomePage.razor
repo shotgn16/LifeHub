@@ -1,0 +1,312 @@
+@page "/home"
+@implements IDisposable
+@inject HomeAssistantClient Ha
+@inject HomeAssistantCatalog Catalog
+@inject HaListSyncService ListSync
+@inject SettingsService Settings
+@inject AutomationService Automation
+@inject Clock Clock
+@inject UiState Ui
+
+<PageTitle>Home · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Home</h1>
+        <div class="sub">@(Ha.IsConfigured ? "Live from Home Assistant — it runs the house, LifeHub gives you one place to see and nudge it" : "Home Assistant not connected")</div>
+    </div>
+    @if (Ha.IsConfigured)
+    {
+        <div class="actions">
+            <button class="btn @(customise ? "primary" : "")" @onclick="() => customise = !customise" title="Choose what's shown here"><Icon Name="eye" Size="15" /> @(customise ? "Done" : "Customise")</button>
+            <button class="btn" @onclick="() => LoadAsync(true)" disabled="@loading"><Icon Name="refresh" Size="15" /> Refresh</button>
+        </div>
+    }
+</div>
+
+@if (!Ha.IsConfigured)
+{
+    <div class="card">
+        <h2 style="margin-bottom:8px">Connect Home Assistant</h2>
+        <p class="muted">As an add-on, LifeHub talks to HA automatically — just tick <em>Enabled</em> and it sets itself up. Elsewhere, create a long-lived access token (your HA profile → Security) and enter it with your HA URL.</p>
+        <a class="btn primary" href="settings?tab=ha">Open settings</a>
+    </div>
+}
+else if (error is not null)
+{
+    <div class="alert danger"><Icon Name="alert" /> @error</div>
+}
+else
+{
+    <div class="grid cols-3" style="margin-bottom:16px">
+        <div class="card">
+            <div class="card-head"><h2><Icon Name="presence" /> Who's home</h2></div>
+            <ul class="list">
+                @if (people.Count == 0) { <li class="empty small">No people in Home Assistant</li> }
+                @foreach (var p in people)
+                {
+                    <li class="row" title="@p.Id">
+                        <span class="dot @(p.State.State == "home" ? "on" : "")"></span>
+                        <div class="grow"><div class="title">@p.Name</div><div class="meta">since @Clock.ToLocal(p.State.LastChanged.ToUniversalTime()).ToString("ddd HH:mm", Fmt.Culture)</div></div>
+                        <span class="badge @(p.State.State == "home" ? "ok" : "")">@p.StateText</span>
+                    </li>
+                }
+            </ul>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h2><Icon Name="play" /> Scenes & routines</h2></div>
+            @if (routines.Count == 0)
+            {
+                <p class="small muted">Scenes and scripts you make in Home Assistant appear here as one-tap buttons.</p>
+            }
+            <div class="chips">
+                @foreach (var r in routines.Take(showAllRoutines ? 100 : 10))
+                {
+                    <button class="chip" title="@r.Id" @onclick="() => RunRoutine(r)"><Icon Name="@(r.Domain == "scene" ? "sparkles" : "play")" Size="13" /> @r.Name</button>
+                }
+                @if (routines.Count > 10)
+                {
+                    <button class="chip" @onclick="() => showAllRoutines = !showAllRoutines">@(showAllRoutines ? "Fewer" : $"+{routines.Count - 10} more")</button>
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h2><Icon Name="bolt" /> Energy</h2></div>
+            @if (energy.Count == 0)
+            {
+                <p class="muted small">No power sensors found. Choose some in <a href="settings?tab=ha">Settings → Home Assistant</a>.</p>
+            }
+            @foreach (var e in energy)
+            {
+                <div style="margin-bottom:10px">
+                    <div style="display:flex;align-items:baseline;gap:8px">
+                        <span class="small muted">@e.Label</span>
+                        <span class="right" style="font-weight:650;font-size:1.1rem">@e.Value</span>
+                    </div>
+                    @if (e.Points.Count > 1)
+                    {
+                        <svg class="spark" viewBox="0 0 100 40" preserveAspectRatio="none" style="height:42px">
+                            <path class="area" d="@Spark(e.Points, true)" />
+                            <path class="line" d="@Spark(e.Points, false)" />
+                        </svg>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (alerts.Count > 0)
+    {
+        <div class="alert warn" style="flex-wrap:wrap">
+            <Icon Name="door" />
+            @foreach (var a in alerts) { <span class="badge warn" title="@a.Id">@a.Name: @a.StateText@(string.IsNullOrEmpty(a.Area) ? "" : $" ({a.Area})")</span> }
+        </div>
+    }
+
+    <div style="display:flex;gap:10px;align-items:center;margin:4px 0 12px;flex-wrap:wrap">
+        <h2 style="margin:0">Rooms</h2>
+        <div class="chips right">
+            <button class="chip @(scope == "lights" ? "on" : "")" @onclick='() => scope = "lights"'>Lights</button>
+            <button class="chip @(scope == "devices" ? "on" : "")" @onclick='() => scope = "devices"'>All devices</button>
+        </div>
+    </div>
+    @if (!Catalog.HasAreas)
+    {
+        <p class="small muted">Tip: assign devices to areas in Home Assistant (Settings → Areas) and they'll be grouped by room here.</p>
+    }
+    <div class="grid cols-2" style="margin-bottom:16px">
+        @foreach (var room in Rooms())
+        {
+            <div class="card">
+                <div class="card-head">
+                    <h3>@room.Name</h3>
+                    <div class="right chips">
+                        @foreach (var c in room.Climate) { <span class="badge info" title="@c.Name">@c.StateText</span> }
+                    </div>
+                </div>
+                <div class="tiles">
+                    @foreach (var d in room.Devices)
+                    {
+                        var hidden = hiddenSet.Contains(d.Id);
+                        <button class="tile @(d.IsOn ? "on" : "") @(hidden ? "muted" : "")" title="@d.Name" disabled="@(!customise && (d.Unavailable || !Controllable(d)))"
+                                @onclick="() => customise ? ToggleHidden(d) : Toggle(d)" style="@(hidden ? "opacity:.45" : "")">
+                            <span style="display:flex;justify-content:space-between;width:100%"><Icon Name="@IconFor(d)" Size="20" />@if (customise) { <Icon Name="@(hidden ? "eyeoff" : "eye")" Size="15" /> }</span>
+                            <span class="name">@ShortName(d, room.Name)</span>
+                            <span class="state">@d.StateText</span>
+                        </button>
+                    }
+                </div>
+                @if (room.Sensors.Count > 0)
+                {
+                    <div class="meta" style="margin-top:10px">
+                        @foreach (var s in room.Sensors) { <span class="badge" title="@s.Name">@SensorLabel(s)</span> }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="grid cols-2">
+        <div class="card">
+            <div class="card-head"><h2><Icon Name="list" /> Shared lists</h2><div class="right"><button class="btn sm" @onclick="SyncLists">Sync now</button></div></div>
+            @{ var h = Settings.Current.HomeAssistant; }
+            <ul class="list">
+                <li class="row"><Icon Name="cart" Size="16" /><div class="grow">Shopping list</div>
+                    <span class="small">@(string.IsNullOrEmpty(h.ShoppingTodoEntity) ? "not linked" : "↔ " + Catalog.NameOf(h.ShoppingTodoEntity))</span></li>
+                <li class="row"><Icon Name="tasks" Size="16" /><div class="grow">Tasks</div>
+                    <span class="small">@(string.IsNullOrEmpty(h.TasksTodoEntity) ? "not linked" : "↔ " + Catalog.NameOf(h.TasksTodoEntity))</span></li>
+            </ul>
+            <p class="tiny muted" style="margin-top:8px">Linked lists are the same list in both apps — add with Assist or the HA app, tick off in either. @(ListSync.LastRunUtc is { } t ? $"Last sync {Fmt.Ago(t)}: {ListSync.LastResult}" : "")</p>
+        </div>
+        <div class="card">
+            <div class="card-head"><h2><Icon Name="link" /> LifeHub in Home Assistant</h2></div>
+            @if (!Settings.Current.HomeAssistant.PublishSensors) { <p class="muted small">Publishing is turned off.</p> }
+            else
+            {
+                <p class="small">Home Assistant gets these LifeHub sensors (for dashboards and automations): <strong>Current period</strong>, <strong>Tasks due</strong>, <strong>Renewals due</strong>, <strong>Food expiring</strong>, <strong>Shopping list</strong> and <strong>AI suggestions</strong> — search "LifeHub" in HA's entity list.</p>
+                <p class="small muted">Last update: @(Automation.LastSensorPublishUtc is { } t2 ? Fmt.Ago(t2) : "not yet")@(string.IsNullOrEmpty(Automation.LastSensorError) ? "" : " — " + Automation.LastSensorError)</p>
+                <button class="btn sm" @onclick="PublishNow">Update now</button>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool loading, customise, showAllRoutines;
+    private string? error;
+    private string scope = "lights";
+    private List<HaEntity> all = new();
+    private List<HaEntity> people = new();
+    private List<HaEntity> routines = new();
+    private List<HaEntity> alerts = new();
+    private HashSet<string> hiddenSet = new();
+    private List<(string Label, string Value, List<(DateTime Time, double Value)> Points)> energy = new();
+    private Timer? timer;
+
+    private static readonly string[] ControlDomains = { "light", "switch", "fan", "cover", "input_boolean" };
+    private static readonly string[] ShowDomains = { "light", "switch", "fan", "cover", "input_boolean", "lock", "media_player", "vacuum" };
+
+    private record Room(string Name, List<HaEntity> Devices, List<HaEntity> Climate, List<HaEntity> Sensors);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(false);
+        timer = new Timer(_ => InvokeAsync(async () => { await LoadStatesAsync(); StateHasChanged(); }), null, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(20));
+    }
+
+    private async Task LoadAsync(bool refresh)
+    {
+        if (!Ha.IsConfigured) return;
+        loading = true;
+        try
+        {
+            await LoadStatesAsync(refresh);
+            var since = DateTime.UtcNow.AddHours(-24);
+            var list = new List<(string, string, List<(DateTime, double)>)>();
+            foreach (var s in Settings.Current.HomeAssistant.EnergySensors)
+            {
+                var e = all.FirstOrDefault(x => x.Id == s.EntityId);
+                var points = new List<(DateTime, double)>();
+                try { points = await Ha.GetNumericHistoryAsync(s.EntityId, since, Clock); } catch { }
+                list.Add((string.IsNullOrEmpty(s.Label) ? e?.Name ?? Catalog.NameOf(s.EntityId) : s.Label, e?.StateText ?? "not found", points));
+            }
+            energy = list;
+            error = null;
+        }
+        catch (Exception ex) { error = "Couldn't reach Home Assistant: " + ex.Message; }
+        finally { loading = false; }
+    }
+
+    private async Task LoadStatesAsync(bool refresh = false)
+    {
+        if (!Ha.IsConfigured) return;
+        try
+        {
+            all = await Catalog.GetAsync(refresh);
+            var h = Settings.Current.HomeAssistant;
+            hiddenSet = h.HiddenEntities.ToHashSet();
+            people = h.PresenceEntities.Count > 0
+                ? all.Where(e => h.PresenceEntities.Contains(e.Id)).ToList()
+                : all.Where(e => e.Domain == "person").ToList();
+            routines = all.Where(e => e.Domain is "scene" or "script" && !hiddenSet.Contains(e.Id)).OrderBy(e => e.Domain).ThenBy(e => e.Name).ToList();
+            alerts = all.Where(e => e.Domain == "binary_sensor" && e.State.State == "on" && e.DeviceClass is "door" or "window" or "garage_door" or "opening" or "moisture" or "smoke" or "gas")
+                .Where(e => !hiddenSet.Contains(e.Id)).ToList();
+        }
+        catch (Exception ex) { error = ex.Message; }
+    }
+
+    private IEnumerable<Room> Rooms()
+    {
+        var devices = all.Where(e => ShowDomains.Contains(e.Domain) && (scope == "devices" || e.Domain == "light"))
+            .Where(e => customise || !hiddenSet.Contains(e.Id));
+        var climates = all.Where(e => e.Domain == "climate" && !hiddenSet.Contains(e.Id));
+        var sensors = all.Where(e => e.Domain == "sensor" && e.DeviceClass is "temperature" or "humidity" && !e.Unavailable && !hiddenSet.Contains(e.Id));
+        var areas = devices.Select(d => d.Area).Concat(climates.Select(c => c.Area)).Distinct()
+            .OrderBy(a => a.Length == 0).ThenBy(a => a);
+        foreach (var area in areas)
+        {
+            var ds = devices.Where(d => d.Area == area).OrderByDescending(d => d.Domain == "light").ThenBy(d => d.Name).ToList();
+            var cs = climates.Where(c => c.Area == area).ToList();
+            if (ds.Count == 0 && cs.Count == 0) continue;
+            var ss = area.Length == 0 ? new List<HaEntity>() : sensors.Where(s => s.Area == area).Take(4).ToList();
+            yield return new Room(area.Length == 0 ? "Not in a room" : area, ds, cs, ss);
+        }
+    }
+
+    /// <summary>"Kitchen Ceiling Light" shown as "Ceiling Light" inside the Kitchen card.</summary>
+    private static string ShortName(HaEntity e, string room) =>
+        e.Name.StartsWith(room + " ", StringComparison.OrdinalIgnoreCase) && e.Name.Length > room.Length + 1 ? e.Name[(room.Length + 1)..] : e.Name;
+
+    private static string SensorLabel(HaEntity s) => s.DeviceClass == "temperature" ? $"🌡 {s.StateText}" : $"💧 {s.StateText}";
+
+    private static bool Controllable(HaEntity e) => ControlDomains.Contains(e.Domain);
+
+    private static string IconFor(HaEntity e) => e.Domain switch
+    {
+        "light" => "bulb", "switch" or "input_boolean" => "plug", "fan" => "fan", "cover" => "blinds", "lock" => "lock",
+        "media_player" => "tv", "climate" => "thermo", "vacuum" => "home", _ => "bolt"
+    };
+
+    private async Task Toggle(HaEntity d)
+    {
+        await Ui.Try(async () =>
+        {
+            await Ha.ToggleAsync(d.Id);
+            await Task.Delay(500);
+            await LoadStatesAsync(refresh: true);
+        });
+    }
+
+    private async Task ToggleHidden(HaEntity d)
+    {
+        await Settings.UpdateAsync(s =>
+        {
+            if (!s.HomeAssistant.HiddenEntities.Remove(d.Id)) s.HomeAssistant.HiddenEntities.Add(d.Id);
+        });
+        hiddenSet = Settings.Current.HomeAssistant.HiddenEntities.ToHashSet();
+    }
+
+    private async Task RunRoutine(HaEntity r) =>
+        await Ui.Try(() => Ha.CallServiceAsync(r.Domain, "turn_on", new Dictionary<string, object> { ["entity_id"] = r.Id }), $"{r.Name} started");
+
+    private async Task PublishNow() => await Ui.Try(() => Automation.PublishSensorsAsync(force: true), "Sensors updated");
+
+    private async Task SyncLists() => Ui.Show(await ListSync.SyncNowAsync());
+
+    private static string Spark(List<(DateTime Time, double Value)> pts, bool area)
+    {
+        var min = pts.Min(p => p.Value);
+        var max = pts.Max(p => p.Value);
+        var range = max - min == 0 ? 1 : max - min;
+        var t0 = pts[0].Time;
+        var span = Math.Max(1, (pts[^1].Time - t0).TotalSeconds);
+        var ic = CultureInfo.InvariantCulture;
+        var coords = pts.Select(p => ((p.Time - t0).TotalSeconds / span * 100, 38 - (p.Value - min) / range * 34)).ToList();
+        var d = "M" + string.Join(" L", coords.Select(c => $"{c.Item1.ToString("0.##", ic)},{c.Item2.ToString("0.##", ic)}"));
+        return area ? d + " L100,40 L0,40 Z" : d;
+    }
+
+    public void Dispose() => timer?.Dispose();
+}

@@ -1,0 +1,55 @@
+@inject TaskService Tasks
+@inject Clock Clock
+@inject UiState Ui
+@inject NavigationManager Nav
+
+<li class="row clickable" @onclick="Open">
+    <button class="tick @(Task.IsOpen ? "" : "done")" title="@(Task.IsOpen ? "Complete" : "Reopen")" @onclick="Toggle" @onclick:stopPropagation="true">
+        <Icon Name="check" Size="13" Stroke="3" />
+    </button>
+    <div class="grow">
+        <div class="title @(Task.IsOpen ? "" : "strike")">
+            @if (Task.Priority >= TaskPriority.High) { <span class="prio-@Task.Priority" title="@Task.Priority">●</span> }
+            @Task.Title
+            @if (Task.Occurrences > 1) { <span class="badge warn" title="This came in @Task.Occurrences times — repeats are stacked onto one task">×@Task.Occurrences</span> }
+        </div>
+        <div class="meta">
+            <span>@Task.Category</span>
+            @if (Task.DueDate is { } d)
+            {
+                var overdue = Task.IsOverdue(Clock.Now);
+                <span class="badge @(overdue ? "danger" : d == Clock.Today ? "warn" : "")">
+                    @Fmt.RelDay(d, Clock.Today)@(Task.DueTime is { } t ? " " + t.ToString("HH:mm") : "")
+                </span>
+            }
+            @if (Task.ScheduledStart is { } s) { <span class="badge accent" title="Planned">@s.ToString("ddd HH:mm", Fmt.Culture)</span> }
+            @if (Task.Recurrence.Kind != RecurrenceKind.None) { <span title="Repeats"><Icon Name="renewals" Size="12" /> @Task.Recurrence</span> }
+            @if (Task.Checklist.Count > 0) { <span>☑ @Task.Checklist.Count(c => c.Done)/@Task.Checklist.Count</span> }
+            @if (Task.EstimatedMinutes is { } m) { <span>@m min</span> }
+            @if (Task.State is TaskState.InProgress or TaskState.Waiting) { <span class="badge info">@Fmt.Split(Task.State.ToString())</span> }
+            @if (Task.Source == "email") { <span title="Created from an email — deleting the task moves the email to the bin"><Icon Name="mail" Size="12" /></span> }
+            else if (Task.Source is "ai" or "capture" or "api") { <span title="Created by @Task.Source"><Icon Name="sparkles" Size="12" /></span> }
+        </div>
+    </div>
+</li>
+
+@code {
+    [Parameter, EditorRequired] public TaskItem Task { get; set; } = default!;
+    [Parameter] public EventCallback<TaskItem> OnOpen { get; set; }
+
+    private async Task Toggle()
+    {
+        if (Task.IsOpen)
+        {
+            var next = await Tasks.CompleteAsync(Task.Id);
+            Ui.Show(next is null ? "Done ✓" : $"Done ✓ — next one due {Fmt.RelDay(next.DueDate!.Value, Clock.Today)}");
+        }
+        else await Tasks.ReopenAsync(Task.Id);
+    }
+
+    private async Task Open()
+    {
+        if (OnOpen.HasDelegate) await OnOpen.InvokeAsync(Task);
+        else Nav.NavigateTo($"tasks?edit={Task.Id}");
+    }
+}
