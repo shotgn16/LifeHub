@@ -14,7 +14,10 @@ Full documentation: <https://github.com/Shotgn16/LifeHub/tree/main/docs>
    `http://192.168.1.50:11434`) and pick a model. `localhost` means the add-on container itself,
    so use the Ollama machine's IP.
 3. **Settings → Email.** Add Gmail/IMAP, Microsoft 365 or Exchange mailboxes.
-4. **Settings → Security & API** (optional). Set a LifeHub username and password if you also want
+4. **Settings → Bible** (optional): a YouVersion key for the verse of the day, and tick your phone's
+   *Last used app* sensor to track time in the YouVersion app.
+5. **Settings → Notifications**: Home Assistant app, LifeHub's own notifications, or both.
+6. **Settings → Security & API** (optional). Set a LifeHub username and password if you also want
    to use the direct port (8099) or your own hostname, and copy the API key for `rest_command`s.
 
 ## Access from other devices
@@ -39,6 +42,7 @@ These refresh every 5 minutes, and their attributes include the item lists:
 - `sensor.lifehub_food_expiring`
 - `sensor.lifehub_shopping_list`
 - `sensor.lifehub_ai_pending`
+- `sensor.lifehub_bible_streak`
 
 ## Data
 

@@ -1,7 +1,7 @@
 name: LifeHub
-version: "1.2.1"
+version: "1.3.0"
 slug: lifehub
-description: Renewals, tasks, kitchen stock, schedule and a local-AI email assistant
+description: Renewals, tasks, kitchen & meals, Bible reading, schedule and a local-AI email assistant
 url: https://github.com/Shotgn16/LifeHub
 arch:
   - amd64

@@ -22,6 +22,16 @@
             <datalist id="ollama-models">@foreach (var m in models) { <option value="@m"></option> }</datalist>
             <div class="help">Good choices: <code>qwen2.5:7b</code>, <code>llama3.1:8b</code>, <code>mistral-nemo</code> (structured output needs Ollama 0.5+). Bigger = better at dates, slower on CPU.</div>
         </div>
+        <div class="field">
+            <label>Vision model <span class="muted">(optional — reads photos)</span></label>
+            <input type="text" @bind="o.VisionModel" list="ollama-models" placeholder="e.g. qwen2.5vl:7b" />
+            <div class="help">Used to read handwritten study notes and to find groceries and dates in photos. Good choices: <code>qwen2.5vl:7b</code>, <code>llama3.2-vision</code>, <code>minicpm-v</code> (<code>ollama pull qwen2.5vl:7b</code>).</div>
+        </div>
+        <div class="field">
+            <label>Embedding model <span class="muted">(optional — links studies by meaning)</span></label>
+            <input type="text" @bind="o.EmbeddingModel" list="ollama-models" placeholder="e.g. nomic-embed-text" />
+            <div class="help">Small and fast. Without it, studies are still linked by passages, themes and people.</div>
+        </div>
         <div class="form-grid">
             <div class="field"><label>Timeout (seconds)</label><input type="number" min="10" @bind="o.TimeoutSeconds" /></div>
             <div class="field"><label>Temperature</label><input type="number" min="0" max="1" step="0.05" @bind="o.Temperature" /></div>

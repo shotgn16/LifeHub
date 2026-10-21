@@ -8,6 +8,8 @@
 @inject SettingsService Settings
 @inject UiState UiState
 @inject NavigationManager Nav
+@inject BibleService Bible
+@inject Clock Clock
 
 <div class="shell">
     <input type="checkbox" id="nav-toggle" class="nav-toggle" @bind="menuOpen" />
@@ -22,6 +24,12 @@
         <NavLink class="nav-link" href="kitchen"><Icon Name="kitchen" /> Kitchen</NavLink>
         <NavLink class="nav-link" href="scan"><Icon Name="barcode" /> Scan</NavLink>
         <NavLink class="nav-link" href="shopping"><Icon Name="cart" /> Shopping @if (shopping > 0) { <span class="count">@shopping</span> }</NavLink>
+        <NavLink class="nav-link" href="meals"><Icon Name="pot" /> Meals</NavLink>
+        @if (bibleEnabled)
+        {
+            <div class="nav-section">Faith</div>
+            <NavLink class="nav-link" href="bible"><Icon Name="book" /> Bible @if (bibleToRead > 0) { <span class="count" title="Still to read today">@bibleToRead</span> }</NavLink>
+        }
         <div class="nav-section">Connected</div>
         <NavLink class="nav-link" href="home"><Icon Name="home" /> Home</NavLink>
         <NavLink class="nav-link" href="inbox"><Icon Name="inbox" /> AI Inbox @if (aiPending > 0) { <span class="count">@aiPending</span> }</NavLink>
@@ -114,7 +122,8 @@
 
 @code {
     private bool menuOpen, captureOpen, noticesOpen;
-    private int tasksDue, shopping, aiPending, unread;
+    private int tasksDue, shopping, aiPending, unread, bibleToRead;
+    private bool bibleEnabled;
     private string householdName = "LifeHub";
     private CurrentPeriod? period;
     private List<Notice> recent = new();
@@ -128,6 +137,8 @@
         Ai.Suggestions.Changed += OnChanged;
         Notices.Repo.Changed += OnChanged;
         Settings.Changed += OnChanged;
+        Bible.Plan.Changed += OnChanged;
+        Bible.Verses.Changed += OnChanged;
         UiState.Changed += OnUi;
         Nav.LocationChanged += OnLocation;
         timer = new Timer(_ => _ = InvokeAsync(LoadPeriodAsync), null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
@@ -141,6 +152,12 @@
         unread = Notices.UnreadCount;
         recent = Notices.Recent(25).ToList();
         householdName = Settings.Current.General.HouseholdName;
+        bibleEnabled = Settings.Current.Bible.Enabled;
+        if (bibleEnabled)
+        {
+            var today = Bible.VerseFor(Clock.Today);
+            bibleToRead = Bible.TodayList().Count(p => !p.Done) + (today is { Read: false } && !string.IsNullOrEmpty(today.Reference) ? 1 : 0);
+        }
         Fmt.Culture = CultureInfo.GetCultureInfo(Settings.Current.General.Culture);
     }
 
@@ -177,6 +194,8 @@
         Ai.Suggestions.Changed -= OnChanged;
         Notices.Repo.Changed -= OnChanged;
         Settings.Changed -= OnChanged;
+        Bible.Plan.Changed -= OnChanged;
+        Bible.Verses.Changed -= OnChanged;
         UiState.Changed -= OnUi;
         Nav.LocationChanged -= OnLocation;
     }

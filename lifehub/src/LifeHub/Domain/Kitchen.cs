@@ -3,6 +3,12 @@ namespace LifeHub.Domain;
 public enum StorageLocation { Fridge, Freezer, Cupboard, Pantry, Other }
 public enum FoodEventKind { Purchased, Used, Wasted, Frozen, Defrosted }
 
+/// <summary>
+/// UseBy = a hard safety date (milk, meat, fish). BestBefore = quality, not safety — the food goes
+/// off gradually (eggs, cereal, pasta, tins), so LifeHub shows a gradient instead of a cliff edge.
+/// </summary>
+public enum DateKind { UseBy, BestBefore }
+
 /// <summary>Something physically in the house right now.</summary>
 public sealed class PantryItem : Entity
 {
@@ -11,7 +17,11 @@ public sealed class PantryItem : Entity
     public StorageLocation Location { get; set; } = StorageLocation.Fridge;
     public decimal Quantity { get; set; } = 1;
     public string Unit { get; set; } = "";
+    /// <summary>The date on the pack (use-by or best-before, see DateKind), or an estimate.</summary>
     public DateOnly? UseBy { get; set; }
+    public DateKind DateKind { get; set; } = DateKind.UseBy;
+    /// <summary>True when the date wasn't printed/read but estimated from typical shelf life.</summary>
+    public bool DateEstimated { get; set; }
     public DateOnly AddedOn { get; set; }
     public DateOnly? FrozenOn { get; set; }
     public DateOnly? OpenedOn { get; set; }
@@ -23,7 +33,7 @@ public sealed class PantryItem : Entity
     public int? DaysLeft(DateOnly today) => UseBy is { } d ? d.DayNumber - today.DayNumber : null;
 }
 
-/// <summary>Something you always want in the house. Drives automatic shopping list entries.</summary>
+/// <summary>Something you always want in the house. Drives shopping suggestions (you choose what to add).</summary>
 public sealed class StapleItem : Entity
 {
     public string Name { get; set; } = "";
@@ -35,7 +45,13 @@ public sealed class StapleItem : Entity
     public string Unit { get; set; } = "";
     /// <summary>Typical shelf life when bought, used to pre-fill use-by dates.</summary>
     public int? ShelfLifeDays { get; set; }
-    /// <summary>Also add when the learned buying interval says you're about to run out.</summary>
+    /// <summary>Overrides LifeHub's built-in guess of whether this has a use-by or a best-before date.</summary>
+    public DateKind? DateKind { get; set; }
+    /// <summary>How long it stays good once opened (e.g. cereal ~8 weeks).</summary>
+    public int? OpenedLifeDays { get; set; }
+    /// <summary>For best-before food: days after the date it's usually still fine.</summary>
+    public int? GraceDays { get; set; }
+    /// <summary>Also suggest it when the learned buying interval says you're about to run out.</summary>
     public bool PredictFromHistory { get; set; } = true;
     /// <summary>Other names that count as this staple (e.g. "semi-skimmed milk" for Milk).</summary>
     public List<string> Aliases { get; set; } = new();
@@ -55,7 +71,7 @@ public sealed class ShoppingItem : Entity
     public string Unit { get; set; } = "";
     public string Category { get; set; } = "Other";
     public bool Checked { get; set; }
-    /// <summary>Manual, Low stock, Predicted, Expired, AI, API</summary>
+    /// <summary>Manual, Scanned, Home Assistant, API, Capture, Meal plan, Suggestion</summary>
     public string Reason { get; set; } = "Manual";
     public Guid? StapleId { get; set; }
     public string? Barcode { get; set; }

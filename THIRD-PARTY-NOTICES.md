@@ -6,9 +6,17 @@ LifeHub includes or depends on the following third-party components.
 |---|---|---|
 | [ASP.NET Core / .NET 8](https://github.com/dotnet/aspnetcore) | Runtime and web framework | MIT |
 | [MailKit](https://github.com/jstedfast/MailKit) / [MimeKit](https://github.com/jstedfast/MimeKit) | IMAP and MIME parsing (NuGet package) | MIT |
+| [PdfPig](https://github.com/UglyToad/PdfPig) | Reading PDF study notes (NuGet package) | Apache-2.0 |
 | [ZXing-js](https://github.com/zxing-js/library) 0.21.3 | Barcode decoding in the browser. Vendored as `wwwroot/js/zxing.min.js`; the licence is in `wwwroot/js/zxing.LICENSE.txt`. | Apache-2.0 |
 
 ## Services and data
+
+- **[YouVersion Platform](https://platform.youversion.com)**: the verse of the day and passage text
+  are fetched with your own app key, subject to YouVersion's terms and each Bible version's
+  licence.
+- **[StudyLight.org](https://www.studylight.org)** and **[Biblia Graphia](https://bibliagraphia.com)**
+  pages are fetched only when you ask for study insights. They're summarised by your local AI for
+  your personal use and always linked; nothing is stored or republished.
 
 - **[Open Food Facts](https://world.openfoodfacts.org)** product data is looked up by barcode at
   run time and isn't redistributed with LifeHub. The data is available under the

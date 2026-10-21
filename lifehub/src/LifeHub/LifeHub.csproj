@@ -6,13 +6,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>LifeHub</RootNamespace>
     <AssemblyName>LifeHub</AssemblyName>
-    <Version>1.2.1</Version>
+    <Version>1.3.0</Version>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- IMAP / MIME parsing (Gmail, generic IMAP, on-prem Exchange with IMAP enabled) -->
     <PackageReference Include="MailKit" Version="4.8.0" />
+    <!-- PDF text and scanned-page images for Bible study notes -->
+    <PackageReference Include="PdfPig" Version="0.1.16" />
   </ItemGroup>
 
 </Project>

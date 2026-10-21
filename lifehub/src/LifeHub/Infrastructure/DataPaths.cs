@@ -11,6 +11,8 @@ public sealed class DataPaths
     public string Backups => Path.Combine(Root, "backups");
     public string Keys => Path.Combine(Root, "keys");
     public string SettingsFile => Path.Combine(Root, "settings.json");
+    /// <summary>Uploaded Bible study notes (images, PDFs, documents).</summary>
+    public string BibleFiles => Path.Combine(Root, "bible", "files");
 
     /// <summary>True when running inside a Home Assistant add-on container.</summary>
     public bool IsHomeAssistantAddon { get; }
@@ -23,6 +25,6 @@ public sealed class DataPaths
             ? Path.GetFullPath(configured, env.ContentRootPath)
             : IsHomeAssistantAddon ? "/data" : Path.Combine(env.ContentRootPath, "data");
 
-        foreach (var dir in new[] { Root, Db, Backups, Keys }) Directory.CreateDirectory(dir);
+        foreach (var dir in new[] { Root, Db, Backups, Keys, BibleFiles }) Directory.CreateDirectory(dir);
     }
 }

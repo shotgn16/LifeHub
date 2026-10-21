@@ -70,7 +70,7 @@ Every email gets a category:
 
 | Category | Can create |
 |---|---|
-| Action needed, Work, Personal | tasks, events |
+| Action needed, Work, Personal | tasks, events (never shopping items) |
 | Bill | tasks, renewal updates |
 | Receipt | renewal updates, and kitchen stock for grocery orders |
 | Delivery, Booking | events, tasks |
@@ -82,7 +82,7 @@ Every email gets a category:
 | Type | Default |
 |---|---|
 | **Task** | Applied automatically. Repeat issues stack onto one task (×N). |
-| **Shopping** | Applied automatically, and merged with existing items. |
+| **Shopping** | **Only from notes you type** (quick capture), never from emails. Applied automatically. |
 | **Promotion** | Applied automatically, to the Promotions list. Clears itself after the offer ends. |
 | **Event** | Waits for approval, then goes to your calendar. |
 | **Renewal** | Waits for approval. Needs a real price. |
@@ -129,6 +129,21 @@ actions.
 | Poll interval | Settings → Email | Default 10 minutes, up to 20 emails per poll. The first sync looks back 2 days. |
 | Ignore senders | Each mailbox | Addresses or domains to skip completely. |
 | Timeout | Settings → AI | Raise it for large models running on CPU (default 180 seconds). |
+
+## Other things the local AI does
+
+- [Bible studies](bible.md): reads handwritten notes, breaks studies down, finds connections, and
+  compares your notes with StudyLight.
+- [Kitchen photos](kitchen-and-meals.md#add-from-photo): lists your groceries and reads their dates.
+- [Meal planner](kitchen-and-meals.md#meal-planner): moves meals around your week, adapts recipes
+  for dietary needs, and uses up food.
+
+Two optional models help with these. Set them in **Settings → AI**:
+
+| Model | For | Example |
+|---|---|---|
+| Vision model | photos and scans | `ollama pull qwen2.5vl:7b` |
+| Embedding model | linking studies by meaning | `ollama pull nomic-embed-text` |
 
 ## Privacy
 - Email bodies are sent to **your** Ollama server only, and are never stored. LifeHub keeps the

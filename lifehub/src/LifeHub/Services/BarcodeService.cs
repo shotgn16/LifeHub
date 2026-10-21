@@ -168,7 +168,7 @@ public sealed class BarcodeService
     public DateOnly? DefaultUseBy(ProductInfo p, StorageLocation location)
     {
         if (location == StorageLocation.Freezer) return null;
-        var days = p.ShelfLifeDays ?? (p.StapleId is { } sid ? _kitchen.Staples.Get(sid)?.ShelfLifeDays : null);
+        var days = p.ShelfLifeDays ?? (p.StapleId is { } sid ? _kitchen.Staples.Get(sid)?.ShelfLifeDays : null) ?? Freshness.ProfileFor(p.Name)?.ShelfDays;
         return days is { } d ? _clock.Today.AddDays(d) : null;
     }
 
@@ -186,7 +186,8 @@ public sealed class BarcodeService
         var item = await _kitchen.AddToPantryAsync(new PantryItem
         {
             Name = p.Name, Quantity = quantity <= 0 ? 1 : quantity, Category = p.Category, Location = location,
-            UseBy = useBy, StapleId = p.StapleId, Barcode = p.Barcode
+            UseBy = useBy, DateEstimated = useBy is not null && useBy == DefaultUseBy(p, location),
+            StapleId = p.StapleId, Barcode = p.Barcode
         });
         // Bought it → tick it off the shopping list.
         var onList = _kitchen.Shopping.Where(s => !s.Checked && (s.Barcode == p.Barcode || s.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase) ||
@@ -194,7 +195,7 @@ public sealed class BarcodeService
         if (onList is not null) await _kitchen.Shopping.DeleteAsync(onList.Id);
 
         var where = location.ToString().ToLowerInvariant();
-        var useByText = item.UseBy is { } ub ? $", use by {ub:ddd d MMM}" : "";
+        var useByText = item.UseBy is { } ub ? $", {(item.DateKind == DateKind.BestBefore ? "best before" : "use by")} {(item.DateEstimated ? "~" : "")}{ub:ddd d MMM}" : "";
         return new ScanOutcome(true, $"Added {p.Name} to the {where}{useByText}", p, async () =>
         {
             await _kitchen.UndoAddAsync(item);

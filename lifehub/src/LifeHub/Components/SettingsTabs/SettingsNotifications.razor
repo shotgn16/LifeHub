@@ -1,20 +1,101 @@
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@implements IAsyncDisposable
 @inject SettingsService Settings
 @inject NotificationService Notices
+@inject WebPushService Push
 @inject HomeAssistantClient Ha
+@inject IJSRuntime JS
+@inject NavigationManager Nav
 @inject UiState Ui
 
-<div class="card" style="max-width:720px">
+<div class="card" style="max-width:760px;margin-bottom:16px">
+    <h2 style="margin-bottom:6px">How notifications reach your phone</h2>
+    <p class="small muted" style="margin-top:0">Every notification also appears under the bell in LifeHub.</p>
+    <div class="choice-list">
+        <label class="check"><input type="radio" name="channel" checked="@(n.Channel == NotifyChannel.HomeAssistant)" @onchange="() => n.Channel = NotifyChannel.HomeAssistant" />
+            <span><strong>Home Assistant app</strong> — via the Companion app on the phones ticked in Settings → Home Assistant
+                @if (!haPhones) { <span class="badge warn">no phones set up</span> }</span></label>
+        <label class="check"><input type="radio" name="channel" checked="@(n.Channel == NotifyChannel.LifeHub)" @onchange="() => n.Channel = NotifyChannel.LifeHub" />
+            <span><strong>LifeHub's own notifications</strong> — straight from LifeHub to the browsers/phones you turn on below (no Home Assistant needed)</span></label>
+        <label class="check"><input type="radio" name="channel" checked="@(n.Channel == NotifyChannel.Both)" @onchange="() => n.Channel = NotifyChannel.Both" />
+            <span><strong>Both</strong></span></label>
+    </div>
+    @if (n.Channel == NotifyChannel.HomeAssistant && !haPhones && devices.Count > 0)
+    {
+        <p class="small muted">Home Assistant has no phones set up, so LifeHub's own notifications are used for now.</p>
+    }
+</div>
+
+<div class="card" style="max-width:760px;margin-bottom:16px">
+    <div class="card-head"><h2>LifeHub notifications on your devices</h2></div>
+    @if (support is null) { <p class="small muted">Checking this browser…</p> }
+    else if (!support.Supported)
+    {
+        <p class="small">This browser can't receive web notifications.@(support.Ios && !support.Standalone ? " On iPhone/iPad: open LifeHub in Safari, tap Share → Add to Home Screen, then open it from the home screen and come back here." : "")</p>
+    }
+    else if (!support.Secure)
+    {
+        <p class="small">Notifications need LifeHub to be opened over <strong>HTTPS</strong> (e.g. your Cloudflare address). Open it that way on this device and come back here.</p>
+    }
+    else
+    {
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            @if (thisDevice is null)
+            {
+                <input type="text" placeholder="Name for this device, e.g. My phone" @bind="deviceName" style="max-width:260px" />
+                <button class="btn primary" @onclick="Enable" disabled="@busy"><Icon Name="bell" Size="15" /> Turn on for this device</button>
+            }
+            else
+            {
+                <span class="badge ok">On for this device (@thisDevice.Name)</span>
+                <button class="btn sm" @onclick="() => Test(thisDevice)">Send test</button>
+                <button class="btn sm" @onclick="Disable">Turn off here</button>
+            }
+            @if (support.Permission == "denied") { <span class="badge danger">Blocked in browser settings</span> }
+        </div>
+        @if (support.Ios && !support.Standalone)
+        {
+            <p class="help small">On iPhone/iPad notifications only work from the home-screen app: Share → <strong>Add to Home Screen</strong>, then open LifeHub from there.</p>
+        }
+    }
+
+    <ul class="list" style="margin-top:12px">
+        @if (devices.Count == 0) { <li class="empty small">No devices yet.</li> }
+        @foreach (var d in devices)
+        {
+            <li class="row">
+                <Icon Name="phone" Size="18" />
+                <div class="grow">
+                    <div class="title">@(string.IsNullOrEmpty(d.Name) ? "Unnamed device" : d.Name)</div>
+                    <div class="meta">
+                        <span>@BrowserOf(d.UserAgent)</span>
+                        @if (d.LastOkUtc is { } ok) { <span>· last delivered @Fmt.Ago(ok)</span> }
+                        @if (!string.IsNullOrEmpty(d.LastError)) { <span class="badge danger" title="@d.LastError">error</span> }
+                    </div>
+                </div>
+                @if (people.Count > 0)
+                {
+                    <select style="width:auto" value="@d.Person" @onchange="e => SetPerson(d, e.Value?.ToString() ?? string.Empty)" title="Whose device is this? (for 'while you're out' messages)">
+                        <option value="">Everyone</option>
+                        @foreach (var (id, name) in people) { <option value="@id">@name</option> }
+                    </select>
+                }
+                <button class="btn sm" @onclick="() => Test(d)">Test</button>
+                <button class="icon-btn" title="Remove" @onclick="() => Remove(d)"><Icon Name="trash" Size="15" /></button>
+            </li>
+        }
+    </ul>
+</div>
+
+<div class="card" style="max-width:760px">
     <h2 style="margin-bottom:12px">Reminders</h2>
     <label class="check"><input type="checkbox" @bind="n.RenewalReminders" /> Renewals — when inside each item's reminder window, the day before, and on the day</label>
     <label class="check"><input type="checkbox" @bind="n.TaskReminders" /> Tasks — 15 minutes before a timed deadline or planned slot</label>
-    <label class="check"><input type="checkbox" @bind="n.ExpiryReminders" /> Food — once a day (from 9am) when things need using up</label>
+    <label class="check"><input type="checkbox" @bind="n.ExpiryReminders" /> Food — once a day (from 9am) when things need using up or checking</label>
     <label class="check"><input type="checkbox" @bind="n.DailyDigest" /> Daily digest</label>
     <div class="field" style="max-width:200px"><label>Digest time</label><input type="time" @bind="n.DailyDigestTime" /></div>
-    <p class="small muted">
-        Notifications always appear under the bell. @(Ha.IsConfigured && !string.IsNullOrEmpty(Settings.Current.HomeAssistant.NotifyService)
-            ? $"They're also pushed via {Settings.Current.HomeAssistant.NotifyService}."
-            : "Set a notify service under Home Assistant to get them on your phone.")
-    </p>
+    <p class="small muted">Bible reading reminders are set in Settings → Bible.</p>
     <div style="display:flex;gap:8px">
         <button class="btn primary" @onclick="Save">Save</button>
         <button class="btn" @onclick="SendTest">Send a test notification</button>
@@ -23,10 +104,142 @@
 
 @code {
     private NotificationSettings n = new();
-    protected override void OnInitialized() => n = Settings.Current.Notifications;
+    private List<PushDevice> devices = new();
+    private List<(string Id, string Name)> people = new();
+    private bool haPhones, busy;
+    private string deviceName = "";
+    private SupportInfo? support;
+    private PushDevice? thisDevice;
+    private IJSObjectReference? module;
 
-    private async Task Save() => await Ui.Try(() => Settings.UpdateAsync(s => s.Notifications = n), "Saved");
+    private sealed class SupportInfo
+    {
+        public bool Supported { get; set; }
+        public bool Secure { get; set; }
+        public string Permission { get; set; } = "";
+        public bool Ios { get; set; }
+        public bool Standalone { get; set; }
+        public string UserAgent { get; set; } = "";
+    }
+
+    private sealed class SubJson
+    {
+        [JsonPropertyName("endpoint")] public string Endpoint { get; set; } = "";
+        [JsonPropertyName("keys")] public Dictionary<string, string> Keys { get; set; } = new();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        n = Settings.Current.Notifications;
+        var ha = Settings.Current.HomeAssistant;
+        haPhones = Ha.IsConfigured && (ha.NotifyServices.Count > 0 || !string.IsNullOrWhiteSpace(ha.NotifyService));
+        devices = Push.Devices.All().OrderBy(d => d.Name).ToList();
+        if (Ha.IsConfigured && ha.PresenceEntities.Count > 0)
+        {
+            try
+            {
+                foreach (var id in ha.PresenceEntities)
+                    people.Add((id, (await Ha.GetStateAsync(id))?.Name ?? id));
+            }
+            catch { }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var baseUri = new Uri(Nav.BaseUri);
+            module = await JS.InvokeAsync<IJSObjectReference>("import", $"//{baseUri.Authority}{baseUri.AbsolutePath}js/push.js?v=1");
+            support = await module.InvokeAsync<SupportInfo>("support");
+            if (support.Supported)
+            {
+                var sub = await module.InvokeAsync<SubJson?>("current");
+                if (sub is not null) thisDevice = Push.Devices.Where(d => d.Endpoint == sub.Endpoint).FirstOrDefault();
+            }
+            if (string.IsNullOrEmpty(deviceName)) deviceName = GuessName(support.UserAgent);
+        }
+        catch (Exception ex) { support = new SupportInfo(); Ui.Show("Couldn't check notification support: " + ex.Message, true); }
+        StateHasChanged();
+    }
+
+    private async Task Enable()
+    {
+        if (module is null) return;
+        busy = true;
+        try
+        {
+            var key = await Push.PublicKeyAsync();
+            var sub = await module.InvokeAsync<SubJson>("subscribe", key);
+            thisDevice = await Push.SaveDeviceAsync(sub.Endpoint, sub.Keys.GetValueOrDefault("p256dh") ?? "", sub.Keys.GetValueOrDefault("auth") ?? "",
+                string.IsNullOrWhiteSpace(deviceName) ? GuessName(support?.UserAgent ?? "") : deviceName.Trim(), support?.UserAgent ?? "");
+            devices = Push.Devices.All().OrderBy(d => d.Name).ToList();
+            if (n.Channel == NotifyChannel.HomeAssistant && !haPhones)
+            {
+                n.Channel = NotifyChannel.LifeHub;
+                await Settings.UpdateAsync(s => s.Notifications.Channel = NotifyChannel.LifeHub);
+            }
+            await Push.SendToAsync(thisDevice, "LifeHub notifications are on", "You'll get reminders here.", "", "test");
+            Ui.Show("Notifications turned on for this device");
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task Disable()
+    {
+        if (module is null || thisDevice is null) return;
+        await Ui.Try(async () =>
+        {
+            await module.InvokeAsync<bool>("unsubscribe");
+            await Push.Devices.DeleteAsync(thisDevice.Id);
+            thisDevice = null;
+            devices = Push.Devices.All().OrderBy(d => d.Name).ToList();
+        }, "Turned off for this device");
+    }
+
+    private async Task Test(PushDevice d)
+    {
+        var ok = await Push.SendToAsync(d, "LifeHub test", "If you can read this, LifeHub notifications work.", "", "test");
+        devices = Push.Devices.All().OrderBy(x => x.Name).ToList();
+        Ui.Show(ok ? $"Sent to {d.Name}" : $"Couldn't send to {d.Name}: {d.LastError}", !ok);
+    }
+
+    private async Task Remove(PushDevice d)
+    {
+        await Push.Devices.DeleteAsync(d.Id);
+        if (thisDevice?.Id == d.Id) thisDevice = null;
+        devices = Push.Devices.All().OrderBy(x => x.Name).ToList();
+    }
+
+    private async Task SetPerson(PushDevice d, string person)
+    {
+        d.Person = person;
+        await Push.Devices.UpsertAsync(d);
+    }
+
+    private static string GuessName(string ua) =>
+        ua.Contains("iPhone") ? "iPhone" : ua.Contains("iPad") ? "iPad" : ua.Contains("Android") ? "Android phone" :
+        ua.Contains("Windows") ? "Windows PC" : ua.Contains("Mac OS") ? "Mac" : "This device";
+
+    private static string BrowserOf(string ua) =>
+        ua.Contains("Edg/") ? "Edge" : ua.Contains("Firefox") ? "Firefox" : ua.Contains("Chrome") ? "Chrome" :
+        ua.Contains("Safari") ? "Safari" : "Browser";
+
+    private async Task Save() => await Ui.Try(() => Settings.UpdateAsync(s =>
+    {
+        // Keep keys created meanwhile.
+        n.VapidPublicKey = s.Notifications.VapidPublicKey;
+        n.VapidPrivateKey = s.Notifications.VapidPrivateKey;
+        s.Notifications = n;
+    }), "Saved");
 
     private async Task SendTest() =>
         await Ui.Try(() => Notices.NotifyAsync("LifeHub test", "If you can read this, notifications work.", NoticeLevel.Info), "Sent");
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null) try { await module.DisposeAsync(); } catch { }
+    }
 }

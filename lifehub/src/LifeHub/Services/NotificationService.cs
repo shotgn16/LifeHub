@@ -2,15 +2,32 @@ using LifeHub.Integrations.HomeAssistant;
 
 namespace LifeHub.Services;
 
-/// <summary>Stores in-app notices and forwards them to the HA notify service (phone push).</summary>
+/// <summary>
+/// Stores in-app notices and pushes them to phones — through Home Assistant's Companion app, LifeHub's own
+/// web push, or both (Settings → Notifications).
+/// </summary>
 public sealed class NotificationService
 {
     private readonly IRepository<Notice> _repo;
     private readonly HomeAssistantClient _ha;
+    private readonly WebPushService _push;
+    private readonly SettingsService _settings;
 
-    public NotificationService(IRepository<Notice> repo, HomeAssistantClient ha)
+    public NotificationService(IRepository<Notice> repo, HomeAssistantClient ha, WebPushService push, SettingsService settings)
     {
-        _repo = repo; _ha = ha;
+        _repo = repo; _ha = ha; _push = push; _settings = settings;
+    }
+
+    /// <summary>The channel actually used: falls back to LifeHub's own push when HA has no phones set up.</summary>
+    public NotifyChannel EffectiveChannel
+    {
+        get
+        {
+            var s = _settings.Current;
+            var haReady = _ha.IsConfigured && (s.HomeAssistant.NotifyServices.Count > 0 || !string.IsNullOrWhiteSpace(s.HomeAssistant.NotifyService));
+            return s.Notifications.Channel == NotifyChannel.HomeAssistant && !haReady && _push.Devices.All().Count > 0
+                ? NotifyChannel.LifeHub : s.Notifications.Channel;
+        }
     }
 
     public IRepository<Notice> Repo => _repo;
@@ -21,11 +38,16 @@ public sealed class NotificationService
 
     /// <summary>Sends a notice unless one with the same dedupe key already exists. Returns true if sent.</summary>
     public async Task<bool> NotifyAsync(string title, string message, NoticeLevel level = NoticeLevel.Info, string link = "", string dedupeKey = "",
-        bool push = true, string? tag = null, IEnumerable<string>? onlyTo = null)
+        bool push = true, string? tag = null, IEnumerable<string>? onlyTo = null, string? person = null)
     {
         if (!string.IsNullOrEmpty(dedupeKey) && _repo.Where(n => n.DedupeKey == dedupeKey).Count > 0) return false;
         await _repo.UpsertAsync(new Notice { Title = title, Message = message, Level = level, Link = link, DedupeKey = dedupeKey });
-        if (push) await _ha.NotifyAsync(title, message, string.IsNullOrEmpty(link) ? null : link, tag, onlyTo);
+        if (!push) return true;
+        var channel = EffectiveChannel;
+        if (channel is NotifyChannel.HomeAssistant or NotifyChannel.Both)
+            await _ha.NotifyAsync(title, message, string.IsNullOrEmpty(link) ? null : link, tag, onlyTo);
+        if (channel is NotifyChannel.LifeHub or NotifyChannel.Both)
+            await _push.SendAsync(title, message, link, tag, person);
         return true;
     }
 

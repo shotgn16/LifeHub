@@ -41,6 +41,28 @@
 | Microsoft can't move emails to Deleted Items | Since 1.2.0 the app needs `Mail.ReadWrite`. Add the permission and sign in again. |
 | Junk was added from old emails | Use **AI Inbox → History → Clean up**, and **Merge duplicates** on the Tasks page. |
 
+## Bible, kitchen photos & meals
+
+| Symptom | Fix |
+|---|---|
+| No verse of the day | Add a YouVersion app key in Settings → Bible, or type the verse on the Bible page. |
+| Verse shows without text | That Bible version isn't licensed for apps like LifeHub. Try BSB (3034) or KJV (1). |
+| App time not counted (Android) | Turn on the Companion app's **Last used app** sensor and tick it in Settings → Bible. Set *Sensor update frequency* to **Fast always**. |
+| App time not counted (iPhone) | Check the Shortcuts automations are set to **Run Immediately** and the URL and API key are right. Your phone must reach LifeHub at that address. |
+| Handwriting not read / "model can't see images" | Set a **vision model** in Settings → AI (`ollama pull qwen2.5vl:7b`). |
+| "Biblia Graphia: page didn't contain readable text" | That site builds its pages with JavaScript. Use the link in **Read more**, or turn it off in Settings → Bible. |
+| Photo finds no food | Get closer, use good light, and spread items out with labels facing the camera. One bag per photo. |
+| Dates read wrongly | Check the day/month order follows Settings → General → Culture. You can always correct the date before adding. |
+| Meal suggestions are odd | Add your requirements and preferences on Meals → Dietary needs. Bigger models give better plans. |
+
+## Notifications
+
+| Symptom | Fix |
+|---|---|
+| "Turn on for this device" missing | Open LifeHub over HTTPS. On iPhone, add it to the home screen first and open it from there. |
+| "Blocked in browser settings" | Allow notifications for the LifeHub site in the browser or phone settings, then try again. |
+| Device shows "error" | Remove it and turn it on again on that device. Expired devices are removed automatically. |
+
 ## General
 
 | Symptom | Fix |

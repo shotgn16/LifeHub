@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.3.0
+**New: Bible**
+- Verse of the day, the same as the YouVersion app (free YouVersion key), or typed in yourself.
+- Time in the YouVersion app is tracked: Android through the Home Assistant "Last used app" sensor,
+  iPhone through a Shortcuts automation. A few minutes in the app ticks off the verse.
+- A missed verse moves to the next day as a catch-up, and unfinished readings carry over.
+  Optional reading plan, evening reminder, streak, heatmap and book coverage.
+- Bible studies with notes plus photos/PDFs as proof. The local AI reads handwriting, breaks the
+  study down, links it to your other studies, and on request compares it with StudyLight. AI text
+  is purple and never changes your notes.
+
+**New: meal planner**
+- Plan up to 2 weeks around your calendar and energy, see what to buy (scaled and checked
+  against your kitchen), and set dietary needs (gluten free etc.).
+- AI suggestions to move meals, use up food, adapt recipes for your needs or improve them.
+  Nothing changes until you press Apply.
+
+**Kitchen & shopping**
+- Add from photo: the vision model lists the groceries and reads printed dates. For missing ones,
+  take a close-up, type them in or use a typical estimate.
+- Use-by vs best-before: eggs, cereal, pasta and tins fade on a scale (past best → check first)
+  instead of "expired". Opened items go stale sooner. Staples can override this.
+- The shopping list only changes when you add things (typed, scanned, your chosen HA list, or the
+  meal planner). Low staples are suggestions. Items LifeHub had added itself are removed once.
+
+**Notifications**
+- Choose Home Assistant, LifeHub's own web push (works on any phone, even without HA), or both.
+
 ## 1.2.1
 - Phone notifications rewritten for the lock screen: short headings, one item per line, "+N more".
 - Morning digest in sections (📅 today, ✅ tasks due, 🔁 renewals, 🥛 use up, 🛒 to buy).

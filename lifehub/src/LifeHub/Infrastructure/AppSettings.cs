@@ -13,6 +13,8 @@ public sealed class AppSettings
     public EmailSettings Email { get; set; } = new();
     public ScheduleSettings Schedule { get; set; } = new();
     public NotificationSettings Notifications { get; set; } = new();
+    public BibleSettings Bible { get; set; } = new();
+    public MealSettings Meals { get; set; } = new();
 }
 
 public sealed class GeneralSettings
@@ -32,6 +34,8 @@ public sealed class GeneralSettings
     public string BarcodeLookupUrl { get; set; } = "https://world.openfoodfacts.org";
     /// <summary>Scanning a product you've already confirmed adds/uses it straight away (with undo).</summary>
     public bool ScanInstantKnown { get; set; } = true;
+    /// <summary>1.3 upgrade flag: shopping items LifeHub added by itself (low stock, predictions, email) were removed once.</summary>
+    public bool ShoppingSourcesMigrated { get; set; }
     public List<string> TaskCategories { get; set; } = new() { "Work", "Home DIY", "Smart Home", "Personal Care", "Admin", "Errands" };
     public List<string> FoodCategories { get; set; } = new() { "Dairy", "Meat & Fish", "Fruit & Veg", "Bakery", "Frozen", "Tins & Jars", "Dry Goods", "Drinks", "Snacks", "Household", "Other" };
 }
@@ -95,6 +99,10 @@ public sealed class OllamaSettings
     /// <summary>Free-text rules appended to the prompt, e.g. "Emails from my boss are always Work".</summary>
     public string ExtraInstructions { get; set; } = "";
     public int MaxEmailChars { get; set; } = 6000;
+    /// <summary>Model that can see images (OCR of study notes, groceries from photos), e.g. qwen2.5vl:7b, llama3.2-vision, minicpm-v.</summary>
+    public string VisionModel { get; set; } = "";
+    /// <summary>Optional embedding model for finding related Bible studies, e.g. nomic-embed-text.</summary>
+    public string EmbeddingModel { get; set; } = "";
 }
 
 public sealed class EmailSettings
@@ -203,4 +211,65 @@ public sealed class NotificationSettings
     public bool ExpiryReminders { get; set; } = true;
     public bool DailyDigest { get; set; } = true;
     public TimeOnly DailyDigestTime { get; set; } = new(8, 0);
+    /// <summary>Where push notifications go: Home Assistant's Companion app, LifeHub's own (web push), or both.</summary>
+    public NotifyChannel Channel { get; set; } = NotifyChannel.HomeAssistant;
+    /// <summary>VAPID key pair for LifeHub's own web push (generated on first use).</summary>
+    public string VapidPublicKey { get; set; } = "";
+    [Secret] public string VapidPrivateKey { get; set; } = "";
+    /// <summary>Contact sent to push services (mailto: or https:). Defaults to your LifeHub web address.</summary>
+    public string VapidSubject { get; set; } = "";
+}
+
+public enum NotifyChannel { HomeAssistant, LifeHub, Both }
+
+public sealed class BibleSettings
+{
+    public bool Enabled { get; set; } = true;
+
+    // ---- Reading tracking ----
+    /// <summary>HA sensors reporting the app in use on a phone (Android Companion "Last used app"), e.g. sensor.pixel_8_last_used_app.</summary>
+    public List<string> AppSensors { get; set; } = new();
+    /// <summary>Text that identifies the Bible app in that sensor (package name or app name).</summary>
+    public string AppMatch { get; set; } = "com.sirma.mobile.bible.android";
+    /// <summary>A day counts as "read" (and today's verse as done) after this many minutes in the app.</summary>
+    public int MinMinutes { get; set; } = 2;
+    /// <summary>Time in the Bible app counts as reading the verse of the day.</summary>
+    public bool AppCountsAsVerse { get; set; } = true;
+
+    // ---- Verse of the day (YouVersion Platform API, optional) ----
+    /// <summary>Free app key from platform.youversion.com. Without it you can type the day's verse yourself.</summary>
+    public string YouVersionAppKey { get; set; } = "";
+    /// <summary>Bible version id for verse text and links (e.g. 3034 = BSB, 111 = NIV, 59 = ESV, 1 = KJV).</summary>
+    public int VersionId { get; set; } = 3034;
+    public string YouVersionApiBase { get; set; } = "https://api.youversion.com";
+
+    // ---- Keeping on track ----
+    /// <summary>Unread verses and plan readings move to the next day.</summary>
+    public bool CarryOver { get; set; } = true;
+    public bool Reminder { get; set; } = true;
+    public TimeOnly ReminderTime { get; set; } = new(20, 30);
+
+    // ---- Reading plan ----
+    public bool PlanEnabled { get; set; }
+    public string PlanBook { get; set; } = "John";
+    public int PlanNextChapter { get; set; } = 1;
+    public int PlanChaptersPerDay { get; set; } = 1;
+
+    // ---- Study helpers (only when you press "Ask for insights") ----
+    public bool StudyLightEnabled { get; set; } = true;
+    /// <summary>{book} {chapter} {verse} {usfm} placeholders.</summary>
+    public string StudyLightUrl { get; set; } = "https://www.studylight.org/commentary/{book}/{chapter}-{verse}.html";
+    public bool BibliaGraphiaEnabled { get; set; } = true;
+    public string BibliaGraphiaUrl { get; set; } = "https://bibliagraphia.com/";
+}
+
+public sealed class MealSettings
+{
+    /// <summary>Dietary needs applied to every suggestion, e.g. "gluten free", "no pork", "nut allergy".</summary>
+    public List<string> Requirements { get; set; } = new();
+    /// <summary>Free-text preferences, e.g. "we like spicy food, quick weekday dinners".</summary>
+    public string Preferences { get; set; } = "";
+    public int DefaultServings { get; set; } = 2;
+    /// <summary>Meals planned for these slots.</summary>
+    public List<string> Slots { get; set; } = new() { "Dinner" };
 }

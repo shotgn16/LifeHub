@@ -149,15 +149,16 @@ public sealed class ShoppingActionHandler : IAiActionHandler
     public string Type => "shopping";
     public string Label => "Shopping list";
     public string Instructions =>
-        "Something the user or their household NEEDS or ASKED to buy (e.g. 'we're out of milk', 'can you pick up nappies'). " +
+        "Only in notes typed by the user: something they say they need to buy ('need coffee', 'out of milk'). " +
         "One action per item. title = item name (e.g. 'Milk'). amount = quantity (default 1). description = unit or notes. " +
-        "Never for products that are merely advertised or on offer — those are promotions.";
+        "Never from emails, and never for products that are advertised or on offer.";
 
     public async Task<string> ApplyAsync(AiSuggestion s, CancellationToken ct)
     {
+        if (s.Origin == "email") throw new InvalidOperationException("Shopping items aren't taken from emails — add it yourself if you need it.");
         var qty = s.Amount is > 0 ? s.Amount.Value : 1;
         var existed = _kitchen.Shopping.Where(x => !x.Checked && x.Name.Equals(s.Title.Trim(), StringComparison.OrdinalIgnoreCase)).Count > 0;
-        var item = await _kitchen.AddToShoppingAsync(s.Title, qty, "", s.Origin == "email" ? "AI" : "Capture");
+        var item = await _kitchen.AddToShoppingAsync(s.Title, qty, "", "Capture");
         s.Extra["undo"] = existed ? $"shopping-qty:{item.Id}:{qty.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"shopping:{item.Id}";
         return "Added to shopping list";
     }
@@ -181,7 +182,7 @@ public sealed class PantryActionHandler : IAiActionHandler
     {
         var cats = _settings.Current.General.FoodCategories;
         var category = cats.FirstOrDefault(c => c.Equals(s.Category, StringComparison.OrdinalIgnoreCase)) ?? "Other";
-        var location = s.Description.Contains("freez", StringComparison.OrdinalIgnoreCase) ? StorageLocation.Freezer : KitchenService.GuessLocation(category);
+        var location = s.Description.Contains("freez", StringComparison.OrdinalIgnoreCase) ? StorageLocation.Freezer : KitchenService.GuessLocation(category, s.Title);
         var item = await _kitchen.AddToPantryAsync(new PantryItem
         {
             Name = s.Title, Quantity = s.Amount is > 0 ? s.Amount.Value : 1, Category = category, Location = location, UseBy = s.Date

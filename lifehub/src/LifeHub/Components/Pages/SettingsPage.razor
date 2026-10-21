@@ -23,6 +23,7 @@
     case "ai": <SettingsAi /> break;
     case "email": <SettingsEmail /> break;
     case "notifications": <SettingsNotifications /> break;
+    case "bible": <SettingsBible /> break;
     case "security": <SettingsSecurity /> break;
     case "backup": <SettingsBackup /> break;
     default: <SettingsGeneral /> break;
@@ -35,6 +36,6 @@
     private static readonly (string, string)[] Tabs =
     {
         ("general", "General"), ("ha", "Home Assistant"), ("ai", "AI"), ("email", "Email"),
-        ("notifications", "Notifications"), ("security", "Security & API"), ("backup", "Backup")
+        ("notifications", "Notifications"), ("bible", "Bible"), ("security", "Security & API"), ("backup", "Backup")
     };
 }

@@ -23,6 +23,22 @@ public static class Endpoints
             var file = Path.Combine(paths.Backups, name);
             return File.Exists(file) ? Results.File(file, "application/zip", name) : Results.NotFound();
         }).RequireAuthorization();
+
+        // Uploaded Bible study notes (signed-in users only).
+        app.MapGet("/bible/files/{name}", (string name, DataPaths paths) =>
+        {
+            if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^[0-9a-f]{32}-[0-9a-f]{32}(\.[a-z0-9]{1,5})?$")) return Results.NotFound();
+            var file = Path.Combine(paths.BibleFiles, name);
+            if (!File.Exists(file)) return Results.NotFound();
+            var type = Path.GetExtension(name) switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", ".webp" => "image/webp", ".gif" => "image/gif",
+                ".pdf" => "application/pdf", ".txt" or ".md" => "text/plain; charset=utf-8",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                _ => "application/octet-stream"
+            };
+            return Results.File(file, type, enableRangeProcessing: true);
+        }).RequireAuthorization();
     }
 
     private static string SafeReturn(HttpContext ctx, string? returnUrl)
@@ -84,6 +100,8 @@ public static class Endpoints
     public sealed record TaskRequest(string Title, string? Category, DateOnly? Due, TimeOnly? Time, string? Priority, string? Notes);
     public sealed record ShoppingRequest(string Name, decimal? Quantity, string? Unit);
     public sealed record ScanRequest(string Barcode, string? Mode, decimal? Quantity);
+    public sealed record BibleAppRequest(string? Event, string? Device);
+    public sealed record BibleReadRequest(string? Reference, int? Minutes);
 
     /// <summary>
     /// REST API for Home Assistant automations, scripts, voice assistants, iOS Shortcuts, etc.
@@ -160,6 +178,46 @@ public static class Endpoints
             if (r.NeedsDetails)
                 return Results.NotFound(new { status = "unknown", barcode = BarcodeService.Normalize(req.Barcode), message = "Unknown barcode — scan it once in the app to name it." });
             return Results.Ok(new { status = r.Success ? "ok" : r.NotInStock ? "not_in_stock" : "failed", r.Message, product = r.Product?.Name });
+        });
+
+        // ---- Bible ----
+        // iPhone: Shortcuts → Automation → "App: Bible is opened / is closed" → Get contents of URL (POST) with {"event":"opened"}.
+        api.MapPost("/bible/app", async (BibleAppRequest req, BibleService bible, Clock clock) =>
+        {
+            var opened = !string.Equals(req.Event, "closed", StringComparison.OrdinalIgnoreCase);
+            await bible.AppEventAsync(opened, "shortcut", string.IsNullOrWhiteSpace(req.Device) ? "shortcut" : req.Device!.Trim());
+            return Results.Ok(new { status = "ok", minutesToday = Math.Round(bible.AppMinutes(clock.Today), 1) });
+        });
+
+        api.MapPost("/bible/read", async (BibleReadRequest req, BibleService bible, Clock clock) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.Reference))
+            {
+                await bible.MarkVerseReadAsync(clock.Today, "manual");
+                return Results.Ok(new { status = "ok", logged = "verse of the day" });
+            }
+            if (BibleBooks.Parse(req.Reference).Count == 0) return Results.BadRequest(new { status = "unknown_reference" });
+            var r = await bible.LogReadingAsync(clock.Today, req.Reference, "api", req.Minutes);
+            return Results.Ok(new { status = "ok", logged = r?.Reference });
+        });
+
+        api.MapGet("/bible/today", (BibleService bible, Clock clock) =>
+        {
+            var v = bible.VerseFor(clock.Today);
+            return Results.Ok(new
+            {
+                verse = v?.Reference, text = v?.Text, verseRead = v?.Read == true, readToday = bible.ReadOn(clock.Today),
+                streak = bible.Streak(), appMinutes = Math.Round(bible.AppMinutes(clock.Today), 1),
+                toRead = bible.TodayList().Where(p => !p.Done).Select(p => new { p.Reference, p.Kind })
+            });
+        });
+
+        // ---- Meals ----
+        api.MapGet("/meals", (MealService meals, Clock clock, int? days) =>
+        {
+            var from = clock.Today;
+            var to = from.AddDays(Math.Clamp(days ?? 1, 1, MealService.MaxDays) - 1);
+            return Results.Ok(meals.EntriesFor(from, to).Select(e => new { e.Date, e.Slot, title = meals.TitleOf(e), e.Servings, e.Cooked }));
         });
 
         api.MapGet("/period", async (ScheduleService schedule) =>

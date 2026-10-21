@@ -1,0 +1,161 @@
+@inject SettingsService Settings
+@inject BibleService Bible
+@inject BibleTrackingService Tracker
+@inject HomeAssistantClient Ha
+@inject NavigationManager Nav
+@inject Clock Clock
+@inject UiState Ui
+
+<div class="grid cols-2" style="align-items:start">
+    <div>
+        <div class="card" style="margin-bottom:16px">
+            <h2 style="margin-bottom:10px">Bible section</h2>
+            <label class="check"><input type="checkbox" @bind="b.Enabled" /> Show the Bible section and track reading</label>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+            <h2 style="margin-bottom:6px">Verse of the day</h2>
+            <p class="small muted" style="margin-top:0">With a free YouVersion app key LifeHub shows the same verse of the day as the YouVersion app. Without one, you can type the day's verse on the Bible page.</p>
+            <div class="field"><label>YouVersion app key</label><input type="text" @bind="b.YouVersionAppKey" placeholder="from platform.youversion.com" />
+                <div class="help">Sign in at <a href="https://platform.youversion.com" target="_blank" rel="noopener">platform.youversion.com</a>, create an app and copy its key.</div>
+            </div>
+            <div class="field"><label>Bible version</label>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <input type="number" min="1" @bind="b.VersionId" style="max-width:110px" />
+                    @foreach (var (id, name) in Versions) { <button class="chip @(b.VersionId == id ? "on" : "")" @onclick="() => b.VersionId = id">@name</button> }
+                </div>
+                <div class="help">Used for the verse text and "Open in YouVersion" links. Some versions' text may not be licensed for apps like LifeHub — the reference and link still work.</div>
+            </div>
+            <button class="btn" @onclick="TestVerse" disabled="@string.IsNullOrWhiteSpace(b.YouVersionAppKey)">Save & fetch today's verse</button>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+            <h2 style="margin-bottom:10px">Keeping on track</h2>
+            <label class="check"><input type="checkbox" @bind="b.CarryOver" /> Move a missed verse of the day, and unfinished readings, onto the next day's list</label>
+            <label class="check"><input type="checkbox" @bind="b.Reminder" /> Remind me if I haven't read by</label>
+            <div class="field" style="max-width:160px"><input type="time" @bind="b.ReminderTime" /></div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom:10px">Reading plan</h2>
+            <label class="check"><input type="checkbox" @bind="b.PlanEnabled" /> Add the next chapter(s) to each day's reading</label>
+            <div class="form-grid">
+                <div class="field"><label>Book</label>
+                    <select @bind="b.PlanBook">@foreach (var book in BibleBooks.All) { <option value="@book.Name">@book.Name</option> }</select>
+                </div>
+                <div class="field"><label>Next chapter</label><input type="number" min="1" @bind="b.PlanNextChapter" /></div>
+                <div class="field"><label>Chapters a day</label><input type="number" min="1" max="10" @bind="b.PlanChaptersPerDay" /></div>
+            </div>
+            <div class="help small">When a book ends the plan carries on with the next one. Unread chapters move to the next day instead of piling up.</div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card" style="margin-bottom:16px">
+            <h2 style="margin-bottom:6px">Time in the YouVersion app</h2>
+            <p class="small muted" style="margin-top:0">LifeHub can tell when you've been reading in the app and tick off the verse of the day for you.</p>
+
+            <h3 style="margin-bottom:4px">Android (through Home Assistant)</h3>
+            <ol class="small" style="margin-top:4px;padding-left:18px">
+                <li>In the Home Assistant app: Settings → Companion app → Manage sensors → <strong>Last used app</strong> → turn it on.</li>
+                <li>For better timing, set <em>Sensor update frequency</em> to <strong>Fast always</strong> (same screen, top).</li>
+                <li>Tick the phone below.</li>
+            </ol>
+            @if (!Ha.IsConfigured) { <p class="small"><span class="badge warn">Home Assistant isn't connected</span></p> }
+            else if (appSensors is null) { <p class="small muted">Looking for phones…</p> }
+            else if (appSensors.Count == 0) { <p class="small muted">No "last used app" sensors found yet.</p> }
+            else
+            {
+                @foreach (var s in appSensors)
+                {
+                    <label class="check">
+                        <input type="checkbox" checked="@b.AppSensors.Contains(s.EntityId)" @onchange="e => ToggleSensor(s.EntityId, (bool)e.Value!)" />
+                        <span>@s.Name <span class="tiny muted">now: @s.State</span></span>
+                    </label>
+                }
+            }
+            <div class="form-grid" style="margin-top:8px">
+                <div class="field"><label>App identifier</label><input type="text" @bind="b.AppMatch" /><div class="help">YouVersion on Android is <code>com.sirma.mobile.bible.android</code>.</div></div>
+                <div class="field"><label>Minutes that count as reading</label><input type="number" min="1" max="60" @bind="b.MinMinutes" /></div>
+            </div>
+            <label class="check"><input type="checkbox" @bind="b.AppCountsAsVerse" /> Time in the app ticks off the verse of the day</label>
+
+            <h3 style="margin:14px 0 4px">iPhone (Shortcuts)</h3>
+            <ol class="small" style="margin-top:4px;padding-left:18px">
+                <li>Shortcuts → Automation → <strong>+</strong> → <strong>App</strong> → choose <em>Bible</em> → <em>Is Opened</em> → <em>Run Immediately</em>.</li>
+                <li>Add the action <strong>Get Contents of URL</strong>: URL <code>@ApiUrl</code>, Method <strong>POST</strong>, Headers <code>X-Api-Key</code> = your API key (Settings → Security &amp; API), Request Body <strong>JSON</strong> with <code>event</code> = <code>opened</code>.</li>
+                <li>Make a second automation the same way for <em>Is Closed</em> with <code>event</code> = <code>closed</code>.</li>
+            </ol>
+            <div class="help small">LifeHub must be reachable from your phone at that address (e.g. your Cloudflare hostname).</div>
+
+            <div class="small" style="margin-top:10px"><strong>Today:</strong> @Math.Round(Bible.AppMinutes(Clock.Today), 1) min in the app @(string.IsNullOrEmpty(Tracker.LastStatus) ? "" : $"· {Tracker.LastStatus}")</div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom:6px">Study helpers</h2>
+            <p class="small muted" style="margin-top:0">Only used when you press <strong>Ask for insights</strong> on a study. LifeHub fetches the page for your passage, and your local AI compares it with your notes. AI notes are shown in purple and never change your own notes.</p>
+            <label class="check"><input type="checkbox" @bind="b.StudyLightEnabled" /> <span><strong>StudyLight.org</strong> — commentaries for the passage</span></label>
+            <div class="field"><input type="text" @bind="b.StudyLightUrl" class="mono small" /></div>
+            <label class="check"><input type="checkbox" @bind="b.BibliaGraphiaEnabled" /> <span><strong>Biblia Graphia</strong> — people, pages and passages</span></label>
+            <div class="field"><input type="text" @bind="b.BibliaGraphiaUrl" class="mono small" />
+                <div class="help">Placeholders: <code>{book}</code> (e.g. 1-corinthians), <code>{name}</code>, <code>{chapter}</code>, <code>{verse}</code>, <code>{usfm}</code> (e.g. 1CO.13.4). If a site builds its pages with JavaScript, LifeHub can't read them and just links to them instead.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="margin-top:16px"><button class="btn primary" @onclick="Save">Save</button></div>
+
+@code {
+    private BibleSettings b = new();
+    private List<HaState>? appSensors;
+
+    private static readonly (int, string)[] Versions = { (3034, "BSB"), (111, "NIV"), (59, "ESV"), (116, "NLT"), (1, "KJV"), (114, "NKJV"), (206, "WEB") };
+
+    private string ApiUrl
+    {
+        get
+        {
+            var pub = Settings.Current.General.PublicUrl;
+            var baseUrl = string.IsNullOrWhiteSpace(pub) ? Nav.BaseUri.TrimEnd('/') : pub.TrimEnd('/');
+            if (baseUrl.Contains("/api/hassio_ingress/")) baseUrl = "https://<your LifeHub address>";
+            return baseUrl + "/api/v1/bible/app";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        b = Settings.Current.Bible;
+        if (Ha.IsConfigured)
+        {
+            try
+            {
+                appSensors = (await Ha.GetStatesAsync())
+                    .Where(s => s.EntityId.StartsWith("sensor.") && s.EntityId.EndsWith("_last_used_app")).OrderBy(s => s.Name).ToList();
+            }
+            catch { appSensors = new(); }
+        }
+    }
+
+    private void ToggleSensor(string id, bool on)
+    {
+        b.AppSensors.Remove(id);
+        if (on) b.AppSensors.Add(id);
+    }
+
+    private async Task Save() => await Ui.Try(() => Settings.UpdateAsync(s =>
+    {
+        b.PlanNextChapter = Math.Max(1, b.PlanNextChapter);
+        s.Bible = b;
+    }), "Saved");
+
+    private async Task TestVerse()
+    {
+        await Save();
+        await Ui.Try(async () =>
+        {
+            var v = await Bible.FetchVerseAsync(Clock.Today);
+            Ui.Show($"Today's verse: {v.Reference}{(string.IsNullOrEmpty(v.Text) ? " (text not available for this version)" : "")}");
+        });
+    }
+}

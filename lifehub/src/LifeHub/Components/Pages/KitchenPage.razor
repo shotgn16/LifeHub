@@ -13,7 +13,8 @@
         <div class="sub">@items.Count items · @items.Count(i => i.Location == StorageLocation.Freezer) in the freezer · @expiringCount to use soon</div>
     </div>
     <div class="actions">
-        <a class="btn primary" href="scan?mode=add"><Icon Name="barcode" Size="15" /> Scan in</a>
+        <a class="btn primary" href="kitchen/photo"><Icon Name="camera" Size="15" /> Add from photo</a>
+        <a class="btn" href="scan?mode=add"><Icon Name="barcode" Size="15" /> Scan in</a>
         <a class="btn" href="scan?mode=use"><Icon Name="barcode" Size="15" /> Scan used</a>
         <a class="btn" href="shopping"><Icon Name="cart" Size="15" /> Shopping list</a>
     </div>
@@ -29,7 +30,7 @@
 @if (tab == "stock")
 {
     <div class="card" style="margin-bottom:14px">
-        <div class="form-grid three" style="grid-template-columns:2fr 1fr 1fr">
+        <div class="form-grid add-food">
             <div class="field"><label>Add item</label><input type="text" placeholder="e.g. Chicken breasts" @bind="add.Name" @bind:event="oninput" @onkeydown="AddKey" list="staple-names" /></div>
             <div class="field"><label>Quantity</label>
                 <div style="display:flex;gap:6px"><input type="number" step="any" min="0" @bind="add.Quantity" style="width:80px" /><input type="text" placeholder="unit" @bind="add.Unit" /></div>
@@ -40,11 +41,18 @@
             <div class="field"><label>Category</label>
                 <select @bind="add.Category">@foreach (var c in Settings.Current.General.FoodCategories) { <option>@c</option> }</select>
             </div>
-            <div class="field"><label>Use by</label><input type="date" @bind="add.UseBy" /></div>
+            <div class="field"><label>Date on pack</label>
+                <div style="display:flex;gap:6px">
+                    <select @bind="addKind" style="width:auto">
+                        <option value="">Auto</option><option value="UseBy">Use by</option><option value="BestBefore">Best before</option>
+                    </select>
+                    <input type="date" @bind="add.UseBy" />
+                </div>
+            </div>
             <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" style="width:100%" @onclick="Add" disabled="@string.IsNullOrWhiteSpace(add.Name)"><Icon Name="plus" Size="15" /> Add</button></div>
         </div>
         <datalist id="staple-names">@foreach (var s in staples) { <option value="@s.Staple.Name"></option> }</datalist>
-        <div class="help small muted">Leave use-by empty for staples with a shelf life and it's filled in for you. Freezer items get @Settings.Current.General.FreezerShelfLifeDays days.</div>
+        <div class="help small muted">No date? Leave it empty and LifeHub estimates one (marked ~). <strong>Use by</strong> is a safety date; <strong>best before</strong> food like eggs, cereal and pasta fades gradually, so it's shown on a scale instead. Freezer items get @Settings.Current.General.FreezerShelfLifeDays days.</div>
     </div>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
@@ -65,17 +73,22 @@
             @if (Visible.Count == 0) { <li class="empty">Nothing here.</li> }
             @foreach (var p in Visible)
             {
-                var d = p.DaysLeft(today);
-                <li class="row">
+                var fr = Kitchen.Fresh(p);
+                <li class="row pantry-row">
                     <div class="grow">
                         <div class="title">@p.Name <span class="muted small">× @Fmt.Qty(p.Quantity, p.Unit)</span></div>
                         <div class="meta">
                             <span>@p.Location</span><span>· @p.Category</span>
+                            @if (p.UseBy is not null && p.Location != StorageLocation.Freezer) { <span>· @(p.DateKind == DateKind.BestBefore ? "best before" : "use by") @(p.DateEstimated ? "~" : "")@p.UseBy.Value.ToString("d MMM")</span> }
                             @if (p.FrozenOn is { } f && p.Location == StorageLocation.Freezer) { <span>· frozen @Fmt.RelDay(f, today).ToLower()</span> }
                             @if (p.OpenedOn is { } o) { <span>· opened @Fmt.RelDay(o, today).ToLower()</span> }
                         </div>
+                        @if (fr.State != FreshState.NoDate)
+                        {
+                            <div class="fresh-bar @(p.DateKind == DateKind.BestBefore && p.Location != StorageLocation.Freezer ? "soft" : "hard")" title="@fr.Detail"><span style="left:@((fr.Position * 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                        }
                     </div>
-                    <span class="badge @Fmt.DaysClass(d, warnDays)">@Fmt.DaysLeft(d)</span>
+                    <span class="badge @fr.Css" title="@fr.Detail">@fr.Label</span>
                     <button class="btn sm" title="Used one (or all if only one left)" @onclick="() => Kitchen.UseAsync(p.Id, p.Quantity > 1 ? 1 : null)">Use 1</button>
                     <button class="icon-btn desktop-only" title="Finished it" @onclick="() => Kitchen.UseAsync(p.Id)"><Icon Name="check" Size="16" /></button>
                     @if (p.Location == StorageLocation.Freezer)
@@ -95,9 +108,9 @@
 else if (tab == "staples")
 {
     <div class="card" style="margin-bottom:14px">
-        <p class="small muted">Staples are things you always want in. When stock drops below the minimum, only expired stock is left, or your usual buying gap says you're about to run out, they're added to the shopping list automatically.</p>
+        <p class="small muted">Staples are things you always want in. When stock drops below the minimum, only old stock is left, or your usual buying gap says you're about to run out, they're <strong>suggested</strong> on the Shopping page — nothing is added until you tap it.</p>
         <button class="btn primary" @onclick="NewStaple"><Icon Name="plus" Size="15" /> Add staple</button>
-        <button class="btn" @onclick="RefreshList"><Icon Name="refresh" Size="15" /> Check now</button>
+        <a class="btn" href="shopping"><Icon Name="cart" Size="15" /> See suggestions</a>
     </div>
     <div class="card flush">
         <div class="table-wrap">
@@ -182,7 +195,12 @@ else
                 <div class="field"><label>Unit</label><input type="text" @bind="editItem.Unit" /></div>
                 <div class="field"><label>Where</label><select @bind="editItem.Location">@foreach (var l in Enum.GetValues<StorageLocation>()) { <option value="@l">@l</option> }</select></div>
                 <div class="field"><label>Category</label><select @bind="editItem.Category">@foreach (var c in Settings.Current.General.FoodCategories) { <option>@c</option> }</select></div>
-                <div class="field"><label>Use by</label><input type="date" @bind="editItem.UseBy" /></div>
+                <div class="field"><label>Date type</label>
+                    <select @bind="editItem.DateKind"><option value="@DateKind.UseBy">Use by (safety)</option><option value="@DateKind.BestBefore">Best before (quality)</option></select>
+                </div>
+                <div class="field"><label>Date</label><input type="date" @bind="editItem.UseBy" @bind:after="() => editItem!.DateEstimated = false" />
+                    @if (editItem.DateEstimated) { <div class="help tiny">Estimated — change it to the date on the pack</div> }
+                </div>
                 <div class="field"><label>Opened</label><input type="date" @bind="editItem.OpenedOn" /></div>
                 <div class="field"><label>Frozen on</label><input type="date" @bind="editItem.FrozenOn" /></div>
                 <div class="field"><label>Added</label><input type="date" @bind="editItem.AddedOn" /></div>
@@ -206,7 +224,16 @@ else
                 <div class="field"><label>Keep at least</label><input type="number" step="any" min="0" @bind="editStaple.MinQuantity" /></div>
                 <div class="field"><label>Unit</label><input type="text" @bind="editStaple.Unit" placeholder="pints, loaves, packs…" /></div>
                 <div class="field"><label>Buy this many</label><input type="number" step="any" min="0" @bind="editStaple.BuyQuantity" /></div>
-                <div class="field"><label>Shelf life (days)</label><input type="number" min="0" @bind="editStaple.ShelfLifeDays" /></div>
+                <div class="field"><label>Shelf life (days)</label><input type="number" min="0" @bind="editStaple.ShelfLifeDays" placeholder="@(Freshness.ProfileFor(editStaple.Name)?.ShelfDays.ToString() ?? "")" /></div>
+                <div class="field"><label>Date type</label>
+                    <select value="@(editStaple.DateKind?.ToString() ?? "")" @onchange="e => editStaple!.DateKind = Enum.TryParse<DateKind>(e.Value?.ToString(), out var k) ? k : null">
+                        <option value="">Auto (@(Freshness.ProfileFor(editStaple.Name)?.Kind == DateKind.BestBefore ? "best before" : "use by"))</option>
+                        <option value="UseBy">Use by — hard date</option>
+                        <option value="BestBefore">Best before — fades gradually</option>
+                    </select>
+                </div>
+                <div class="field"><label>Keeps once opened (days)</label><input type="number" min="0" @bind="editStaple.OpenedLifeDays" placeholder="@(Freshness.ProfileFor(editStaple.Name)?.OpenedDays?.ToString() ?? "")" /></div>
+                <div class="field"><label>Usually fine after best before (days)</label><input type="number" min="0" @bind="editStaple.GraceDays" placeholder="@(Freshness.ProfileFor(editStaple.Name)?.GraceDays.ToString() ?? "")" /></div>
                 <div class="field"><label>Stored in</label><select @bind="editStaple.DefaultLocation">@foreach (var l in Enum.GetValues<StorageLocation>()) { <option value="@l">@l</option> }</select></div>
                 <div class="field"><label>Category</label><select @bind="editStaple.Category">@foreach (var c in Settings.Current.General.FoodCategories) { <option>@c</option> }</select></div>
                 <div class="field full"><label>Also matches (comma separated)</label><input type="text" @bind="aliases" placeholder="semi-skimmed milk, whole milk" /></div>
@@ -310,7 +337,7 @@ else
     private List<PantryItem> Visible => items
         .Where(i => location is null || i.Location == location)
         .Where(i => string.IsNullOrWhiteSpace(search) || i.Name.Contains(search, StringComparison.OrdinalIgnoreCase))
-        .OrderBy(i => i.UseBy ?? DateOnly.MaxValue).ThenBy(i => i.Name).ToList();
+        .OrderBy(i => Kitchen.Fresh(i).CheckBy ?? DateOnly.MaxValue).ThenBy(i => i.Name).ToList();
 
     private void ResetAdd() => add = new PantryItem { Location = location ?? StorageLocation.Fridge, Category = "Other", Quantity = 1 };
 
@@ -319,10 +346,12 @@ else
         if (e.Key == "Enter") await Add();
     }
 
+    private string addKind = "";
+
     private async Task Add()
     {
         if (string.IsNullOrWhiteSpace(add.Name)) return;
-        var item = await Kitchen.AddToPantryAsync(add);
+        var item = await Kitchen.AddToPantryAsync(add, kind: Enum.TryParse<DateKind>(addKind, out var k) ? k : null);
         Ui.Show($"{item.Name} added to {item.Location.ToString().ToLower()}");
         ResetAdd();
     }
@@ -330,6 +359,7 @@ else
     private async Task SaveItem()
     {
         if (editItem is null) return;
+        if (Kitchen.Pantry.Get(editItem.Id) is { } before && before.UseBy != editItem.UseBy) editItem.DateEstimated = false;
         await Kitchen.SavePantryAsync(editItem);
         editItem = null;
     }
@@ -350,7 +380,6 @@ else
         editStaple.Aliases = aliases.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
         await Kitchen.Staples.UpsertAsync(editStaple);
         editStaple = null;
-        await Kitchen.RefreshAutoShoppingAsync();
     }
 
     private async Task DeleteStaple()
@@ -358,12 +387,6 @@ else
         if (editStaple is null) return;
         await Kitchen.Staples.DeleteAsync(editStaple.Id);
         editStaple = null;
-    }
-
-    private async Task RefreshList()
-    {
-        var n = await Kitchen.RefreshAutoShoppingAsync();
-        Ui.Show(n == 0 ? "Nothing new needed" : $"{n} item(s) added to the shopping list");
     }
 
     private static string WastePct((int Purchased, int Used, int Wasted) s) =>

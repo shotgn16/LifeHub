@@ -39,6 +39,11 @@ builder.Services.AddSingleton<ScheduleService>();
 builder.Services.AddSingleton<PlannerService>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<BackupService>();
+builder.Services.AddSingleton<WebPushService>();
+builder.Services.AddSingleton<BibleService>();
+builder.Services.AddSingleton<BibleStudyService>();
+builder.Services.AddSingleton<KitchenPhotoService>();
+builder.Services.AddSingleton<MealService>();
 
 // ---------- Integrations ----------
 builder.Services.AddSingleton<HomeAssistantClient>();
@@ -66,6 +71,8 @@ builder.Services.AddSingleton<EmailSyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailSyncService>());
 builder.Services.AddSingleton<AutomationService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationService>());
+builder.Services.AddSingleton<BibleTrackingService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BibleTrackingService>());
 
 // ---------- Auth ----------
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -100,7 +107,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
     o.ForwardLimit = null;   // Cloudflare → cloudflared → LifeHub adds more than one hop
 });
 
-builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddRazorComponents().AddInteractiveServerComponents()
+    .AddHubOptions(o => o.MaximumReceiveMessageSize = 1024 * 1024);   // photo uploads stream in chunks
 builder.Services.AddScoped<LifeHub.Components.Shared.UiState>();
 
 var app = builder.Build();

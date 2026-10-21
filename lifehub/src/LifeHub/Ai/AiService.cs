@@ -66,7 +66,8 @@ public sealed class AiService
             - Only propose actions clearly supported by the text. Never invent dates, amounts or people.
             - For promotion or newsletter emails use ONLY the "promotion" action (at most one, describing the offer).
               NEVER create shopping, task, event, renewal or pantry actions from adverts — the user hasn't decided to buy.
-            - "shopping" is only for things the user (or their household) actually needs or asked to buy.
+            - "shopping" is ONLY for a note typed by the user that says they need to buy something. NEVER create
+              "shopping" actions from emails of any kind (receipts, deliveries, adverts, newsletters, reminders).
             - Receipts, deliveries and notifications that need nothing doing → no actions
               (except "renewal" for a service the user pays for, or "pantry" for groceries that arrived).
             - Convert relative dates ("tomorrow", "next Tuesday", "end of the month") to YYYY-MM-DD using today's date.
@@ -165,6 +166,8 @@ public sealed class AiService
 
         if (origin == "email")
         {
+            // The shopping list only changes when you add things (typed, scanned or the linked HA list).
+            list.RemoveAll(a => a.Type == "shopping");
             // Stock only from grocery deliveries/receipts; renewals only from bills/receipts/account mail.
             if (category is not (EmailCategories.Receipt or EmailCategories.Delivery)) list.RemoveAll(a => a.Type == "pantry");
             if (category is not (EmailCategories.Bill or EmailCategories.Receipt or EmailCategories.Account or EmailCategories.ActionNeeded or EmailCategories.Notification))

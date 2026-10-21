@@ -11,8 +11,9 @@ different places:
 
 - **renewals and subscriptions**
 - **tasks**
-- **kitchen stock and shopping**
+- **kitchen stock, shopping and meal planning**
 - your **schedule**
+- your **daily Bible reading and studies**
 - **Home Assistant**
 - a **local-AI email assistant**, powered by [Ollama](https://ollama.com), that turns emails into
   tasks, calendar events, renewal updates and shopping items without your mail leaving the house
@@ -26,6 +27,11 @@ add-on**, on **Plesk Obsidian**, or anywhere Docker or .NET 8 runs.
   &nbsp;
   <img src="docs/images/scanner.png" alt="Barcode scanner on a phone" width="22%">
 </p>
+<p align="center">
+  <img src="docs/images/bible.png" alt="Bible reading" width="48%">
+  &nbsp;
+  <img src="docs/images/meals.png" alt="Meal planner" width="48%">
+</p>
 
 ---
 
@@ -37,14 +43,16 @@ add-on**, on **Plesk Obsidian**, or anywhere Docker or .NET 8 runs.
 | **Tasks** | Categories, priorities, recurrence, checklists and tags. Repeat issues stack onto one task with a ×N count. |
 | **Schedule** | A weekly template of work and free time. Calendar events and holidays override it. **Plan my day** slots tasks into free gaps, and runs automatically every evening. |
 | **Renewals** | Domains, hosting, subscriptions, insurance and utilities: cost, cycle, usage, auto-renew. It records price-rise history and reminds you before each date. |
-| **Kitchen** | Fridge, freezer and cupboard stock with use-by dates, freeze and defrost, and waste tracking. **Staples** have minimum stock, and LifeHub predicts when each one will run out. |
+| **Kitchen** | Fridge, freezer and cupboard stock with freeze/defrost and waste tracking. **Use-by** dates count down; **best-before** food (eggs, cereal, pasta…) fades on a scale. **Add from photo** lists your groceries and reads their dates. **Staples** predict when you'll run out. |
 | **Scan** | Phone barcode scanner with three modes: stock in, use up, and add to the shopping list. It looks products up on Open Food Facts, learns them after the first scan, and lets you undo. |
-| **Shopping** | Grouped by aisle. Items come from low stock, expiry, predictions or AI. Ticked items go into stock when you put them away. Two-way sync with HA's Shopping List, so Assist voice works. |
+| **Shopping** | Grouped by aisle. Only you add items: typed, scanned, from the HA list you choose (two-way, so Assist works) or from the meal planner. Staples running low appear as suggestions. Ticked items go into stock when you put them away. |
+| **Meals** | Plan up to two weeks around your calendar and energy. See what to buy, and get AI ideas that move meals, use up food, meet dietary needs (gluten free etc.) and improve recipes. You apply each idea yourself. |
+| **Bible** | Verse of the day (same as YouVersion), time in the YouVersion app (HA sensor or iPhone Shortcut), missed readings carried over, reading plan, streaks and coverage. **Studies** with photo/PDF proof, AI reading of handwriting, breakdowns, links between studies, and StudyLight insights shown in purple, never mixed into your notes. |
 | **Home** | Home Assistant runs the house; LifeHub gives you one place to see and nudge it. Rooms, lights, climate, scenes, who's home and energy, all shown with friendly names. Setup is automatic. |
 | **AI Inbox** | Reads Gmail/IMAP, Microsoft 365 and on-prem Exchange. A local Ollama model classifies each email and proposes actions. Safe actions are applied automatically and can be undone. |
 | **Promotions** | Adverts and newsletters go into their own list instead of becoming tasks or shopping items, and clear themselves when they expire. |
 | **Email ↔ task link** | Delete a task and its email moves to the Bin. Delete the email and its task goes. |
-| **Notifications** | In-app bell plus phone push through HA: a morning digest, renewal and task reminders, food expiry, and a "you've left home" shopping list. |
+| **Notifications** | In-app bell plus phone push through **Home Assistant or LifeHub's own web push** (or both): a morning digest, renewal and task reminders, food expiry, Bible reminder, and a "you've left home" shopping list. |
 | **REST API** | API-key endpoints for HA automations, Assist, iOS Shortcuts and USB barcode scanners. |
 
 ## Quick start
@@ -75,6 +83,8 @@ For Plesk, IIS, Cloudflare Tunnel and development setups, see the **[installatio
 | [Home Assistant](docs/home-assistant.md) | What's automatic, rooms, shared lists, notifications, sensors, automations |
 | [Email & AI](docs/email-and-ai.md) | Ollama, Gmail/IMAP, Microsoft 365, Exchange, classification, auto-apply and undo |
 | [Barcode scanner](docs/scanner.md) | Phone camera, photo, USB scanners, product learning |
+| [Kitchen, shopping & meals](docs/kitchen-and-meals.md) | Use-by vs best-before, add from photo, shopping rules, meal planner |
+| [Bible](docs/bible.md) | Verse of the day, YouVersion app tracking, carry-over, studies and AI insights |
 | [REST API](docs/api.md) | Endpoints and Home Assistant `rest_command` examples |
 | [Architecture](docs/architecture.md) | How the code is organised |
 | [Extending LifeHub](docs/extending.md) | New AI actions, mail providers, pages, storage |
@@ -102,7 +112,8 @@ For Plesk, IIS, Cloudflare Tunnel and development setups, see the **[installatio
 
 - **To run:** Docker, or the ASP.NET Core 8 runtime. The add-on supports amd64 and aarch64.
 - **For AI:** an [Ollama](https://ollama.com) server (0.5 or later) on your network. A 7–8B model
-  such as `qwen2.5:7b` works well.
+  such as `qwen2.5:7b` works well. Add a vision model such as `qwen2.5vl:7b` for photos and
+  handwriting.
 - **To build:** the .NET 8 SDK.
 
 ## Contributing

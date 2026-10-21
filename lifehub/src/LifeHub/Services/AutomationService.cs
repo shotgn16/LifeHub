@@ -61,7 +61,7 @@ public sealed class AutomationService : BackgroundService
             try { await S<HomeAssistantSetup>().AutoConfigureAsync(redo: false); }
             catch (Exception ex) { _log.LogInformation("HA auto-setup postponed: {Message}", ex.Message); }
         }
-        await S<KitchenService>().RefreshAutoShoppingAsync();
+        await CleanUpAutoShoppingOnceAsync();
         await S<NotificationService>().PruneAsync();
         await S<AiService>().PruneAsync();
         await S<TaskService>().PurgeCompletedAsync(180);
@@ -73,6 +73,30 @@ public sealed class AutomationService : BackgroundService
         var backup = S<BackupService>();
         var clock = S<Clock>();
         if (clock.Now.Hour >= 3 && !backup.HasBackupToday()) backup.Create();
+    }
+
+    /// <summary>
+    /// 1.3: the shopping list only contains what you add (typed, scanned, the linked HA list, or a suggestion you
+    /// tapped). Items LifeHub used to add by itself are removed once, and pending email shopping ideas are dismissed.
+    /// </summary>
+    private async Task CleanUpAutoShoppingOnceAsync()
+    {
+        var settings = S<SettingsService>();
+        if (settings.Current.General.ShoppingSourcesMigrated) return;
+        var kitchen = S<KitchenService>();
+        var auto = kitchen.Shopping.Where(x => !x.Checked && x.Reason is "Low stock" or "Expired" or "Predicted" or "AI");
+        if (auto.Count > 0)
+        {
+            await kitchen.Shopping.DeleteManyAsync(auto.Select(x => x.Id));
+            await S<NotificationService>().NotifyAsync($"🛒 Shopping list tidied: {auto.Count} removed",
+                "Items LifeHub had added by itself (low stock, predictions, emails) were removed. From now on only you add items — " +
+                "staples that are running low appear as suggestions on the Shopping page.",
+                NoticeLevel.Info, "shopping", "shopping-cleanup-1.3", push: false);
+        }
+        var ai = S<AiService>();
+        foreach (var s in ai.Suggestions.Where(x => x.Status == SuggestionStatus.Pending && x.Type == "shopping" && x.Origin == "email"))
+            await ai.RejectAsync(s.Id);
+        await settings.UpdateAsync(s => s.General.ShoppingSourcesMigrated = true);
     }
 
     private async Task RemindersAsync()
@@ -115,10 +139,11 @@ public sealed class AutomationService : BackgroundService
         if (n.ExpiryReminders)
         {
             var warn = settings.General.ExpiryWarningDays;
-            var expiring = S<KitchenService>().ExpiringWithin(warn).Where(p => p.Location != StorageLocation.Freezer).ToList();
+            var kitchen = S<KitchenService>();
+            var expiring = kitchen.NeedsAttention(warn).Where(p => p.Location != StorageLocation.Freezer).ToList();
             if (expiring.Count > 0)
             {
-                var list = NotificationService.Bullets(expiring.Select(p => $"{p.Name} — {Describe(p.DaysLeft(today))}"), 6);
+                var list = NotificationService.Bullets(expiring.Select(p => $"{p.Name} — {kitchen.Fresh(p).Label}"), 6);
                 // Once a day, and again if the set of items changes.
                 var key = $"food:{today}:{string.Join(",", expiring.Select(e => e.Id.ToString()[..8]).OrderBy(x => x))}";
                 if (now.Hour >= 9)
@@ -145,6 +170,11 @@ public sealed class AutomationService : BackgroundService
                                  NotificationService.Bullets(tasks.Select(t => t.Occurrences > 1 ? $"{t.Title} (×{t.Occurrences})" : t.Title), 4));
                 if (renewals.Count > 0)
                     sections.Add("🔁 Renewing this week\n" + NotificationService.Bullets(renewals.Select(r => $"{r.Name} · {r.NextRenewal.ToString("ddd", culture)} · {Components.Shared.Fmt.Money(r.Cost, r.Currency)}"), 3));
+                var meals = S<MealService>().EntriesFor(today, today).Where(e => !e.Cooked).ToList();
+                if (meals.Count > 0)
+                    sections.Add("🍽 Meals today\n" + NotificationService.Bullets(meals.Select(e => $"{e.Slot} · {S<MealService>().TitleOf(e)}"), 3));
+                if (settings.Bible.Enabled && S<BibleService>().VerseFor(today) is { Reference.Length: > 0 } verse)
+                    sections.Add($"📖 Verse of the day · {verse.Reference}");
                 var extras = new List<string>();
                 if (food.Count > 0) extras.Add($"🥛 {food.Count} to use up");
                 if (shopping > 0) extras.Add($"🛒 {shopping} to buy");
@@ -232,7 +262,7 @@ public sealed class AutomationService : BackgroundService
                     await S<NotificationService>().NotifyAsync(
                         $"🛒 {NotificationService.FirstName(st.Name)}, while you're out — {items.Count} to buy",
                         NotificationService.Bullets(lines, 8), NoticeLevel.Info, "shopping",
-                        $"leave:{id}:{DateTime.UtcNow:yyyyMMddHHmm}", tag: "shopping", onlyTo: phones);
+                        $"leave:{id}:{DateTime.UtcNow:yyyyMMddHHmm}", tag: "shopping", onlyTo: phones, person: id);
                 }
             }
             _lastPresence[id] = st.State;

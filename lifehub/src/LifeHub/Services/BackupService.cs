@@ -2,7 +2,7 @@ using System.IO.Compression;
 
 namespace LifeHub.Services;
 
-/// <summary>Zips the db folder, settings.json and the encryption keys into data/backups (keeps the latest 14).</summary>
+/// <summary>Zips the db folder, settings.json, the encryption keys and uploaded study notes into data/backups (keeps the latest 14).</summary>
 public sealed class BackupService
 {
     private readonly DataPaths _paths;
@@ -23,6 +23,8 @@ public sealed class BackupService
             foreach (var f in Directory.GetFiles(_paths.Db, "*.json")) zip.CreateEntryFromFile(f, "db/" + Path.GetFileName(f));
             if (File.Exists(_paths.SettingsFile)) zip.CreateEntryFromFile(_paths.SettingsFile, "settings.json");
             foreach (var f in Directory.GetFiles(_paths.Keys)) zip.CreateEntryFromFile(f, "keys/" + Path.GetFileName(f));
+            if (Directory.Exists(_paths.BibleFiles))
+                foreach (var f in Directory.GetFiles(_paths.BibleFiles)) zip.CreateEntryFromFile(f, "bible/files/" + Path.GetFileName(f));
         }
         foreach (var old in List().Skip(14)) old.Delete();
         return file;

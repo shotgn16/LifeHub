@@ -10,6 +10,8 @@
 @inject SettingsService Settings
 @inject Clock Clock
 @inject UiState Ui
+@inject MealService Meals
+@inject BibleService Bible
 
 <PageTitle>Today · LifeHub</PageTitle>
 
@@ -26,6 +28,20 @@
 @if (!Settings.Current.HomeAssistant.Enabled && !Settings.Current.Ollama.Enabled && Settings.Current.Email.Accounts.Count == 0)
 {
     <div class="alert info"><Icon Name="sparkles" /> <div>Welcome! Connect <a href="settings?tab=ha">Home Assistant</a>, <a href="settings?tab=ai">Ollama</a> and your <a href="settings?tab=email">email</a> in Settings — everything else works straight away.</div></div>
+}
+
+@if (mealsToday.Count > 0 || (Settings.Current.Bible.Enabled && verse is { Reference.Length: > 0 }))
+{
+    <div class="chips" style="margin-bottom:14px">
+        @foreach (var m in mealsToday)
+        {
+            <a class="chip" href="meals" style="text-decoration:none"><Icon Name="pot" Size="13" /> @m.Slot: @Meals.TitleOf(m)</a>
+        }
+        @if (Settings.Current.Bible.Enabled && verse is { Reference.Length: > 0 } v)
+        {
+            <a class="chip @(v.Read ? "on" : "")" href="bible" style="text-decoration:none"><Icon Name="book" Size="13" /> @v.Reference @(v.Read ? "✓" : "· not read yet")</a>
+        }
+    </div>
 }
 
 <div class="grid cols-4 keep-2" style="margin-bottom:16px">
@@ -143,13 +159,13 @@
             @if (expiring.Count == 0) { <li class="empty small">Nothing about to go off</li> }
             @foreach (var p in expiring.Take(6))
             {
-                var d = p.DaysLeft(today);
+                var fr = Kitchen.Fresh(p);
                 <li class="row">
                     <div class="grow">
                         <div class="title">@p.Name</div>
                         <div class="meta">@p.Location · @Fmt.Qty(p.Quantity, p.Unit)</div>
                     </div>
-                    <span class="badge @Fmt.DaysClass(d, Settings.Current.General.ExpiryWarningDays)">@Fmt.DaysLeft(d)</span>
+                    <span class="badge @fr.Css" title="@fr.Detail">@fr.Label</span>
                     @if (p.Location != StorageLocation.Freezer)
                     {
                         <button class="icon-btn" title="Freeze" @onclick="() => Kitchen.FreezeAsync(p.Id)"><Icon Name="snow" Size="16" /></button>
@@ -211,6 +227,7 @@
     protected override async Task OnInitializedAsync()
     {
         Watch(Tasks.Repo); Watch(Renewals.Repo); Watch(Kitchen.Pantry); Watch(Kitchen.Shopping); Watch(Ai.Suggestions);
+        Watch(Meals.Entries); Watch(Bible.Verses);
         quickCategory = Settings.Current.General.TaskCategories.FirstOrDefault() ?? "Admin";
         Load();
         await LoadSlowAsync();
@@ -229,7 +246,12 @@
         expiring = Kitchen.ExpiringWithin(Settings.Current.General.ExpiryWarningDays).ToList();
         shoppingCount = Kitchen.Shopping.Where(s => !s.Checked).Count;
         aiPending = Ai.PendingCount;
+        mealsToday = Meals.EntriesFor(today, today).Where(e => !e.Cooked).ToList();
+        verse = Bible.VerseFor(today);
     }
+
+    private List<MealPlanEntry> mealsToday = new();
+    private DailyVerse? verse;
 
     private async Task LoadSlowAsync()
     {

@@ -261,6 +261,22 @@ public sealed class HomeAssistantClient
             .Where(t => t.StartsWith("device_tracker.")).Select(t => "notify.mobile_app_" + t["device_tracker.".Length..]).ToList();
     }
 
+    /// <summary>Raw state changes (UTC time, state) since a time — e.g. which app was in use.</summary>
+    public async Task<List<(DateTime Utc, string State)>> GetStateHistoryAsync(string entityId, DateTime sinceUtc)
+    {
+        var url = $"history/period/{sinceUtc:yyyy-MM-ddTHH:mm:ss}Z?filter_entity_id={entityId}&minimal_response&no_attributes";
+        using var r = await Client().GetAsync(url);
+        var data = await Read<List<List<JsonElement>>>(r);
+        var list = new List<(DateTime, string)>();
+        foreach (var e in data.FirstOrDefault() ?? new())
+        {
+            if (!e.TryGetProperty("state", out var st)) continue;
+            var ts = e.TryGetProperty("last_changed", out var lc) ? lc.GetDateTime().ToUniversalTime() : DateTime.UtcNow;
+            list.Add((ts, st.GetString() ?? ""));
+        }
+        return list;
+    }
+
     /// <summary>State history for charts (minimal response, no attributes).</summary>
     public async Task<List<(DateTime Time, double Value)>> GetNumericHistoryAsync(string entityId, DateTime sinceUtc, Clock clock)
     {

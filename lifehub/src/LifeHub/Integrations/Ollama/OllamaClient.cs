@@ -36,28 +36,73 @@ public sealed class OllamaClient
 
     /// <summary>
     /// Chat completion constrained to a JSON schema (Ollama structured outputs, v0.5+).
-    /// Returns the parsed JSON object.
+    /// Returns the parsed JSON object. Pass images (JPEG/PNG bytes) to use the vision model.
     /// </summary>
-    public async Task<JsonElement> ChatJsonAsync(string system, string user, JsonObject schema, CancellationToken ct = default)
+    public async Task<JsonElement> ChatJsonAsync(string system, string user, JsonObject schema, CancellationToken ct = default,
+        IReadOnlyList<byte[]>? images = null, string? model = null)
+    {
+        var content = await ChatAsync(system, user, schema, images, model, ct);
+        return ParseLenient(content);
+    }
+
+    /// <summary>Plain-text chat (e.g. transcribing handwriting).</summary>
+    public Task<string> ChatTextAsync(string system, string user, CancellationToken ct = default,
+        IReadOnlyList<byte[]>? images = null, string? model = null) =>
+        ChatAsync(system, user, null, images, model, ct);
+
+    public bool HasVision => IsConfigured && !string.IsNullOrWhiteSpace(_settings.Current.Ollama.VisionModel);
+
+    /// <summary>The model to use with images: the vision model if set, otherwise the main model.</summary>
+    public string VisionModel
+    {
+        get { var o = _settings.Current.Ollama; return string.IsNullOrWhiteSpace(o.VisionModel) ? o.Model : o.VisionModel; }
+    }
+
+    private async Task<string> ChatAsync(string system, string user, JsonObject? schema, IReadOnlyList<byte[]>? images, string? model, CancellationToken ct)
     {
         var o = _settings.Current.Ollama;
+        var userMsg = new JsonObject { ["role"] = "user", ["content"] = user };
+        if (images is { Count: > 0 })
+            userMsg["images"] = new JsonArray(images.Select(i => (JsonNode)JsonValue.Create(Convert.ToBase64String(i))!).ToArray());
         var request = new JsonObject
         {
-            ["model"] = o.Model,
+            ["model"] = model ?? (images is { Count: > 0 } ? VisionModel : o.Model),
             ["stream"] = false,
-            ["format"] = schema,
             ["options"] = new JsonObject { ["temperature"] = o.Temperature },
             ["messages"] = new JsonArray
             {
                 new JsonObject { ["role"] = "system", ["content"] = system },
-                new JsonObject { ["role"] = "user", ["content"] = user }
+                userMsg
             }
         };
+        if (schema is not null) request["format"] = schema;
         using var r = await Client().PostAsync("api/chat", JsonHttp.Body(request), ct);
         var body = await r.Content.ReadAsStringAsync(ct);
         if (!r.IsSuccessStatusCode) throw new InvalidOperationException($"Ollama returned {(int)r.StatusCode}: {body[..Math.Min(300, body.Length)]}");
-        var content = JsonDocument.Parse(body).RootElement.GetProperty("message").GetProperty("content").GetString() ?? "{}";
-        return ParseLenient(content);
+        return JsonDocument.Parse(body).RootElement.GetProperty("message").GetProperty("content").GetString() ?? "";
+    }
+
+    public bool HasEmbeddings => IsConfigured && !string.IsNullOrWhiteSpace(_settings.Current.Ollama.EmbeddingModel);
+
+    /// <summary>Vector for semantic similarity (Ollama /api/embed). Null when no embedding model is set.</summary>
+    public async Task<float[]?> EmbedAsync(string text, CancellationToken ct = default)
+    {
+        if (!HasEmbeddings) return null;
+        var request = new JsonObject { ["model"] = _settings.Current.Ollama.EmbeddingModel, ["input"] = text.Length > 8000 ? text[..8000] : text };
+        using var r = await Client().PostAsync("api/embed", JsonHttp.Body(request), ct);
+        var body = await r.Content.ReadAsStringAsync(ct);
+        if (!r.IsSuccessStatusCode) throw new InvalidOperationException($"Ollama embed returned {(int)r.StatusCode}: {body[..Math.Min(200, body.Length)]}");
+        var root = JsonDocument.Parse(body).RootElement;
+        if (!root.TryGetProperty("embeddings", out var e) || e.GetArrayLength() == 0) return null;
+        return e[0].EnumerateArray().Select(x => (float)x.GetDouble()).ToArray();
+    }
+
+    public static double Cosine(float[] a, float[] b)
+    {
+        if (a.Length != b.Length || a.Length == 0) return 0;
+        double dot = 0, na = 0, nb = 0;
+        for (var i = 0; i < a.Length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+        return na == 0 || nb == 0 ? 0 : dot / (Math.Sqrt(na) * Math.Sqrt(nb));
     }
 
     /// <summary>Accepts plain JSON or JSON wrapped in ``` fences / extra prose (older models).</summary>

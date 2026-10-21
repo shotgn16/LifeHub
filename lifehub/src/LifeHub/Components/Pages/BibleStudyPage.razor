@@ -1,0 +1,398 @@
+@page "/bible/study/{Id}"
+@inherits LiveComponent
+@inject BibleStudyService Studies
+@inject BibleService Bible
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+@inject NavigationManager Nav
+
+<PageTitle>@(string.IsNullOrWhiteSpace(study.Title) ? "Bible study" : study.Title) · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <a class="small" href="bible?tab=studies"><Icon Name="left" Size="13" /> Studies</a>
+        <h1>@(isNew ? "New study" : string.IsNullOrWhiteSpace(study.Title) ? "Bible study" : study.Title)</h1>
+        <div class="sub">@study.Date.ToString("dddd d MMMM yyyy")@(study.Passages.Count > 0 ? " · " + string.Join(", ", study.Passages) : "")</div>
+    </div>
+    <div class="actions">
+        @if (!isNew) { <button class="btn danger" @onclick="Delete"><Icon Name="trash" Size="15" /> @(confirmDelete ? "Tap again to delete" : "Delete")</button> }
+        <button class="btn primary" @onclick="Save"><Icon Name="check" Size="15" /> Save</button>
+    </div>
+</div>
+
+<div class="grid cols-2" style="align-items:start">
+    <div>
+        <div class="card" style="margin-bottom:14px">
+            <div class="form-grid">
+                <div class="field full"><label>Title</label><input type="text" placeholder="e.g. Romans 8 — no condemnation" @bind="study.Title" /></div>
+                <div class="field full"><label>Passages studied</label>
+                    <input type="text" placeholder="e.g. Romans 8:1-17; John 3:16" @bind="passagesText" @bind:event="oninput" />
+                    @{ var parsed = BibleBooks.Parse(passagesText); }
+                    @if (!string.IsNullOrWhiteSpace(passagesText)) { <div class="help small">@(parsed.Count == 0 ? "Not recognised yet" : "→ " + string.Join("; ", parsed))</div> }
+                </div>
+                <div class="field"><label>Date</label><input type="date" @bind="study.Date" /></div>
+                <div class="field"><label>Minutes</label><input type="number" min="0" @bind="study.Minutes" /></div>
+                <div class="field full"><label>Tags (comma separated)</label><input type="text" placeholder="e.g. grace, prayer, small group" @bind="tagsText" /></div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+            <div class="card-head"><h2>My notes</h2><span class="tiny muted right">Only you write here — the AI never changes it</span></div>
+            <textarea rows="14" style="width:100%;font-size:15px;line-height:1.55" placeholder="Type your notes, or upload photos / a PDF of them below." @bind="study.Notes"></textarea>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h2>Notes & proof of study</h2><span class="tiny muted right">Photos, scans, PDFs, Word or text files</span></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <label class="btn">
+                    <Icon Name="camera" Size="15" /> Take photo
+                    <InputFile OnChange="Upload" accept="image/*" capture="environment" style="display:none" />
+                </label>
+                <label class="btn">
+                    <Icon Name="upload" Size="15" /> Upload files
+                    <InputFile OnChange="Upload" multiple accept="image/*,application/pdf,.pdf,.txt,.md,.docx" style="display:none" />
+                </label>
+                @if (uploading) { <span class="small muted">Uploading…</span> }
+            </div>
+            @if (study.Attachments.Count == 0) { <p class="small muted" style="margin:0">Nothing uploaded yet.</p> }
+            <div class="attach-grid">
+                @foreach (var a in study.Attachments)
+                {
+                    <div class="a">
+                        <a href="@FileUrl(a)" target="_blank" rel="noopener" style="color:inherit">
+                            @if (a.IsImage) { <img src="@FileUrl(a)" alt="@a.FileName" loading="lazy" /> }
+                            else { <div class="ph"><Icon Name="file" Size="30" /></div> }
+                        </a>
+                        <div class="n" title="@a.FileName">@a.FileName</div>
+                        <div class="n tiny muted" style="display:flex;gap:6px;align-items:center">
+                            @(a.TextSource switch { "ocr" => "read by AI", "pdf-text" => "text from PDF", "text" => "text", _ => "not read yet" })
+                            <button class="icon-btn" style="margin-left:auto;width:24px;height:24px" title="Remove" @onclick="() => RemoveAttachment(a)"><Icon Name="x" Size="13" /></button>
+                        </div>
+                    </div>
+                }
+            </div>
+            @if (study.Attachments.Any(a => a.Text.Length > 0))
+            {
+                <details style="margin-top:12px">
+                    <summary class="small"><span class="ai-label"><Icon Name="sparkle" Size="12" /> AI-read text from your uploads</span></summary>
+                    @foreach (var a in study.Attachments.Where(a => a.Text.Length > 0))
+                    {
+                        <div class="ai-block" style="margin-top:8px">
+                            <div class="ai-label">@a.FileName</div>
+                            <div class="notes-text small">@a.Text</div>
+                        </div>
+                    }
+                </details>
+            }
+        </div>
+    </div>
+
+    <div>
+        <div class="card" style="margin-bottom:14px;border-color:var(--ai-border)">
+            <div class="card-head">
+                <h2><span class="ai-text"><Icon Name="sparkle" Size="17" /></span> AI study helper</h2>
+            </div>
+            @if (!Studies.AiAvailable)
+            {
+                <p class="small muted">Turn on the local AI (Ollama) in Settings → AI to read handwriting, break down your notes and find connections.</p>
+            }
+            else
+            {
+                <p class="small muted" style="margin-top:0">Everything in purple is AI-generated and kept separate from your notes. Nothing is changed unless you change it.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn ai" @onclick="Process" disabled="@(working is not null || isNew)"><Icon Name="sparkle" Size="15" /> @(study.Breakdown is null ? "Read & break down" : "Break down again")</button>
+                    <button class="btn ai" @onclick="Insights" disabled="@(working is not null || isNew || StudyBibleRefs.Count == 0)" title="@(StudyBibleRefs.Count == 0 ? "Add the passages you studied first" : "")"><Icon Name="book" Size="15" /> Ask for insights</button>
+                </div>
+                @if (Settings.Current.Bible is { StudyLightEnabled: false, BibliaGraphiaEnabled: false })
+                {
+                    <div class="help small">Reference sites are switched off in Settings → Bible, so insights use your notes, your other studies and general knowledge.</div>
+                }
+                else
+                {
+                    <div class="help small">Insights look up @string.Join(" and ", Sources) for your passages and compare them with your notes and other studies.</div>
+                }
+                @if (!Studies.HasVision && study.Attachments.Any(a => a.IsImage))
+                {
+                    <div class="help small"><span class="badge warn">Tip</span> Set a vision model (e.g. qwen2.5vl:7b) in Settings → AI so photos of handwriting can be read.</div>
+                }
+                @if (working is not null)
+                {
+                    <div class="ai-block" style="margin-top:10px"><span class="ai-label">Working</span> <span class="small">@working</span></div>
+                }
+                else if (study.AiStatus == "failed")
+                {
+                    <div class="toast error" style="position:static;margin-top:10px;max-width:none">@study.AiError</div>
+                }
+                else if (!string.IsNullOrEmpty(study.AiError))
+                {
+                    <div class="help small" style="margin-top:8px">@study.AiError</div>
+                }
+            }
+        </div>
+
+        @if (study.Breakdown is { } b)
+        {
+            <div class="ai-block" style="margin-bottom:14px">
+                <div class="ai-label"><Icon Name="sparkle" Size="12" /> AI breakdown of your notes</div>
+                @if (!string.IsNullOrWhiteSpace(b.Summary)) { <p>@b.Summary</p> }
+                @if (b.KeyPoints.Count > 0) { <h4>Key points</h4><ul>@foreach (var k in b.KeyPoints) { <li>@k</li> }</ul> }
+                @if (b.Passages.Count > 0)
+                {
+                    <h4>Passages mentioned</h4>
+                    <p>@foreach (var p in b.Passages) { <a href="@Bible.LinkFor(p)" target="_blank" rel="noopener" style="margin-right:10px">@p</a> }
+                        @{ var missing = b.Passages.Except(study.Passages).ToList(); }
+                        @if (missing.Count > 0) { <button class="btn sm" @onclick="() => AddPassages(missing)">Add to my passages</button> }
+                    </p>
+                }
+                @if (b.Themes.Count > 0) { <h4>Themes</h4><p>@foreach (var t in b.Themes) { <span class="badge ai" style="margin-right:4px">@t</span> }</p> }
+                @if (b.People.Count > 0) { <h4>People</h4><p>@string.Join(", ", b.People)</p> }
+                @if (b.Questions.Count > 0) { <h4>Questions</h4><ul>@foreach (var q in b.Questions) { <li>@q</li> }</ul> }
+                @if (b.Applications.Count > 0) { <h4>Applications & prayer</h4><ul>@foreach (var a in b.Applications) { <li>@a</li> }</ul> }
+                <div class="src">Generated @Fmt.Ago(b.GeneratedUtc) · @b.Model</div>
+            </div>
+        }
+
+        @if (study.Insights.Any(i => !i.Dismissed))
+        {
+            <h3 style="margin:4px 0 8px">Insights <span class="badge ai">AI</span></h3>
+            @foreach (var i in study.Insights.Where(i => !i.Dismissed).OrderByDescending(i => i.Pinned).ThenBy(i => KindOrder(i.Kind)))
+            {
+                <div class="ai-block">
+                    <div style="display:flex;align-items:center;gap:6px">
+                        <span class="ai-label">@KindLabel(i.Kind)</span>
+                        @if (i.Pinned) { <span class="badge ai">kept</span> }
+                        <span class="right" style="display:flex;gap:2px">
+                            <button class="icon-btn" style="width:28px;height:28px" title="@(i.Pinned ? "Unpin" : "Keep this (survives refreshing insights)")" @onclick="() => Studies.UpdateInsightAsync(study.Id, i.Id, x => x.Pinned = !x.Pinned)"><Icon Name="pin" Size="14" /></button>
+                            <button class="icon-btn" style="width:28px;height:28px" title="Dismiss" @onclick="() => Studies.UpdateInsightAsync(study.Id, i.Id, x => x.Dismissed = true)"><Icon Name="x" Size="14" /></button>
+                        </span>
+                    </div>
+                    <h4>@i.Title</h4>
+                    <p>@i.Body</p>
+                    <div class="src">
+                        @if (!string.IsNullOrEmpty(i.SourceUrl)) { <a href="@i.SourceUrl" target="_blank" rel="noopener">@i.Source</a> }
+                        else if (i.RelatedStudyId is { } rid) { <a href="bible/study/@rid">@i.Source</a> }
+                        else { @i.Source }
+                    </div>
+                </div>
+            }
+        }
+
+        @if (!isNew)
+        {
+            var related = Studies.Related(study);
+            var readBefore = Bible.ReadingsOf(StudyBibleRefs).Take(6).ToList();
+            <div class="card flush" style="margin-top:14px">
+                <div class="card-head"><h2>Connected studies</h2></div>
+                <ul class="list">
+                    @if (related.Count == 0) { <li class="empty small">No links yet — they appear when studies share passages, themes or people.</li> }
+                    @foreach (var r in related)
+                    {
+                        <li class="row clickable" @onclick='() => Nav.NavigateTo($"bible/study/{r.Study.Id}")'>
+                            <div class="grow">
+                                <div class="title small">@(string.IsNullOrWhiteSpace(r.Study.Title) ? string.Join(", ", r.Study.Passages) : r.Study.Title)</div>
+                                <div class="meta"><span>@r.Study.Date.ToString("d MMM yyyy")</span>@foreach (var why in r.Reasons) { <span>· @why</span> }</div>
+                            </div>
+                            <Icon Name="right" Size="15" />
+                        </li>
+                    }
+                </ul>
+                @if (readBefore.Count > 0)
+                {
+                    <div style="padding:8px 14px 12px" class="small">
+                        <strong>You've read these before:</strong>
+                        @string.Join(" · ", readBefore.Select(r => $"{r.Reference} ({r.Date:d MMM})"))
+                    </div>
+                }
+            </div>
+
+            var links = Studies.SourceLinks(study);
+            var mainRefs = BibleStudyService.MainRefsOf(study).Take(4).ToList();
+            @if (mainRefs.Count > 0)
+            {
+                <div class="card flush" style="margin-top:14px">
+                    <div class="card-head"><h2>Read more</h2></div>
+                    <ul class="list">
+                        @foreach (var r in mainRefs)
+                        {
+                            <li class="row small">
+                                <div class="grow"><strong>@r</strong></div>
+                                <a href="@Bible.LinkFor(r.ToString())" target="_blank" rel="noopener">YouVersion</a>
+                                @foreach (var (name, url, _) in links.Where(l => l.Passage == r.ToString())) { <a href="@url" target="_blank" rel="noopener">@name</a> }
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+    private BibleStudy study = new();
+    private bool isNew, uploading, confirmDelete;
+    private string passagesText = "", tagsText = "";
+    private string? working;
+    private Timer? poll;
+
+    private List<BibleRef> StudyBibleRefs => BibleStudyService.RefsOf(study);
+
+    private IEnumerable<string> Sources
+    {
+        get
+        {
+            var b = Settings.Current.Bible;
+            if (b.StudyLightEnabled) yield return "StudyLight";
+            if (b.BibliaGraphiaEnabled) yield return "Biblia Graphia";
+        }
+    }
+
+    protected override void OnInitialized() => Watch(Studies.Repo);
+
+    protected override void OnParametersSet()
+    {
+        if (Guid.TryParse(Id, out var gid) && Studies.Repo.Get(gid) is { } s)
+        {
+            study = s;
+            isNew = false;
+        }
+        else
+        {
+            study = new BibleStudy { Date = Clock.Today };
+            isNew = true;
+        }
+        passagesText = string.Join("; ", study.Passages);
+        tagsText = string.Join(", ", study.Tags);
+        working = Studies.Working(study.Id);
+        poll ??= new Timer(_ => InvokeAsync(() =>
+        {
+            var w = Studies.Working(study.Id);
+            if (w != working) { working = w; StateHasChanged(); }
+        }), null, 1000, 1000);
+    }
+
+    protected override void OnDataChanged()
+    {
+        if (isNew || Studies.Repo.Get(study.Id) is not { } fresh) return;
+        // Keep what you're typing; take everything the AI produced.
+        fresh.Title = study.Title; fresh.Notes = study.Notes; fresh.Date = study.Date; fresh.Minutes = study.Minutes;
+        study = fresh;
+        working = Studies.Working(study.Id);
+    }
+
+    private string FileUrl(StudyAttachment a) => $"bible/files/{a.StoredName}";
+
+    private void ApplyForm()
+    {
+        study.Passages = BibleBooks.Normalise(new[] { passagesText });
+        if (study.Passages.Count == 0 && !string.IsNullOrWhiteSpace(passagesText)) study.Passages = new() { passagesText.Trim() };
+        study.Tags = tagsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (string.IsNullOrWhiteSpace(study.Title) && study.Passages.Count > 0) study.Title = string.Join(", ", study.Passages.Take(2));
+    }
+
+    private async Task<bool> SaveInternal()
+    {
+        ApplyForm();
+        var stored = Studies.Repo.Get(study.Id);
+        if (stored is not null)
+        {
+            // Don't lose AI results that arrived while editing.
+            study.Attachments = stored.Attachments; study.ExtractedText = stored.ExtractedText; study.Breakdown = stored.Breakdown;
+            study.Insights = stored.Insights; study.AiStatus = stored.AiStatus; study.AiError = stored.AiError; study.Embedding = stored.Embedding;
+        }
+        await Studies.Repo.UpsertAsync(study);
+        foreach (var p in study.Passages) await Bible.LogReadingAsync(study.Date, p, "study", study.Minutes);
+        if (isNew)
+        {
+            isNew = false;
+            Nav.NavigateTo($"bible/study/{study.Id}", replace: true);
+            return true;
+        }
+        return false;
+    }
+
+    private async Task Save()
+    {
+        await Ui.Try(async () => { await SaveInternal(); }, "Saved");
+    }
+
+    private async Task Upload(InputFileChangeEventArgs e)
+    {
+        uploading = true;
+        try
+        {
+            if (isNew || Studies.Repo.Get(study.Id) is null) await SaveInternal();
+            var files = e.FileCount > 1 ? e.GetMultipleFiles(12) : new[] { e.File };
+            foreach (var f in files)
+            {
+                IBrowserFile file = f;
+                var name = f.Name;
+                if (f.ContentType.StartsWith("image/") && f.Size > 2_500_000)
+                {
+                    // Big phone photos: shrink in the browser first (still plenty for reading handwriting).
+                    file = await f.RequestImageFileAsync("image/jpeg", 2400, 2400);
+                    name = Path.ChangeExtension(f.Name, ".jpg");
+                }
+                await using var stream = file.OpenReadStream(BibleStudyService.MaxUploadBytes);
+                await Studies.AddAttachmentAsync(study, name, file.ContentType, stream);
+            }
+            Ui.Show($"{files.Count} file{(files.Count == 1 ? "" : "s")} added");
+            study = Studies.Repo.Get(study.Id) ?? study;
+            if (Studies.AiAvailable) Studies.StartProcessing(study.Id);
+            working = Studies.Working(study.Id);
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { uploading = false; }
+    }
+
+    private async Task RemoveAttachment(StudyAttachment a)
+    {
+        await Studies.RemoveAttachmentAsync(study.Id, a.Id);
+        study = Studies.Repo.Get(study.Id) ?? study;
+    }
+
+    private async Task Process()
+    {
+        await SaveInternal();
+        Studies.StartProcessing(study.Id);
+        working = Studies.Working(study.Id);
+    }
+
+    private async Task Insights()
+    {
+        await SaveInternal();
+        Studies.StartInsights(study.Id);
+        working = Studies.Working(study.Id);
+    }
+
+    private async Task AddPassages(List<string> refs)
+    {
+        passagesText = string.Join("; ", study.Passages.Concat(refs).Distinct());
+        await SaveInternal();
+    }
+
+    private async Task Delete()
+    {
+        if (!confirmDelete) { confirmDelete = true; return; }
+        await Studies.DeleteStudyAsync(study.Id);
+        Nav.NavigateTo("bible?tab=studies");
+    }
+
+    private static int KindOrder(string k) => k switch
+    {
+        "connection" => 0, "related-study" => 1, "expand" => 2, "context" => 3, "cross-reference" => 4, "question" => 5, _ => 6
+    };
+
+    private static string KindLabel(string k) => k switch
+    {
+        "connection" => "Connection", "expand" => "Go deeper", "context" => "Background", "cross-reference" => "Cross-references",
+        "question" => "Question to explore", "related-study" => "Link to another study", _ => "Insight"
+    };
+
+    public override void Dispose()
+    {
+        poll?.Dispose();
+        base.Dispose();
+    }
+}

@@ -1,5 +1,8 @@
 namespace LifeHub.Services;
 
+/// <summary>A staple you might want to buy. Nothing is added to the list until you tap it.</summary>
+public sealed record ShoppingSuggestion(StapleItem Staple, string Reason, decimal Quantity);
+
 public sealed record StapleStatus(StapleItem Staple, decimal InStock, double? AvgDaysBetweenBuys, DateOnly? LastBought, DateOnly? PredictedRunOut)
 {
     public bool Low => InStock < Staple.MinQuantity;
@@ -31,25 +34,56 @@ public sealed class KitchenService
 
     // ---------------- Inventory ----------------
 
+    public StapleItem? StapleOf(PantryItem p) => p.StapleId is { } id ? _staples.Get(id) : null;
+
+    /// <summary>Where an item is in its life (use-by cliff edge, or best-before gradient).</summary>
+    public FreshInfo Fresh(PantryItem p) => Freshness.Of(p, StapleOf(p), _clock.Today, _settings.Current.General.ExpiryWarningDays);
+
+    /// <summary>
+    /// Food to use up: use-by within <paramref name="days"/> or passed, best-before food that's due soon or past
+    /// its best (soft dates fade, so they're only flagged when it matters), and freezer items within a week.
+    /// </summary>
     public IReadOnlyList<PantryItem> ExpiringWithin(int days)
     {
         var today = _clock.Today;
-        return _pantry.Where(p => p.Location != StorageLocation.Freezer && p.UseBy is { } d && d.DayNumber - today.DayNumber <= days)
-            .Concat(_pantry.Where(p => p.Location == StorageLocation.Freezer && p.UseBy is { } d && d.DayNumber - today.DayNumber <= 7))
-            .OrderBy(p => p.UseBy).ToList();
+        return _pantry.Where(p =>
+            {
+                if (p.Location == StorageLocation.Freezer) return p.UseBy is { } fd && fd.DayNumber - today.DayNumber <= 7;
+                var f = Freshness.Of(p, StapleOf(p), today, days);
+                return f.State is FreshState.UseSoon or FreshState.Expired or FreshState.CheckFirst or FreshState.PastBest;
+            })
+            .OrderBy(p => Freshness.Of(p, StapleOf(p), today, days).EffectiveDate ?? DateOnly.MaxValue).ToList();
     }
 
-    public async Task<PantryItem> AddToPantryAsync(PantryItem item, bool logPurchase = true)
+    /// <summary>Only the items worth a reminder: use-by soon/passed and best-before food that now needs checking.</summary>
+    public IReadOnlyList<PantryItem> NeedsAttention(int days)
+    {
+        var today = _clock.Today;
+        return ExpiringWithin(days).Where(p => p.Location == StorageLocation.Freezer || Freshness.Of(p, StapleOf(p), today, days).NeedsAttention).ToList();
+    }
+
+    /// <param name="kind">Use-by or best-before; null = LifeHub's guess from the staple or food type.</param>
+    public async Task<PantryItem> AddToPantryAsync(PantryItem item, bool logPurchase = true, DateKind? kind = null)
     {
         item.Name = item.Name.Trim();
         if (item.AddedOn == default) item.AddedOn = _clock.Today;
         var staple = item.StapleId is { } sid ? _staples.Get(sid) : FindStaple(item.Name);
+        item.DateKind = kind ?? Freshness.KindFor(item.Name, staple);
         if (staple is not null)
         {
             item.StapleId = staple.Id;
-            if (item.UseBy is null && staple.ShelfLifeDays is { } days) item.UseBy = item.AddedOn.AddDays(days);
             if (string.IsNullOrEmpty(item.Unit)) item.Unit = staple.Unit;
             if (item.Category == "Other") item.Category = staple.Category;
+        }
+        if (item.UseBy is null && item.Location != StorageLocation.Freezer)
+        {
+            var (est, estKind) = Freshness.Estimate(item.Name, staple, null, item.AddedOn, item.Location);
+            if (est is not null)
+            {
+                item.UseBy = est;
+                item.DateEstimated = true;
+                if (kind is null) item.DateKind = estKind;
+            }
         }
         if (item.Location == StorageLocation.Freezer && item.FrozenOn is null)
         {
@@ -77,7 +111,6 @@ public sealed class KitchenService
             await _pantry.UpsertAsync(item);
         }
         await LogAsync(item.Name, item.StapleId, wasted ? FoodEventKind.Wasted : FoodEventKind.Used, used);
-        await RefreshAutoShoppingAsync();
     }
 
     public async Task FreezeAsync(Guid id)
@@ -152,36 +185,32 @@ public sealed class KitchenService
     public IReadOnlyList<StapleStatus> StapleStatuses() => _staples.All().OrderBy(s => s.Name).Select(StatusOf).ToList();
 
     /// <summary>
-    /// Adds staples that are low, predicted to run out within 2 days, or only have expired stock.
-    /// Never duplicates something already on the list. Returns number added.
+    /// Staples that are low, only have out-of-date stock, or that your buying history says will run out
+    /// within 2 days. These are only suggestions: the shopping list only changes when you add one
+    /// (or add items yourself, scan them, or use the linked Home Assistant list).
     /// </summary>
-    public async Task<int> RefreshAutoShoppingAsync()
+    public IReadOnlyList<ShoppingSuggestion> ShoppingSuggestions()
     {
         var today = _clock.Today;
+        var warn = _settings.Current.General.ExpiryWarningDays;
         var list = _shopping.Where(s => !s.Checked);
-        var adds = new List<ShoppingItem>();
-
+        var result = new List<ShoppingSuggestion>();
         foreach (var st in StapleStatuses())
         {
             if (list.Any(l => l.StapleId == st.Staple.Id || st.Staple.Matches(l.Name))) continue;
-
-            string? reason = null;
             var freshStock = _pantry.Where(p => (p.StapleId == st.Staple.Id || st.Staple.Matches(p.Name)) &&
-                                                (p.UseBy is null || p.UseBy >= today)).Sum(p => p.Quantity);
-            if (st.InStock < st.Staple.MinQuantity) reason = "Low stock";
-            else if (freshStock < st.Staple.MinQuantity) reason = "Expired";
-            else if (st.Staple.PredictFromHistory && st.PredictedRunOut is { } r && r.DayNumber - today.DayNumber <= 2) reason = "Predicted";
-
-            if (reason is null) continue;
-            adds.Add(new ShoppingItem
-            {
-                Name = st.Staple.Name, Quantity = st.Staple.BuyQuantity, Unit = st.Staple.Unit,
-                Category = st.Staple.Category, Reason = reason, StapleId = st.Staple.Id
-            });
+                                                Freshness.Of(p, st.Staple, today, warn).State is not (FreshState.Expired or FreshState.CheckFirst)).Sum(p => p.Quantity);
+            string? reason = null;
+            if (st.InStock < st.Staple.MinQuantity) reason = st.InStock == 0 ? "None left" : "Running low";
+            else if (freshStock < st.Staple.MinQuantity) reason = "Only old stock left";
+            else if (st.Staple.PredictFromHistory && st.PredictedRunOut is { } r && r.DayNumber - today.DayNumber <= 2) reason = "Usually bought about now";
+            if (reason is not null) result.Add(new ShoppingSuggestion(st.Staple, reason, st.Staple.BuyQuantity));
         }
-        if (adds.Count > 0) await _shopping.UpsertManyAsync(adds);
-        return adds.Count;
+        return result;
     }
+
+    public Task<ShoppingItem> AddSuggestionAsync(ShoppingSuggestion s) =>
+        AddToShoppingAsync(s.Staple.Name, s.Quantity <= 0 ? 1 : s.Quantity, s.Staple.Unit, "Manual", s.Staple.Category);
 
     // ---------------- Shopping list ----------------
 
@@ -221,24 +250,26 @@ public sealed class KitchenService
         {
             var staple = s.StapleId is { } id ? _staples.Get(id) : FindStaple(s.Name);
             var product = string.IsNullOrEmpty(s.Barcode) ? null : _products.Where(p => p.Barcode == s.Barcode).FirstOrDefault();
+            var fromProduct = product is { ShelfLifeDays: { } days, DefaultLocation: not StorageLocation.Freezer } ? _clock.Today.AddDays(days) : (DateOnly?)null;
             await AddToPantryAsync(new PantryItem
             {
                 Name = s.Name, Quantity = s.Quantity <= 0 ? 1 : s.Quantity, Unit = s.Unit, Category = s.Category,
-                Location = product?.DefaultLocation ?? staple?.DefaultLocation ?? GuessLocation(s.Category),
+                Location = product?.DefaultLocation ?? staple?.DefaultLocation ?? GuessLocation(s.Category, s.Name),
                 StapleId = product?.StapleId ?? staple?.Id, Barcode = s.Barcode,
-                UseBy = product is { ShelfLifeDays: { } days, DefaultLocation: not StorageLocation.Freezer } ? _clock.Today.AddDays(days) : null
+                UseBy = fromProduct, DateEstimated = fromProduct is not null
             });
         }
         await _shopping.DeleteManyAsync(done.Select(d => d.Id));
         return done.Count;
     }
 
-    public static StorageLocation GuessLocation(string category) => category switch
-    {
-        "Dairy" or "Meat & Fish" or "Fruit & Veg" => StorageLocation.Fridge,
-        "Frozen" => StorageLocation.Freezer,
-        _ => StorageLocation.Cupboard
-    };
+    public static StorageLocation GuessLocation(string category, string? name = null) =>
+        name is not null && Freshness.ProfileFor(name) is { } p && category is not ("Frozen") ? p.Location : category switch
+        {
+            "Dairy" or "Meat & Fish" or "Fruit & Veg" => StorageLocation.Fridge,
+            "Frozen" => StorageLocation.Freezer,
+            _ => StorageLocation.Cupboard
+        };
 
     public (int Purchased, int Used, int Wasted) StatsSince(DateOnly since)
     {

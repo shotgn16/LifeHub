@@ -12,22 +12,22 @@ library.
  (ingress)      │                 │                         │                                │
  HA / Shortcuts ┤ REST /api/v1 ───┘                 IRepository<T>  ──► /data/db/*.json      │
  (API key)      │                                   SettingsService ──► /data/settings.json  │
-                │ Background: EmailSync · Automation (every minute) · HaListSync             │
+                │ Background: EmailSync · Automation · HaListSync · BibleTracking (1 min)    │
                 └──────┬───────────────────┬──────────────────────┬──────────────────────────┘
                        │                   │                      │
             Home Assistant REST     Ollama /api/chat        IMAP · Microsoft Graph · EWS
-     (states, services, templates,  (JSON-schema output)
-      calendars, history, to-do,
-      notify; publishes sensor.lifehub_*)
+     (states, services, templates,  (JSON schema, images,
+      calendars, history, to-do,     /api/embed)            Web Push services (VAPID)
+      notify; publishes sensor.lifehub_*)                   YouVersion API · StudyLight (on request)
 ```
 
 ## Source layout (`lifehub/src/LifeHub`)
 
 | Folder | Contents |
 |---|---|
-| `Domain/` | Plain entity classes: `TaskItem`, `Renewal`, `PantryItem`, `StapleItem`, `ShoppingItem`, `ProductInfo`, `EmailRecord`, `Promotion`, `AiSuggestion`, … |
+| `Domain/` | Plain entity classes: `TaskItem`, `Renewal`, `PantryItem`, `StapleItem`, `ShoppingItem`, `ProductInfo`, `EmailRecord`, `Promotion`, `AiSuggestion`, `BibleStudy`, `DailyVerse`, `Recipe`, `MealPlanEntry`, `PushDevice`, … plus `BibleRef`, the Bible reference parser (66 books, abbreviations, USFM) |
 | `Data/` | `IRepository<T>` and `JsonRepository<T>`, which keeps an in-memory copy, writes the file atomically and raises a change event |
-| `Services/` | Business logic, plus the background jobs `AutomationService` and `EmailSyncService` |
+| `Services/` | Business logic and background jobs. New in 1.3: `BibleService`, `BibleTrackingService`, `BibleStudyService` (uploads, OCR, PdfPig, insights), `MealService`, `KitchenPhotoService`, `Freshness` (use-by vs best-before), `WebPushService` (RFC 8291/8292) |
 | `Integrations/HomeAssistant/` | REST client, entity catalogue (names, areas, devices), automatic setup, two-way to-do sync |
 | `Integrations/Email/` | `IEmailProvider` implementations: IMAP (MailKit), Microsoft Graph, EWS (SOAP) |
 | `Integrations/Ollama/` | `/api/chat` client with JSON-schema structured output |
@@ -35,7 +35,7 @@ library.
 | `Api/` | Login/setup endpoints and the REST API |
 | `Infrastructure/` | Settings (with encrypted `[Secret]` fields), auth, HA ingress middleware, clock and time zone, data paths |
 | `Components/` | Pages, layout, settings tabs and shared components |
-| `wwwroot/` | `app.css`, the scanner script, ZXing, the manifest and icons |
+| `wwwroot/` | `app.css`, the scanner script, ZXing, `sw.js` (service worker for push), `js/push.js`, the manifest and icons |
 
 ## Key design points
 
@@ -60,6 +60,10 @@ library.
     roll-forward, nightly planning, presence and sensor publishing.
   - `EmailSyncService` polls the mailboxes.
   - `HaListSyncService` syncs the lists with HA's to-do lists.
+- **AI never edits your content.** Bible study insights, breakdowns and OCR text live in their own
+  fields (`ExtractedText`, `Breakdown`, `Insights`) and are shown in purple. Meal suggestions and
+  adapted recipes are stored as pending `MealSuggestion`s, or as new recipe versions, until you
+  apply them.
 - **AI pipeline.**
   1. The email text is trimmed to `MaxEmailChars`.
   2. Ollama is called with a JSON schema built from the registered `IAiActionHandler`s.
@@ -72,6 +76,7 @@ library.
 
 - .NET 8 / ASP.NET Core / Blazor Server
 - [MailKit](https://github.com/jstedfast/MailKit) for IMAP
+- [PdfPig](https://github.com/UglyToad/PdfPig) for PDF text and scanned-page images
 - [ZXing-js](https://github.com/zxing-js/library) and the native `BarcodeDetector` for scanning
 - [Open Food Facts](https://world.openfoodfacts.org) for product lookup
 - [Ollama](https://ollama.com) for local LLMs

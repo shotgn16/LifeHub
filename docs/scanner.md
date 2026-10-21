@@ -22,6 +22,7 @@ Every scan shows a toast with **Undo**.
 - **Take photo.** Reads the barcode from a picture. This works over plain HTTP too.
 - **Type or USB/Bluetooth scanner.** Type the number into the box, or use a scanner that acts as
   a keyboard.
+- **Photo of the whole shop.** No barcodes needed: see [Add from photo](kitchen-and-meals.md#add-from-photo).
 - **API.** `POST /api/v1/scan` lets a Raspberry Pi or ESPHome scanner by the bin do it hands-free.
   See [api.md](api.md).
 

@@ -29,6 +29,10 @@ ingress URLs need a Home Assistant session, so they don't suit API calls.
 | POST | `/api/v1/shopping` | `{"name":"Milk","quantity":2,"unit":"pints"}` | Adds the item, merging duplicates |
 | POST | `/api/v1/capture` | `{"text":"dentist Tuesday 2:30 and buy coffee"}` | AI quick capture. The actions follow your auto-apply settings. |
 | POST | `/api/v1/scan` | `{"barcode":"5000112637922","mode":"add\|use\|shopping","quantity":1}` | The scan result. Unknown barcodes return 404; scan them once in the app to name them. |
+| GET | `/api/v1/meals` | `?days=1` (1–14) | Planned meals: date, slot, title, servings, cooked |
+| POST | `/api/v1/bible/app` | `{"event":"opened\|closed","device":"iPhone"}` | Times the Bible app (for the iPhone Shortcuts automation). Returns `minutesToday`. |
+| POST | `/api/v1/bible/read` | `{"reference":"Ps 23","minutes":10}` | Logs a reading. Leave out `reference` to mark today's verse as read. |
+| GET | `/api/v1/bible/today` | | Verse of the day (and text), whether you've read today, the streak, minutes in the app, and what's still to read |
 
 ## Examples
 
@@ -82,6 +86,43 @@ intent_script:
           title: "{{ title }}"
     speech:
       text: "Added {{ title }} to LifeHub"
+```
+
+### Bible
+
+The iPhone Shortcuts setup for timing the YouVersion app is in [bible.md](bible.md#iphone-shortcuts).
+To log a reading from an NFC tag on your Bible:
+
+```yaml
+rest_command:
+  lifehub_bible_read:
+    url: "http://192.168.1.10:8099/api/v1/bible/read"
+    method: POST
+    headers:
+      X-Api-Key: !secret lifehub_api_key
+    content_type: "application/json"
+    payload: '{}'          # marks today's verse of the day as read
+```
+
+### What's for dinner (Assist)
+
+```yaml
+conversation:
+  intents:
+    LifeHubDinner:
+      - "what's for dinner"
+rest:
+  - resource: http://192.168.1.10:8099/api/v1/meals?days=1
+    headers:
+      X-Api-Key: !secret lifehub_api_key
+    scan_interval: 900
+    sensor:
+      - name: LifeHub dinner
+        value_template: "{{ (value_json | selectattr('slot', 'eq', 'Dinner') | map(attribute='title') | first) | default('nothing planned') }}"
+intent_script:
+  LifeHubDinner:
+    speech:
+      text: "Tonight it's {{ states('sensor.lifehub_dinner') }}"
 ```
 
 ### Sensor from the summary

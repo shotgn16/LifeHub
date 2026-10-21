@@ -18,6 +18,7 @@ start it detects:
 | `notify.mobile_app_*` phones | Push notifications. Untick any you don't want in **Settings → Home Assistant**. |
 | Power and energy sensors | Energy tiles and 24-hour charts |
 | `todo.shopping_list` and other to-do lists | Two-way sync of the shopping list (and optionally tasks) |
+| `sensor.*_last_used_app` (Android Companion) | Timing reading in the YouVersion app. Tick it in Settings → Bible. |
 
 You can review or change any of these in **Settings → Home Assistant**. Running outside HA (Docker
 or Plesk)? Enter the HA URL and a **long-lived access token** there instead. To create a token, go
@@ -35,14 +36,31 @@ to your HA profile → **Security** → **Long-lived access tokens**.
 
 ## Shared lists
 
-- **Shopping list ↔ HA Shopping List.** Items added with Assist ("add milk to the shopping list"),
+- **Shopping list ↔ the HA list you choose.** This, typing, scanning and the meal planner are the only ways items get on the list. Items added with Assist ("add milk to the shopping list"),
   the HA app or LifeHub appear in both places, and ticking an item off in either app ticks it off
   in both. LifeHub sends its changes straight away and checks HA for changes every minute, or press **Sync now** on the Home page.
 - **Tasks ↔ an HA to-do list** is optional. Pick the list in **Settings → Home Assistant**.
 
 ## Notifications
 
-LifeHub sends push notifications through the HA Companion app to the phones you tick:
+Under **Settings → Notifications**, choose how notifications reach your phone:
+
+- **Home Assistant app**: through the Companion app on the phones you tick in Settings → Home
+  Assistant. This is the default.
+- **LifeHub's own notifications**: standard web push straight from LifeHub to any browser or
+  phone, with no Home Assistant needed. Open LifeHub over **HTTPS** on each device (for example
+  through your Cloudflare address) and press **Turn on for this device**.
+  - On iPhone, first add LifeHub to the home screen (Share → Add to Home Screen), then turn it on
+    from there.
+  - You can tag each device with its owner, so "while you're out" messages only go to that
+    person's devices.
+- **Both.**
+
+If Home Assistant has no phones set up, LifeHub uses its own notifications automatically.
+Messages are end-to-end encrypted with this server's own key (VAPID); there's no third-party
+account involved.
+
+The notifications themselves:
 
 - a **morning digest** with sections for today, tasks due, renewals, food to use up and things to buy
 - **renewal reminders**: within the warning window, the day before, and on the day
@@ -51,6 +69,7 @@ LifeHub sends push notifications through the HA Companion app to the phones you 
 - **while you're out**: when someone leaves home and the shopping list isn't empty, that person's
   phone gets the list
 - the **evening plan** for tomorrow
+- the **Bible reading reminder**, if you haven't read by the time you set (see [bible.md](bible.md))
 
 Notifications of the same kind replace each other instead of stacking up. Tapping one opens
 LifeHub: at the **LifeHub web address** if one is set in Settings → General, otherwise at the HA
@@ -68,6 +87,7 @@ These update every 5 minutes. Their attributes contain the item lists.
 | `sensor.lifehub_food_expiring` | count | `items` |
 | `sensor.lifehub_shopping_list` | count | `items` |
 | `sensor.lifehub_ai_pending` | count | |
+| `sensor.lifehub_bible_streak` | days | `read_today`, `verse`, `verse_read`, `app_minutes_today`, `to_read` |
 
 ### Example automations
 

@@ -1,0 +1,250 @@
+@page "/kitchen/photo"
+@inject KitchenPhotoService Photos
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+@inject NavigationManager Nav
+
+<PageTitle>Add from photo · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <a class="small" href="kitchen"><Icon Name="left" Size="13" /> Kitchen</a>
+        <h1>Add from photo</h1>
+        <div class="sub">Photograph your shopping — LifeHub lists the items and reads any dates it can see. You check everything before it's added.</div>
+    </div>
+</div>
+
+@if (!Photos.Available)
+{
+    <div class="card"><p>Turn on the local AI (Ollama) in <a href="settings?tab=ai">Settings → AI</a> and choose a <strong>vision model</strong> (e.g. <code>qwen2.5vl:7b</code>, <code>llama3.2-vision</code> or <code>minicpm-v</code>).</p></div>
+}
+else
+{
+    @if (!Photos.HasVision)
+    {
+        <div class="card" style="margin-bottom:14px"><span class="badge warn">Tip</span> <span class="small">No vision model is set in Settings → AI, so your main model will be used — it may not be able to see photos.</span></div>
+    }
+
+    <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <label class="btn primary">
+                <Icon Name="camera" Size="15" /> Take photo
+                <InputFile OnChange="AddPhotos" accept="image/*" capture="environment" style="display:none" />
+            </label>
+            <label class="btn">
+                <Icon Name="upload" Size="15" /> Choose photos
+                <InputFile OnChange="AddPhotos" multiple accept="image/*" style="display:none" />
+            </label>
+            @if (photos.Count > 0)
+            {
+                <button class="btn ai" @onclick="Identify" disabled="@busy"><Icon Name="sparkle" Size="15" /> @(items.Count == 0 ? "Find the items" : "Find items in new photos")</button>
+                <button class="btn ghost sm" @onclick="Reset" disabled="@busy">Start again</button>
+            }
+            @if (busy) { <span class="small ai-text">@status</span> }
+        </div>
+        @if (photos.Count > 0)
+        {
+            <div class="photo-strip" style="margin-top:12px">
+                @foreach (var p in photos) { <img src="@p.Preview" alt="photo" style="@(p.Done ? "opacity:.55" : "")" /> }
+            </div>
+        }
+        else
+        {
+            <p class="small muted" style="margin-bottom:0">Tip: spread things out with the labels facing the camera, in good light. One photo per bag works well.</p>
+        }
+    </div>
+
+    @if (items.Count > 0)
+    {
+        var noDate = items.Where(i => i.Include && i.NeedsDate).ToList();
+        <div class="card" style="margin-bottom:14px">
+            <div class="card-head" style="margin-bottom:4px"><h2>@items.Count(i => i.Include) item@(items.Count(i => i.Include) == 1 ? "" : "s") to add</h2></div>
+            @if (noDate.Count > 0)
+            {
+                <div class="small" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <span><span class="badge warn">@noDate.Count without a date</span> — tick the ones in your next photo, then:</span>
+                    <label class="btn sm ai">
+                        <Icon Name="camera" Size="14" /> Photo of their dates
+                        <InputFile OnChange="DatesPhoto" accept="image/*" capture="environment" style="display:none" />
+                    </label>
+                    <button class="btn sm" @onclick="EstimateAll">Use typical dates</button>
+                    <span class="muted">or type them in</span>
+                </div>
+            }
+            else
+            {
+                <div class="small muted">All items have a date. Check them, then add.</div>
+            }
+        </div>
+
+        <div class="card flush" style="margin-bottom:14px">
+            @foreach (var i in items)
+            {
+                <div class="review-row" style="@(i.Include ? "" : "opacity:.5")">
+                    <input type="checkbox" @bind="i.Include" title="Include" />
+                    <div>
+                        <input type="text" @bind="i.Name" style="font-weight:600" />
+                        <div class="tiny muted" style="margin-top:3px">@(string.IsNullOrEmpty(i.Where) ? "" : i.Where + " · ")@i.Category</div>
+                    </div>
+                    <input type="number" min="1" step="1" @bind="i.Quantity" title="Quantity" />
+                    <select @bind="i.Location">@foreach (var l in Enum.GetValues<StorageLocation>()) { <option value="@l">@l</option> }</select>
+                    <div class="date-cell">
+                        @if (i.Location == StorageLocation.Freezer)
+                        {
+                            <span class="small muted">Freezer — dated automatically</span>
+                        }
+                        else
+                        {
+                            <select @bind="i.Kind" style="width:auto">
+                                <option value="@DateKind.UseBy">Use by</option>
+                                <option value="@DateKind.BestBefore">Best before</option>
+                            </select>
+                            <input type="date" value="@(i.Date?.ToString("yyyy-MM-dd"))" @onchange="e => SetDate(i, e.Value?.ToString())" style="width:auto" />
+                            @switch (i.DateSource)
+                            {
+                                case "photo": <span class="badge ai" title="Read from the photo">read: @i.DateText</span> break;
+                                case "close-up": <span class="badge ai" title="Read from the close-up">read: @i.DateText</span> break;
+                                case "estimate": <span class="badge" title="Typical shelf life — change it if the pack says otherwise">~ estimate</span> break;
+                                case "manual": break;
+                                default:
+                                    <label class="check tiny" title="Include in the next close-up photo"><input type="checkbox" @bind="i.Selected" /> in next photo</label>
+                                    <button class="btn sm" @onclick="() => Estimate(i)">Estimate</button>
+                                    break;
+                            }
+                        }
+                    </div>
+                    <button class="icon-btn" title="Remove" @onclick="() => items.Remove(i)"><Icon Name="x" Size="15" /></button>
+                </div>
+            }
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+            <button class="btn" @onclick="AddRow"><Icon Name="plus" Size="15" /> Add a missed item</button>
+            <button class="btn primary" @onclick="AddAll" disabled="@(busy || items.Count(i => i.Include) == 0)"><Icon Name="box" Size="15" /> Add @items.Count(i => i.Include) to kitchen</button>
+        </div>
+        <p class="small muted" style="margin-top:10px">
+            <strong>Use by</strong> dates are about safety. <strong>Best before</strong> food (eggs, cereal, pasta, tins…) is only past its best after the date, so
+            LifeHub shows it fading on a scale instead of "expired".
+        </p>
+    }
+}
+
+@code {
+    private sealed class Photo
+    {
+        public byte[] Bytes { get; init; } = Array.Empty<byte>();
+        public string Preview { get; init; } = "";
+        public bool Done { get; set; }
+    }
+
+    private readonly List<Photo> photos = new();
+    private List<PhotoItem> items = new();
+    private bool busy;
+    private string status = "";
+
+    private static async Task<byte[]> ReadImage(IBrowserFile f, int max)
+    {
+        var resized = await f.RequestImageFileAsync("image/jpeg", max, max);
+        await using var s = resized.OpenReadStream(15 * 1024 * 1024);
+        using var ms = new MemoryStream();
+        await s.CopyToAsync(ms);
+        return ms.ToArray();
+    }
+
+    private async Task AddPhotos(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var files = e.FileCount > 1 ? e.GetMultipleFiles(8) : new[] { e.File };
+            foreach (var f in files)
+            {
+                var bytes = await ReadImage(f, 1600);
+                var thumb = await ReadImage(f, 240);
+                photos.Add(new Photo { Bytes = bytes, Preview = "data:image/jpeg;base64," + Convert.ToBase64String(thumb) });
+            }
+            if (items.Count == 0) await Identify();
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+    }
+
+    private async Task Identify()
+    {
+        var todo = photos.Where(p => !p.Done).ToList();
+        if (todo.Count == 0) { Ui.Show("Add another photo first"); return; }
+        busy = true;
+        status = $"Looking at {todo.Count} photo{(todo.Count == 1 ? "" : "s")}… (this can take a minute)";
+        StateHasChanged();
+        try
+        {
+            var found = await Photos.IdentifyAsync(todo.Select(p => p.Bytes).ToList());
+            foreach (var p in todo) p.Done = true;
+            foreach (var f in found)
+            {
+                var same = items.FirstOrDefault(x => string.Equals(x.Name, f.Name, StringComparison.OrdinalIgnoreCase));
+                if (same is null) items.Add(f);
+                else if (same.Date is null && f.Date is not null) { same.Date = f.Date; same.DateText = f.DateText; same.DateSource = f.DateSource; same.Kind = f.Kind; }
+            }
+            Ui.Show(found.Count == 0 ? "No food found in that photo — try closer and in better light" : $"Found {found.Count} item{(found.Count == 1 ? "" : "s")}", found.Count == 0);
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; status = ""; }
+    }
+
+    private async Task DatesPhoto(InputFileChangeEventArgs e)
+    {
+        var targets = items.Where(i => i.Include && i.NeedsDate && i.Selected).ToList();
+        if (targets.Count == 0) targets = items.Where(i => i.Include && i.NeedsDate).ToList();
+        if (targets.Count == 0) return;
+        busy = true;
+        status = "Reading dates…";
+        StateHasChanged();
+        try
+        {
+            var bytes = await ReadImage(e.File, 2000);
+            var n = await Photos.ReadDatesAsync(targets, new[] { bytes });
+            var left = items.Count(i => i.Include && i.NeedsDate);
+            Ui.Show(n == 0 ? "Couldn't read any dates — get closer to the label, or type them in" : $"Read {n} date{(n == 1 ? "" : "s")}{(left > 0 ? $" · {left} still without" : "")}", n == 0);
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; status = ""; }
+    }
+
+    private void SetDate(PhotoItem i, string? value)
+    {
+        if (DateOnly.TryParse(value, CultureInfo.InvariantCulture, out var d)) { i.Date = d; i.DateSource = "manual"; i.DateText = ""; }
+        else { i.Date = null; i.DateSource = ""; }
+    }
+
+    private void Estimate(PhotoItem i)
+    {
+        if (!Photos.Estimate(i)) Ui.Show($"No typical shelf life known for {i.Name} — please type the date", true);
+    }
+
+    private void EstimateAll()
+    {
+        var missed = items.Where(i => i.Include && i.NeedsDate).Where(i => !Photos.Estimate(i)).Select(i => i.Name).ToList();
+        if (missed.Count > 0) Ui.Show($"Please type a date for: {string.Join(", ", missed)}", true);
+    }
+
+    private void AddRow() => items.Add(new PhotoItem { Name = "", Location = StorageLocation.Fridge, Confidence = 1 });
+
+    private async Task AddAll()
+    {
+        busy = true;
+        try
+        {
+            var n = await Photos.AddAllAsync(items);
+            Ui.Show($"{n} item{(n == 1 ? "" : "s")} added to the kitchen");
+            Nav.NavigateTo("kitchen");
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private void Reset()
+    {
+        photos.Clear();
+        items.Clear();
+    }
+}

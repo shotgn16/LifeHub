@@ -1,0 +1,564 @@
+@page "/meals"
+@inherits LiveComponent
+@inject MealService Meals
+@inject KitchenService Kitchen
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+
+<PageTitle>Meals · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Meals</h1>
+        <div class="sub">@planned meal@(planned == 1 ? "" : "s") planned over the next @days days · @needCount thing@(needCount == 1 ? "" : "s") to buy</div>
+    </div>
+    <div class="actions">
+        <div class="chips">
+            <button class="chip @(days == 7 ? "on" : "")" @onclick="() => SetDays(7)">This week</button>
+            <button class="chip @(days == 14 ? "on" : "")" @onclick="() => SetDays(14)">2 weeks</button>
+        </div>
+        @if (Meals.AiAvailable)
+        {
+            <button class="btn ai" @onclick="Suggest" disabled="@busy"><Icon Name="sparkle" Size="15" /> @(busy ? "Thinking…" : "Suggest improvements")</button>
+        }
+    </div>
+</div>
+
+<div class="tabs">
+    <button class="tab @(tab == "plan" ? "on" : "")" @onclick='() => tab = "plan"'>Plan</button>
+    <button class="tab @(tab == "buy" ? "on" : "")" @onclick='() => tab = "buy"'>What to buy @if (needCount > 0) { <span class="count">@needCount</span> }</button>
+    <button class="tab @(tab == "recipes" ? "on" : "")" @onclick='() => tab = "recipes"'>Recipes <span class="muted">· @recipes.Count</span></button>
+    <button class="tab @(tab == "needs" ? "on" : "")" @onclick='() => tab = "needs"'>Dietary needs</button>
+</div>
+
+@if (tab == "plan")
+{
+    <div class="small" style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span class="muted">Requirements:</span>
+        @if (Settings.Current.Meals.Requirements.Count == 0) { <a href="" @onclick:preventDefault @onclick='() => tab = "needs"'>none set</a> }
+        @foreach (var r in Settings.Current.Meals.Requirements) { <span class="badge info">@r</span> }
+    </div>
+
+    @if (suggestions.Count > 0)
+    {
+        <div style="margin-bottom:14px">
+            @foreach (var s in suggestions)
+            {
+                <div class="ai-block">
+                    <div style="display:flex;gap:6px;align-items:center">
+                        <span class="ai-label"><Icon Name="sparkle" Size="12" /> @SuggestionLabel(s.Kind)</span>
+                        <span class="right" style="display:flex;gap:6px">
+                            @if (s.Kind != "tip") { <button class="btn sm primary" @onclick="() => Apply(s)">Apply</button> }
+                            <button class="btn sm" @onclick="() => Meals.DismissAsync(s.Id)">@(s.Kind == "tip" ? "Got it" : "Dismiss")</button>
+                        </span>
+                    </div>
+                    <h4>@s.Title</h4>
+                    <p>@s.Body</p>
+                    @if (s.Kind == "move" && s.EntryId is { } eid && Meals.Entries.Get(eid) is { } me && s.NewDate is { } nd)
+                    {
+                        <p class="small"><Icon Name="swap" Size="13" /> @Meals.TitleOf(me): @me.Date.ToString("ddd d MMM") → <strong>@nd.ToString("ddd d MMM")</strong>
+                            @if (Meals.EntriesFor(nd, nd).FirstOrDefault(x => x.Slot == me.Slot) is { } other) { <span class="muted">(swaps with @Meals.TitleOf(other))</span> }
+                        </p>
+                    }
+                    @if (s.Proposed is { } pr && s.RecipeId is { } rid && Meals.Recipes.Get(rid) is { } orig)
+                    {
+                        <details><summary class="small">See the changes to @orig.Name</summary>@Diff(orig, pr)</details>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (unused.Count > 0)
+    {
+        <div class="card suggest-card" style="margin-bottom:14px">
+            <div class="small"><strong>Use these up</strong> — no planned meal uses them:
+                @foreach (var p in unused) { <span class="badge @Kitchen.Fresh(p).Css" style="margin:2px">@p.Name · @Kitchen.Fresh(p).Label</span> }
+            </div>
+            @if (Meals.AiAvailable) { <div class="help small">Press <strong>Suggest improvements</strong> for ideas that use them.</div> }
+        </div>
+    }
+
+    <div class="meal-days">
+        @foreach (var d in contexts)
+        {
+            var dayEntries = entries.Where(e => e.Date == d.Date).ToList();
+            <div class="card meal-day @(d.Date == today ? "today" : "")">
+                <div class="dh">
+                    <strong>@(d.Date == today ? "Today" : d.Date == today.AddDays(1) ? "Tomorrow" : d.Date.ToString("ddd d MMM"))</strong>
+                    <button class="energy @d.Energy right" title="@(d.Manual ? "Your setting — tap to change" : $"Guessed from your calendar ({d.EnergyAuto}) — tap to set it yourself")" @onclick="() => CycleEnergy(d)">
+                        @(d.Energy switch { "low" => "Low energy", "high" => "Lots of time", _ => "Normal" })@(d.Manual ? " ✎" : "")
+                    </button>
+                </div>
+                <div class="ctx" title="@string.Join(", ", d.Events)">@d.Summary</div>
+                @foreach (var slot in Settings.Current.Meals.Slots)
+                {
+                    var e = dayEntries.FirstOrDefault(x => x.Slot == slot);
+                    if (e is null)
+                    {
+                        <div class="meal-slot empty" @onclick="() => OpenAdd(d.Date, slot)"><Icon Name="plus" Size="13" /> Add @slot.ToLowerInvariant()</div>
+                    }
+                    else
+                    {
+                        var r = e.RecipeId is { } id ? Meals.Recipes.Get(id) : null;
+                        var conflicts = r is null ? new List<string>() : Meals.DietConflicts(r);
+                        <div class="meal-slot" style="@(e.Cooked ? "opacity:.6" : "")">
+                            <div class="grow">
+                                <div class="@(e.Cooked ? "strike" : "")" style="font-weight:600">@Meals.TitleOf(e)</div>
+                                <div class="effort">
+                                    @slot · serves @e.Servings
+                                    @if (r is not null) { <span>· @r.Effort.ToString().ToLowerInvariant()@(r.Minutes is { } m ? $", {m} min" : "")</span> }
+                                    @if (r?.AiGenerated == true) { <span class="ai-text">· AI</span> }
+                                    @if (conflicts.Count > 0) { <span class="badge warn" title="@string.Join(", ", conflicts)">check diet</span> }
+                                </div>
+                            </div>
+                            @if (!e.Cooked && e.Date <= today)
+                            {
+                                <button class="icon-btn" title="Cooked it (uses the ingredients from your kitchen)" @onclick="() => Cooked(e)"><Icon Name="check" Size="15" /></button>
+                            }
+                            <button class="icon-btn" title="Remove" @onclick="() => Meals.Entries.DeleteAsync(e.Id)"><Icon Name="x" Size="14" /></button>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+}
+else if (tab == "buy")
+{
+    var toBuy = needs.Where(n => n.Status is "need" or "have-some").ToList();
+    <div class="card" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span class="small">Ingredients for the meals in the next @days days, checked against your kitchen and shopping list.</span>
+        <button class="btn primary right" @onclick="AddNeeds" disabled="@(!needs.Any(n => n.Selected))"><Icon Name="cart" Size="15" /> Add @needs.Count(n => n.Selected) to shopping list</button>
+    </div>
+    <div class="card flush">
+        @if (needs.Count == 0) { <div class="empty">Plan some meals with recipes and their ingredients appear here.</div> }
+        @foreach (var group in needs.GroupBy(n => n.Status))
+        {
+            <div class="group-title">@(group.Key switch { "need" => "To buy", "have-some" => "Need more", "on-list" => "Already on the shopping list", "have" => "In the kitchen", _ => "Basics (assumed)" })</div>
+            <ul class="list">
+                @foreach (var n in group)
+                {
+                    <li class="row">
+                        @if (n.Status is "need" or "have-some") { <input type="checkbox" @bind="n.Selected" /> }
+                        <div class="grow">
+                            <div class="title small">@n.Name @if (n.Quantity is { } q) { <span class="muted">× @Fmt.Qty(q, n.Unit)</span> }</div>
+                            <div class="meta"><span>@string.Join(", ", n.Meals)</span><span>· first needed @Fmt.RelDay(n.FirstNeeded, today).ToLower()</span>@if (n.InStock.Length > 0) { <span>· have: @n.InStock</span> }</div>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+    <p class="small muted" style="margin-top:10px">Nothing goes on your shopping list until you press the button. Quantities are added up across meals and scaled to the servings you planned.</p>
+}
+else if (tab == "recipes")
+{
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn primary" @onclick="NewRecipe"><Icon Name="plus" Size="15" /> New recipe</button>
+        <input type="search" placeholder="Search recipes…" @bind="recipeSearch" @bind:event="oninput" style="max-width:260px" />
+    </div>
+    <div class="card flush">
+        <ul class="list">
+            @if (recipes.Count == 0) { <li class="empty">No recipes yet. Add your own, or plan a meal by name and let the AI draft one.</li> }
+            @foreach (var r in recipes.Where(r => string.IsNullOrWhiteSpace(recipeSearch) || r.Name.Contains(recipeSearch, StringComparison.OrdinalIgnoreCase) || r.Tags.Any(t => t.Contains(recipeSearch, StringComparison.OrdinalIgnoreCase))))
+            {
+                var conflicts = Meals.DietConflicts(r);
+                <li class="row clickable" @onclick="() => EditRecipe(r)">
+                    <Icon Name="pot" Size="18" />
+                    <div class="grow">
+                        <div class="title">@r.Name @if (r.AiGenerated) { <span class="badge ai">AI</span> }</div>
+                        <div class="meta">
+                            <span>serves @r.Servings</span><span>· @r.Effort.ToString().ToLowerInvariant()</span>
+                            @if (r.Minutes is { } m) { <span>· @m min</span> }
+                            @if (r.VariantOf is { } vo && Meals.Recipes.Get(vo) is { } parent) { <span>· version of @parent.Name</span> }
+                            @foreach (var t in r.Tags.Take(4)) { <span class="badge">@t</span> }
+                            @if (conflicts.Count > 0) { <span class="badge warn" title="@string.Join(", ", conflicts)">check: @conflicts[0]</span> }
+                        </div>
+                    </div>
+                </li>
+            }
+        </ul>
+    </div>
+}
+else
+{
+    <div class="card" style="max-width:720px">
+        <h2 style="margin-top:0">Dietary needs & preferences</h2>
+        <p class="small muted">Every AI suggestion and adapted recipe follows these. LifeHub also flags ingredients in your recipes that might clash.</p>
+        <div class="field"><label>Requirements</label>
+            <div class="chips" style="margin-bottom:8px">
+                @foreach (var r in reqs.ToList()) { <button class="chip on" @onclick="() => reqs.Remove(r)">@r ×</button> }
+            </div>
+            <div class="chips" style="margin-bottom:8px">
+                @foreach (var r in CommonReqs.Where(c => !reqs.Contains(c))) { <button class="chip" @onclick="() => reqs.Add(r)">+ @r</button> }
+            </div>
+            <div class="inline-form" style="max-width:360px"><input type="text" placeholder="Something else, e.g. low sodium" @bind="newReq" /><button class="btn" @onclick="AddReq">Add</button></div>
+        </div>
+        <div class="field"><label>Preferences</label><textarea rows="3" @bind="prefs" placeholder="e.g. We like spicy food. Quick dinners on weekdays. One of us doesn't like mushrooms."></textarea></div>
+        <div class="form-grid">
+            <div class="field"><label>Usual servings</label><input type="number" min="1" max="20" @bind="servings" /></div>
+            <div class="field"><label>Plan these meals</label>
+                <div class="chips">
+                    @foreach (var s in new[] { "Breakfast", "Lunch", "Dinner" })
+                    {
+                        <button class="chip @(slots.Contains(s) ? "on" : "")" @onclick="() => ToggleSlot(s)">@s</button>
+                    }
+                </div>
+            </div>
+        </div>
+        <button class="btn primary" @onclick="SaveNeeds">Save</button>
+    </div>
+}
+
+<Modal Open="addOpen" OpenChanged="v => addOpen = v" Title="@($"{addSlot} · {addDate:ddd d MMM}")">
+    <ChildContent>
+        <div class="form-grid">
+            <div class="field full"><label>Recipe or meal</label>
+                <input type="text" list="recipe-names" placeholder="Pick a recipe or type a meal (e.g. Takeaway, Chicken fajitas)" @bind="addTitle" @bind:event="oninput" />
+                <datalist id="recipe-names">@foreach (var r in recipes) { <option value="@r.Name"></option> }</datalist>
+                @if (!string.IsNullOrWhiteSpace(addTitle) && MatchRecipe(addTitle) is null)
+                {
+                    <div class="help small">Not one of your recipes — it'll be added as a plain meal@(Meals.AiAvailable ? ", or let the AI draft a recipe for it (so its ingredients count towards the shopping)." : ".")</div>
+                }
+            </div>
+            <div class="field"><label>Servings</label><input type="number" min="1" max="20" @bind="addServings" /></div>
+            <div class="field"><label>Repeat</label>
+                <select @bind="addRepeat"><option value="0">Just this day</option><option value="7">Same day next week too</option></select>
+            </div>
+        </div>
+        @if (draft is not null)
+        {
+            <div class="ai-block" style="margin-top:12px">
+                <div class="ai-label"><Icon Name="sparkle" Size="12" /> AI draft — check it before saving</div>
+                @RecipeView(draft)
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        @if (Meals.AiAvailable && !string.IsNullOrWhiteSpace(addTitle) && MatchRecipe(addTitle) is null)
+        {
+            <button class="btn ai left" @onclick="DraftRecipe" disabled="@busy"><Icon Name="sparkle" Size="15" /> @(busy ? "Drafting…" : draft is null ? "Draft a recipe" : "Try again")</button>
+        }
+        <button class="btn" @onclick="() => addOpen = false">Cancel</button>
+        <button class="btn primary" @onclick="AddMeal" disabled="@string.IsNullOrWhiteSpace(addTitle)">@(draft is null ? "Add" : "Save recipe & add")</button>
+    </Footer>
+</Modal>
+
+<Modal Open="editing is not null" OpenChanged="v => { if (!v) { editing = null; proposal = null; } }" Title="@(editing is null || string.IsNullOrEmpty(editing.Name) ? "New recipe" : editing.Name)" Wide="true">
+    <ChildContent>
+        @if (editing is not null)
+        {
+            <div class="form-grid">
+                <div class="field full"><label>Name</label><input type="text" @bind="editing.Name" @bind:event="oninput" /></div>
+                <div class="field"><label>Serves</label><input type="number" min="1" @bind="editing.Servings" /></div>
+                <div class="field"><label>Total minutes</label><input type="number" min="1" @bind="editing.Minutes" /></div>
+                <div class="field"><label>Effort</label><select @bind="editing.Effort">@foreach (var e in Enum.GetValues<MealEffort>()) { <option value="@e">@e</option> }</select></div>
+                <div class="field"><label>Tags (comma separated)</label><input type="text" @bind="tagsText" placeholder="vegetarian, batch cook, freezes well" /></div>
+                <div class="field full"><label>Ingredients — one per line</label><textarea rows="7" @bind="ingredientsText" placeholder="200 g rice&#10;2 onions, chopped&#10;1 tbsp olive oil"></textarea></div>
+                <div class="field full"><label>Method — one step per line</label><textarea rows="6" @bind="editing.Steps"></textarea></div>
+                <div class="field full"><label>Link</label><input type="url" @bind="editing.SourceUrl" placeholder="https://…" /></div>
+                @if (!string.IsNullOrEmpty(editing.VariantNote)) { <div class="field full"><div class="ai-block small"><span class="ai-label">AI change note</span> @editing.VariantNote</div></div> }
+            </div>
+            var conflicts = Meals.DietConflicts(editing);
+            @if (conflicts.Count > 0) { <p class="small"><span class="badge warn">Check</span> may not meet your requirements: @string.Join(", ", conflicts)</p> }
+
+            @if (Meals.AiAvailable && Meals.Recipes.Get(editing.Id) is not null)
+            {
+                <div class="card" style="margin-top:12px;border-color:var(--ai-border)">
+                    <div class="small" style="margin-bottom:8px"><span class="ai-label"><Icon Name="sparkle" Size="12" /> Adapt with AI</span> — you'll see the changes first; your recipe stays as it is unless you choose to replace it.</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        @if (Settings.Current.Meals.Requirements.Count > 0) { <button class="btn sm ai" @onclick='() => Adapt("Make it meet these requirements: " + string.Join(", ", Settings.Current.Meals.Requirements))' disabled="@busy">Meet our requirements</button> }
+                        <button class="btn sm ai" @onclick="AdaptUseUp" disabled="@busy">Use up what we have</button>
+                        <button class="btn sm ai" @onclick='() => Adapt("Make it quicker and easier for a busy weeknight")' disabled="@busy">Quicker</button>
+                        <button class="btn sm ai" @onclick='() => Adapt("Improve the flavour and make it a bit healthier, keeping it simple")' disabled="@busy">Improve it</button>
+                    </div>
+                    <div class="inline-form" style="margin-top:8px"><input type="text" placeholder="Or say what you want, e.g. make it gluten free and dairy free" @bind="customGoal" /><button class="btn sm ai" @onclick="() => Adapt(customGoal)" disabled="@(busy || string.IsNullOrWhiteSpace(customGoal))">Go</button></div>
+                    @if (busy) { <div class="small ai-text" style="margin-top:6px">Working on it…</div> }
+                </div>
+            }
+            @if (proposal is not null && editing is not null)
+            {
+                <div class="ai-block" style="margin-top:12px">
+                    <div class="ai-label"><Icon Name="sparkle" Size="12" /> Suggested version</div>
+                    @if (!string.IsNullOrWhiteSpace(proposal.VariantNote)) { <p>@proposal.VariantNote</p> }
+                    @Diff(editing, proposal)
+                    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                        <button class="btn sm primary" @onclick="SaveProposalAsNew">Save as a new version</button>
+                        <button class="btn sm" @onclick="ReplaceWithProposal">Replace this recipe</button>
+                        <button class="btn sm ghost" @onclick="() => proposal = null">Discard</button>
+                    </div>
+                </div>
+            }
+        }
+    </ChildContent>
+    <Footer>
+        @if (editing is not null && Meals.Recipes.Get(editing.Id) is not null)
+        {
+            <button class="btn danger left" @onclick="DeleteRecipe"><Icon Name="trash" Size="15" /> Delete</button>
+        }
+        <button class="btn" @onclick="() => { editing = null; proposal = null; }">Cancel</button>
+        <button class="btn primary" @onclick="SaveRecipe" disabled="@string.IsNullOrWhiteSpace(editing?.Name)">Save</button>
+    </Footer>
+</Modal>
+
+@code {
+    private string tab = "plan";
+    private int days = 7;
+    private DateOnly today, to;
+    private bool busy;
+    private List<DayContext> contexts = new();
+    private List<MealPlanEntry> entries = new();
+    private List<Recipe> recipes = new();
+    private List<MealSuggestion> suggestions = new();
+    private List<NeedLine> needs = new();
+    private List<PantryItem> unused = new();
+    private int planned, needCount;
+    private string recipeSearch = "";
+
+    // add meal
+    private bool addOpen;
+    private DateOnly addDate;
+    private string addSlot = "Dinner", addTitle = "";
+    private int addServings = 2, addRepeat;
+    private Recipe? draft;
+
+    // recipe editor
+    private Recipe? editing, proposal;
+    private string ingredientsText = "", tagsText = "", customGoal = "";
+
+    // needs
+    private List<string> reqs = new(), slots = new();
+    private string prefs = "", newReq = "";
+    private int servings = 2;
+    private static readonly string[] CommonReqs = { "gluten free", "dairy free", "vegetarian", "vegan", "nut free", "egg free", "no pork", "low carb" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Watch(Meals.Entries); Watch(Meals.Recipes); Watch(Meals.Suggestions); Watch(Meals.Notes); Watch(Kitchen.Pantry); Watch(Kitchen.Shopping);
+        var m = Settings.Current.Meals;
+        reqs = m.Requirements.ToList(); slots = m.Slots.ToList(); prefs = m.Preferences; servings = m.DefaultServings;
+        await LoadAsync();
+    }
+
+    protected override void OnDataChanged() => _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    private async Task LoadAsync()
+    {
+        today = Clock.Today;
+        to = today.AddDays(days - 1);
+        entries = Meals.EntriesFor(today, to).ToList();
+        recipes = Meals.Recipes.All().OrderBy(r => r.Name).ToList();
+        suggestions = Meals.Suggestions.Where(s => s.Status == "pending").ToList();
+        needs = Meals.Needs(today, to);
+        unused = Meals.UnusedExpiring(today, to);
+        planned = entries.Count;
+        needCount = needs.Count(n => n.Status is "need" or "have-some");
+        contexts = await Meals.DayContextsAsync(today, to);
+    }
+
+    private async Task SetDays(int d) { days = d; await LoadAsync(); }
+
+    private async Task CycleEnergy(DayContext d)
+    {
+        var next = !d.Manual ? "low" : d.Energy switch { "low" => "normal", "normal" => "high", _ => "" };
+        await Meals.SetEnergyAsync(d.Date, next);
+    }
+
+    private static string SuggestionLabel(string k) => k switch
+    {
+        "move" => "Move a meal", "tweak" => "Recipe idea", "use-up" => "Use it up", "diet" => "Dietary needs", _ => "Tip"
+    };
+
+    private async Task Suggest()
+    {
+        busy = true;
+        try
+        {
+            var list = await Meals.SuggestAsync(today, to);
+            Ui.Show(list.Count == 0 ? "No suggestions this time — the plan looks good" : $"{list.Count} suggestion{(list.Count == 1 ? "" : "s")}");
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task Apply(MealSuggestion s) => await Ui.Try(async () => Ui.Show(await Meals.ApplyAsync(s.Id)));
+
+    private async Task Cooked(MealPlanEntry e)
+    {
+        var used = await Meals.CookedAsync(e.Id, useIngredients: true);
+        Ui.Show(used > 0 ? $"Enjoy! {used} ingredient{(used == 1 ? "" : "s")} taken out of the kitchen" : "Marked as cooked");
+    }
+
+    private Recipe? MatchRecipe(string title) => recipes.FirstOrDefault(r => r.Name.Equals(title.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private void OpenAdd(DateOnly date, string slot)
+    {
+        addDate = date; addSlot = slot; addTitle = ""; addServings = Settings.Current.Meals.DefaultServings; addRepeat = 0; draft = null;
+        addOpen = true;
+    }
+
+    private async Task DraftRecipe()
+    {
+        busy = true;
+        try { draft = await Meals.DraftAsync(addTitle, addServings); }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task AddMeal()
+    {
+        var recipe = MatchRecipe(addTitle);
+        if (recipe is null && draft is not null)
+        {
+            draft.Name = string.IsNullOrWhiteSpace(draft.Name) ? addTitle.Trim() : draft.Name;
+            await Meals.Recipes.UpsertAsync(draft);
+            recipe = draft;
+        }
+        foreach (var offset in addRepeat == 7 ? new[] { 0, 7 } : new[] { 0 })
+        {
+            await Meals.Entries.UpsertAsync(new MealPlanEntry
+            {
+                Date = addDate.AddDays(offset), Slot = addSlot, RecipeId = recipe?.Id, Title = recipe is null ? addTitle.Trim() : "",
+                Servings = Math.Max(1, addServings)
+            });
+        }
+        addOpen = false;
+        draft = null;
+    }
+
+    private async Task AddNeeds()
+    {
+        var n = await Meals.AddToShoppingAsync(needs.Where(x => x.Selected));
+        Ui.Show($"{n} added to the shopping list");
+    }
+
+    // ---- recipes ----
+
+    private void NewRecipe()
+    {
+        editing = new Recipe { Servings = Settings.Current.Meals.DefaultServings };
+        ingredientsText = ""; tagsText = ""; proposal = null;
+    }
+
+    private void EditRecipe(Recipe r)
+    {
+        editing = Meals.Recipes.Get(r.Id);
+        if (editing is null) return;
+        ingredientsText = MealService.FormatIngredients(editing.Ingredients);
+        tagsText = string.Join(", ", editing.Tags);
+        proposal = null;
+    }
+
+    private void ApplyEditor()
+    {
+        if (editing is null) return;
+        editing.Ingredients = MealService.ParseIngredients(ingredientsText);
+        editing.Tags = tagsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(t => t.ToLowerInvariant()).ToList();
+    }
+
+    private async Task SaveRecipe()
+    {
+        if (editing is null) return;
+        ApplyEditor();
+        if (Meals.Recipes.Get(editing.Id) is { } before && (before.Steps != editing.Steps || MealService.FormatIngredients(before.Ingredients) != MealService.FormatIngredients(editing.Ingredients)))
+            editing.AiGenerated = false;   // you've made it yours
+        await Meals.Recipes.UpsertAsync(editing);
+        editing = null;
+        Ui.Show("Recipe saved");
+    }
+
+    private async Task DeleteRecipe()
+    {
+        if (editing is null) return;
+        await Meals.Recipes.DeleteAsync(editing.Id);
+        editing = null;
+    }
+
+    private async Task Adapt(string goal)
+    {
+        if (editing is null || string.IsNullOrWhiteSpace(goal)) return;
+        ApplyEditor();
+        busy = true;
+        try
+        {
+            var (r, summary) = await Meals.AdaptAsync(editing, goal);
+            r.VariantNote = summary;
+            proposal = r;
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private Task AdaptUseUp()
+    {
+        var items = Kitchen.ExpiringWithin(Settings.Current.General.ExpiryWarningDays + 4).Select(p => p.Name).Distinct().Take(8).ToList();
+        return Adapt(items.Count == 0 ? "Use more of what's already in the kitchen" : $"Use up: {string.Join(", ", items)} (only where it suits the dish)");
+    }
+
+    private async Task SaveProposalAsNew()
+    {
+        if (proposal is null || editing is null) return;
+        var v = await Meals.SaveVariantAsync(proposal, editing.Id, today, to);
+        Ui.Show($"Saved \"{v.Name}\" — planned meals in the next {days} days now use it");
+        proposal = null;
+        editing = null;
+    }
+
+    private async Task ReplaceWithProposal()
+    {
+        if (proposal is null || editing is null) return;
+        editing.Ingredients = proposal.Ingredients; editing.Steps = proposal.Steps; editing.Minutes = proposal.Minutes;
+        editing.Effort = proposal.Effort; editing.AiGenerated = true; editing.VariantNote = proposal.VariantNote;
+        if (proposal.Tags.Count > 0) editing.Tags = editing.Tags.Union(proposal.Tags).ToList();
+        await Meals.Recipes.UpsertAsync(editing);
+        ingredientsText = MealService.FormatIngredients(editing.Ingredients);
+        tagsText = string.Join(", ", editing.Tags);
+        proposal = null;
+        Ui.Show("Recipe updated");
+    }
+
+    // ---- needs ----
+
+    private void AddReq()
+    {
+        var r = newReq.Trim().ToLowerInvariant();
+        if (r.Length > 0 && !reqs.Contains(r)) reqs.Add(r);
+        newReq = "";
+    }
+
+    private void ToggleSlot(string s)
+    {
+        if (slots.Contains(s)) { if (slots.Count > 1) slots.Remove(s); }
+        else slots.Add(s);
+        slots = new[] { "Breakfast", "Lunch", "Dinner" }.Where(slots.Contains).ToList();
+    }
+
+    private async Task SaveNeeds() => await Ui.Try(() => Settings.UpdateAsync(s =>
+    {
+        s.Meals.Requirements = reqs.ToList(); s.Meals.Preferences = prefs; s.Meals.DefaultServings = Math.Max(1, servings); s.Meals.Slots = slots.ToList();
+    }), "Saved");
+
+    // ---- rendering helpers ----
+
+    private RenderFragment RecipeView(Recipe r) => __builder =>
+    {
+        <h4>@r.Name</h4>
+        <div class="small muted">Serves @r.Servings · @r.Effort.ToString().ToLowerInvariant()@(r.Minutes is { } m ? $" · {m} min" : "")</div>
+        <ul class="ingredient-list small">@foreach (var i in r.Ingredients) { <li>@i</li> }</ul>
+        @if (!string.IsNullOrWhiteSpace(r.Steps)) { <ol class="small">@foreach (var s in r.Steps.Split('\n')) { <li>@s</li> }</ol> }
+    };
+
+    private RenderFragment Diff(Recipe before, Recipe after) => __builder =>
+    {
+        var oldLines = before.Ingredients.Select(i => i.ToString()).ToList();
+        var newLines = after.Ingredients.Select(i => i.ToString()).ToList();
+        <div class="small" style="margin-top:6px"><strong>@after.Name</strong> · serves @after.Servings@(after.Minutes is { } m ? $" · {m} min" : "") · @after.Effort.ToString().ToLowerInvariant()</div>
+        <ul class="ingredient-list small">
+            @foreach (var l in newLines) { <li class="@(oldLines.Contains(l) ? "" : "diff-add")">@(oldLines.Contains(l) ? "" : "+ ")@l</li> }
+            @foreach (var l in oldLines.Where(l => !newLines.Contains(l))) { <li class="diff-del">@l</li> }
+        </ul>
+        @if (!string.IsNullOrWhiteSpace(after.Steps)) { <details><summary class="small">Method</summary><ol class="small">@foreach (var s in after.Steps.Split('\n')) { <li>@s</li> }</ol></details> }
+    };
+}

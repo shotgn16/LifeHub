@@ -56,7 +56,8 @@ also use **Rebuild** on the add-on page.
   port for `8099/tcp`. This lets phones and PCs reach LifeHub without going through HA. Set a
   LifeHub login first under **Settings → Security**. See [Remote access](remote-access.md).
 - **Ollama.** HA OS isn't a good place to run an LLM. Run Ollama on another VM or PC, then enter
-  its address in **Settings → AI**. See [Email & AI](email-and-ai.md).
+  its address in **Settings → AI**. See [Email & AI](email-and-ai.md). For the photo features
+  (study notes, groceries), also `ollama pull qwen2.5vl:7b` and set it as the vision model.
 
 ---
 

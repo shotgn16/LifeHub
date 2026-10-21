@@ -1,0 +1,306 @@
+@page "/bible"
+@inherits LiveComponent
+@inject BibleService Bible
+@inject BibleStudyService Studies
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+@inject NavigationManager Nav
+
+<PageTitle>Bible · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Bible</h1>
+        <div class="sub">@(streak > 0 ? $"{streak}-day streak" : "Start a streak today") · @readThisWeek of the last 7 days · @Math.Round(minutesToday) min in the app today</div>
+    </div>
+    <div class="actions">
+        <a class="btn primary" href="bible/study/new"><Icon Name="plus" Size="15" /> New study</a>
+        <button class="btn" @onclick="() => logOpen = true"><Icon Name="book" Size="15" /> Log reading</button>
+    </div>
+</div>
+
+<div class="tabs">
+    <button class="tab @(tab == "today" ? "on" : "")" @onclick='() => tab = "today"'>Today</button>
+    <button class="tab @(tab == "studies" ? "on" : "")" @onclick='() => tab = "studies"'>Studies <span class="muted">· @studies.Count</span></button>
+    <button class="tab @(tab == "progress" ? "on" : "")" @onclick='() => tab = "progress"'>Progress</button>
+</div>
+
+@if (tab == "today")
+{
+    <div class="grid cols-2" style="align-items:start">
+        <div>
+            <div class="card verse-card" style="margin-bottom:14px">
+                <div class="card-head">
+                    <h3>Verse of the day</h3>
+                    @if (verse is { Read: true }) { <span class="badge ok right">Read @(verse.ReadHow == "app" ? "· in the app" : "")</span> }
+                </div>
+                @if (verse is null || string.IsNullOrWhiteSpace(verse.Reference))
+                {
+                    @if (Bible.HasYouVersion)
+                    {
+                        <p class="small muted">Fetching today's verse from YouVersion…</p>
+                        <button class="btn sm" @onclick="FetchVerse">Fetch now</button>
+                    }
+                    else
+                    {
+                        <p class="small muted" style="margin-top:0">Type today's verse (or add a free YouVersion key in Settings → Bible to get the same verse as the app automatically).</p>
+                        <div class="inline-form">
+                            <input type="text" placeholder="e.g. John 3:16" @bind="verseInput" @onkeydown="VerseKey" />
+                            <button class="btn" @onclick="SetVerse" disabled="@string.IsNullOrWhiteSpace(verseInput)">Set</button>
+                        </div>
+                    }
+                }
+                else
+                {
+                    @if (!string.IsNullOrWhiteSpace(verse.Text)) { <div class="verse-text">@verse.Text</div> }
+                    <div class="verse-ref">@verse.Reference</div>
+                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+                        <a class="btn" href="@Bible.LinkFor(verse.Reference)" target="_blank" rel="noopener"><Icon Name="link" Size="15" /> Open in YouVersion</a>
+                        @if (!verse.Read)
+                        {
+                            <button class="btn primary" @onclick='() => Bible.MarkVerseReadAsync(today, "manual")'><Icon Name="check" Size="15" /> I've read it</button>
+                        }
+                        else
+                        {
+                            <button class="btn ghost sm" @onclick='() => Bible.MarkVerseReadAsync(today, "manual", false)'>Undo</button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="card flush" style="margin-bottom:14px">
+                <div class="card-head"><h2>Today's reading</h2></div>
+                <ul class="list">
+                    @if (todayList.Count == 0) { <li class="empty small">Nothing else on the list@(Settings.Current.Bible.PlanEnabled ? "" : " — turn on a reading plan in Settings → Bible, or add a passage")</li> }
+                    @foreach (var p in todayList)
+                    {
+                        <li class="row">
+                            <button class="tick @(p.Done ? "done" : "")" @onclick="() => Bible.CompleteAsync(p.Id, !p.Done)"><Icon Name="check" Size="13" Stroke="3" /></button>
+                            <div class="grow">
+                                <div class="title @(p.Done ? "strike" : "")">@p.Reference</div>
+                                <div class="meta">
+                                    @if (p.Kind == "catch-up") { <span class="badge warn">Catch up</span> <span>missed verse from @(p.OriginalDate?.ToString("ddd d MMM") ?? "earlier")</span> }
+                                    else if (p.Kind == "plan") { <span>Reading plan</span> }
+                                    else { <span>Added by you</span> }
+                                    @if (p.TimesCarried > 0 && p.Kind != "catch-up") { <span>· carried over @p.TimesCarried×</span> }
+                                </div>
+                            </div>
+                            <a class="icon-btn" href="@Bible.LinkFor(p.Reference)" target="_blank" rel="noopener" title="Open"><Icon Name="link" Size="15" /></a>
+                        </li>
+                    }
+                </ul>
+                <div style="padding:10px 14px">
+                    <div class="inline-form">
+                        <input type="text" placeholder="Add a passage to today, e.g. Psalm 23" @bind="addInput" @onkeydown="AddKey" />
+                        <button class="btn" @onclick="AddToList" disabled="@string.IsNullOrWhiteSpace(addInput)"><Icon Name="plus" Size="15" /></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="card" style="margin-bottom:14px">
+                <div style="display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap">
+                    <div><div class="streak">@streak</div><div class="small muted">day streak</div></div>
+                    <div><div class="streak">@readThisWeek<span class="muted" style="font-size:16px">/7</span></div><div class="small muted">this week</div></div>
+                    <div><div class="streak">@studies.Count(s => s.Date >= today.AddDays(-30))</div><div class="small muted">studies (30 days)</div></div>
+                </div>
+                <div class="heatmap" style="margin-top:14px" title="Last 16 weeks">
+                    @foreach (var d in heat)
+                    {
+                        <i class="l@(d.Level(Settings.Current.Bible.MinMinutes)) @(d.Date == today ? "today" : "")" title="@d.Date.ToString("ddd d MMM"): @Describe(d)"></i>
+                    }
+                </div>
+                <div class="tiny muted" style="margin-top:6px">Darker = read · darkest = studied. Time in the Bible app counts after @Settings.Current.Bible.MinMinutes minutes.</div>
+            </div>
+
+            <div class="card flush">
+                <div class="card-head"><h2>Recently read</h2></div>
+                <ul class="list">
+                    @if (recent.Count == 0) { <li class="empty small">Nothing logged yet.</li> }
+                    @foreach (var r in recent)
+                    {
+                        <li class="row">
+                            <div class="grow">
+                                <div class="title small">@r.Reference</div>
+                                <div class="meta"><span>@Fmt.RelDay(r.Date, today)</span><span>· @SourceLabel(r.Source)</span>@if (r.Minutes is { } m) { <span>· @m min</span> }</div>
+                            </div>
+                            <button class="icon-btn" title="Remove" @onclick="() => Bible.Readings.DeleteAsync(r.Id)"><Icon Name="x" Size="14" /></button>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+}
+else if (tab == "studies")
+{
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <input type="search" placeholder="Search studies, passages, themes…" @bind="search" @bind:event="oninput" style="max-width:340px" />
+    </div>
+    <div class="card flush">
+        <ul class="list">
+            @if (VisibleStudies.Count == 0) { <li class="empty">No studies yet. <a href="bible/study/new">Add your first one</a> — type notes or upload photos/PDFs of them.</li> }
+            @foreach (var s in VisibleStudies)
+            {
+                <li class="row clickable" @onclick='() => Nav.NavigateTo($"bible/study/{s.Id}")'>
+                    <div class="grow">
+                        <div class="title">@(string.IsNullOrWhiteSpace(s.Title) ? string.Join(", ", s.Passages) : s.Title)</div>
+                        <div class="meta">
+                            <span>@s.Date.ToString("d MMM yyyy")</span>
+                            @if (s.Passages.Count > 0) { <span>· @string.Join(", ", s.Passages.Take(3))</span> }
+                            @if (s.Attachments.Count > 0) { <span>· @s.Attachments.Count file@(s.Attachments.Count == 1 ? "" : "s")</span> }
+                            @foreach (var t in (s.Breakdown?.Themes ?? new()).Take(3)) { <span class="badge ai">@t</span> }
+                        </div>
+                    </div>
+                    @if (s.Insights.Count(i => !i.Dismissed) > 0) { <span class="badge ai" title="AI insights"><Icon Name="sparkle" Size="12" /> @s.Insights.Count(i => !i.Dismissed)</span> }
+                    <Icon Name="right" Size="16" />
+                </li>
+            }
+        </ul>
+    </div>
+}
+else
+{
+    var coverage = Bible.Coverage();
+    var chaptersRead = coverage.Values.Sum(v => v.Count);
+    <div class="grid cols-3" style="margin-bottom:16px">
+        <div class="card stat"><span class="label">Chapters read</span><span class="value">@chaptersRead</span><span class="hint">of @BibleBooks.TotalChapters (@(chaptersRead * 100 / BibleBooks.TotalChapters)%)</span></div>
+        <div class="card stat"><span class="label">Books started</span><span class="value">@coverage.Count</span><span class="hint">of 66</span></div>
+        <div class="card stat"><span class="label">Days read (90 days)</span><span class="value">@Bible.LastDays(90).Count(d => d.Level(Settings.Current.Bible.MinMinutes) >= 2)</span></div>
+    </div>
+    @foreach (var nt in new[] { false, true })
+    {
+        <div class="card" style="margin-bottom:14px">
+            <h3 style="margin-top:0">@(nt ? "New Testament" : "Old Testament")</h3>
+            <div class="book-grid">
+                @foreach (var b in BibleBooks.All.Where(b => b.NewTestament == nt))
+                {
+                    var read = coverage.TryGetValue(b.Index, out var set) ? set.Count : 0;
+                    <div class="b" title="@read of @b.Chapters chapters">
+                        <span class="@(read == 0 ? "muted" : "")">@b.Name</span> <span class="tiny muted">@read/@b.Chapters</span>
+                        <div class="bar"><span style="width:@((read * 100 / b.Chapters).ToString(CultureInfo.InvariantCulture))%"></span></div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+
+<Modal Open="logOpen" OpenChanged="v => logOpen = v" Title="Log a reading">
+    <ChildContent>
+        <div class="form-grid">
+            <div class="field full"><label>Passage(s)</label><input type="text" placeholder="e.g. Romans 8; Psalm 23" @bind="logRef" @bind:event="oninput" />
+                @if (!string.IsNullOrWhiteSpace(logRef))
+                {
+                    var parsed = BibleBooks.Parse(logRef);
+                    <div class="help small">@(parsed.Count == 0 ? "Not recognised — check the book name" : "→ " + string.Join("; ", parsed))</div>
+                }
+            </div>
+            <div class="field"><label>Date</label><input type="date" @bind="logDate" /></div>
+            <div class="field"><label>Minutes (optional)</label><input type="number" min="0" @bind="logMinutes" /></div>
+        </div>
+    </ChildContent>
+    <Footer>
+        <button class="btn" @onclick="() => logOpen = false">Cancel</button>
+        <button class="btn primary" @onclick="LogReading" disabled="@(BibleBooks.Parse(logRef).Count == 0)">Save</button>
+    </Footer>
+</Modal>
+
+@code {
+    private string tab = "today";
+    private DateOnly today;
+    private DailyVerse? verse;
+    private List<ReadingPlanItem> todayList = new();
+    private List<BibleReading> recent = new();
+    private List<BibleStudy> studies = new();
+    private IReadOnlyList<BibleDay> heat = Array.Empty<BibleDay>();
+    private int streak, readThisWeek;
+    private double minutesToday;
+    private string verseInput = "", addInput = "", search = "";
+    private bool logOpen;
+    private string logRef = "";
+    private DateOnly logDate;
+    private int? logMinutes;
+
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Tab)) tab = Tab;
+        Watch(Bible.Readings); Watch(Bible.Verses); Watch(Bible.Plan); Watch(Bible.Sessions); Watch(Bible.Studies);
+        logDate = Clock.Today;
+        Load();
+        await Bible.RollDayAsync();
+        Load();
+    }
+
+    protected override void OnDataChanged() => Load();
+
+    private void Load()
+    {
+        today = Clock.Today;
+        verse = Bible.VerseFor(today);
+        todayList = Bible.TodayList().ToList();
+        recent = Bible.Recent(15).ToList();
+        studies = Bible.Studies.All().OrderByDescending(s => s.Date).ThenByDescending(s => s.CreatedUtc).ToList();
+        // Start the heatmap on a Monday so the rows line up with weekdays.
+        heat = Bible.LastDays(7 * 15 + ((int)today.DayOfWeek + 6) % 7 + 1);
+        streak = Bible.Streak();
+        readThisWeek = Bible.LastDays(7).Count(d => d.Level(Settings.Current.Bible.MinMinutes) >= 2);
+        minutesToday = Bible.AppMinutes(today);
+    }
+
+    private List<BibleStudy> VisibleStudies => studies.Where(s => string.IsNullOrWhiteSpace(search) ||
+        s.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+        s.Passages.Any(p => p.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+        s.Tags.Any(t => t.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+        (s.Breakdown?.Themes.Any(t => t.Contains(search, StringComparison.OrdinalIgnoreCase)) ?? false) ||
+        s.Notes.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private string Describe(BibleDay d)
+    {
+        var parts = new List<string>();
+        if (d.VerseRead) parts.Add("verse read");
+        if (d.Readings > 0) parts.Add($"{d.Readings} reading{(d.Readings == 1 ? "" : "s")}");
+        if (d.AppMinutes >= 0.5) parts.Add($"{Math.Round(d.AppMinutes)} min in app");
+        if (d.Studies > 0) parts.Add($"{d.Studies} stud{(d.Studies == 1 ? "y" : "ies")}");
+        return parts.Count == 0 ? "nothing" : string.Join(", ", parts);
+    }
+
+    private static string SourceLabel(string s) => s switch
+    {
+        "verse" => "verse of the day", "plan" => "reading plan", "catch-up" => "catch-up", "study" => "study",
+        "api" => "shortcut / API", _ => "logged"
+    };
+
+    private async Task FetchVerse() => await Ui.Try(async () => await Bible.FetchVerseAsync(today), "Verse updated");
+
+    private async Task VerseKey(KeyboardEventArgs e) { if (e.Key == "Enter") await SetVerse(); }
+
+    private async Task SetVerse()
+    {
+        if (string.IsNullOrWhiteSpace(verseInput)) return;
+        await Bible.SetVerseAsync(today, verseInput);
+        verseInput = "";
+    }
+
+    private async Task AddKey(KeyboardEventArgs e) { if (e.Key == "Enter") await AddToList(); }
+
+    private async Task AddToList()
+    {
+        if (BibleBooks.Parse(addInput).Count == 0) { Ui.Show("Couldn't recognise that passage", true); return; }
+        await Bible.AddToListAsync(addInput);
+        addInput = "";
+    }
+
+    private async Task LogReading()
+    {
+        await Bible.LogReadingAsync(logDate, logRef, "manual", logMinutes);
+        logOpen = false;
+        logRef = "";
+        logMinutes = null;
+        Ui.Show("Reading logged");
+    }
+}

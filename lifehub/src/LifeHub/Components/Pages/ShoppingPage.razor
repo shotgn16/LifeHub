@@ -13,7 +13,6 @@
     </div>
     <div class="actions">
         <a class="btn" href="scan?mode=shopping"><Icon Name="barcode" Size="15" /> Scan</a>
-        <button class="btn" @onclick="Refresh" title="Add staples that are low or about to run out"><Icon Name="refresh" Size="15" /> Suggest</button>
         <button class="btn primary" @onclick="PutAway" disabled="@(!items.Any(i => i.Checked))"><Icon Name="box" Size="15" /> Put away ticked</button>
     </div>
 </div>
@@ -25,6 +24,27 @@
     </div>
     <datalist id="shop-staples">@foreach (var s in Kitchen.Staples.All()) { <option value="@s.Name"></option> }</datalist>
 </div>
+
+@if (suggestions.Count > 0)
+{
+    <div class="card suggest-card" style="margin-bottom:14px">
+        <div class="card-head" style="margin-bottom:6px">
+            <h3>Suggestions <span class="muted small">· staples running low</span></h3>
+            <button class="btn ghost sm right" @onclick="() => showSuggestions = !showSuggestions">@(showSuggestions ? "Hide" : $"Show {suggestions.Count}")</button>
+        </div>
+        @if (showSuggestions)
+        {
+            <div class="chips">
+                @foreach (var sg in suggestions)
+                {
+                    <button class="chip" title="@sg.Reason — tap to add" @onclick="() => AddSuggestion(sg)"><Icon Name="plus" Size="13" /> @sg.Staple.Name <span class="muted">· @sg.Reason</span></button>
+                }
+                @if (suggestions.Count > 1) { <button class="chip" @onclick="AddAllSuggestions"><Icon Name="plus" Size="13" /> Add all</button> }
+            </div>
+            <div class="help small muted" style="margin-top:6px">Only added if you tap them. Your list only contains things you add, scan, or put on the linked Home Assistant list.</div>
+        }
+    </div>
+}
 
 <div class="card flush">
     @if (items.Count == 0)
@@ -54,14 +74,33 @@
     private List<ShoppingItem> items = new();
     private string text = "";
 
+    private List<ShoppingSuggestion> suggestions = new();
+    private bool showSuggestions = true;
+
     protected override void OnInitialized()
     {
-        Watch(Kitchen.Shopping);
+        Watch(Kitchen.Shopping); Watch(Kitchen.Pantry); Watch(Kitchen.Staples);
         Load();
     }
 
     protected override void OnDataChanged() => Load();
-    private void Load() => items = Kitchen.Shopping.All().ToList();
+    private void Load()
+    {
+        items = Kitchen.Shopping.All().ToList();
+        suggestions = Kitchen.ShoppingSuggestions().ToList();
+    }
+
+    private async Task AddSuggestion(ShoppingSuggestion sg)
+    {
+        await Kitchen.AddSuggestionAsync(sg);
+        Ui.Show($"{sg.Staple.Name} added");
+    }
+
+    private async Task AddAllSuggestions()
+    {
+        foreach (var sg in suggestions.ToList()) await Kitchen.AddSuggestionAsync(sg);
+        Ui.Show($"{suggestions.Count} added");
+    }
 
     private int CategoryOrder(string c)
     {
@@ -75,7 +114,7 @@
             <button class="tick square @(i.Checked ? "done" : "")" @onclick="() => Kitchen.ToggleAsync(i.Id)"><Icon Name="check" Size="13" Stroke="3" /></button>
             <div class="grow">
                 <div class="title @(i.Checked ? "strike" : "")">@i.Name @if (i.Quantity != 1 || !string.IsNullOrEmpty(i.Unit)) { <span class="muted small">× @Fmt.Qty(i.Quantity, i.Unit)</span> }</div>
-                @if (i.Reason != "Manual") { <div class="meta"><span class="badge @(i.Reason is "Low stock" or "Expired" ? "warn" : "info")">@i.Reason</span></div> }
+                @if (i.Reason is not ("Manual" or "")) { <div class="meta"><span class="badge info">@i.Reason</span></div> }
             </div>
             <button class="icon-btn" title="−" @onclick="() => Bump(i, -1)" disabled="@(i.Quantity <= 1)"><Icon Name="down" Size="15" /></button>
             <button class="icon-btn" title="+" @onclick="() => Bump(i, 1)"><Icon Name="up" Size="15" /></button>
@@ -109,12 +148,6 @@
         confirmClear = false;
         await Kitchen.Shopping.DeleteManyAsync(items.Select(i => i.Id));
         Ui.Show("Shopping list cleared");
-    }
-
-    private async Task Refresh()
-    {
-        var n = await Kitchen.RefreshAutoShoppingAsync();
-        Ui.Show(n == 0 ? "Nothing new needed" : $"Added {n} item(s)");
     }
 
     private async Task PutAway()
