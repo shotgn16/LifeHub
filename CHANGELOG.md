@@ -9,6 +9,13 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [1.3.2] – 2026-10-24
+
+### Changed
+- Model advice now points to **`qwen3-vl:4b-instruct`** (and `8b-instruct`). The plain `qwen3-vl:4b`
+  tag is the *thinking* version, which reasons before every answer even when asked not to, and is
+  slow on small machines. The instruct version is the same size and answers straight away.
+
 ## [1.3.1] – 2026-10-24
 
 ### Fixed
@@ -208,7 +215,8 @@ on the add-on page. That file is a shorter version of this one.
   - Nightly backups.
 - Runs as a Home Assistant add-on (ingress), with Docker, or on Plesk (Docker, .NET Toolkit or IIS).
 
-[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/Shotgn16/LifeHub/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/Shotgn16/LifeHub/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Shotgn16/LifeHub/releases/tag/v1.3.0
 [1.2.1]: https://github.com/Shotgn16/LifeHub/releases/tag/v1.2.1

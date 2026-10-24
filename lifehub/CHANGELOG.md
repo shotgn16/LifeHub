@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.2
+- Model advice: use `qwen3-vl:4b-instruct`. The plain `qwen3-vl:4b` is the slower "thinking" version.
+
 ## 1.3.1
 - Fix: no answer from "thinking" models such as qwen3-vl. Thinking is now off by default (you can
   turn it on in Settings → AI). Answers are length-capped, errors are clearer, and Try it shows a timer.

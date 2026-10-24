@@ -24,15 +24,15 @@
         </div>
         <div class="field">
             <label>Vision model <span class="muted">(optional — reads photos)</span></label>
-            <input type="text" @bind="o.VisionModel" list="ollama-models" placeholder="e.g. qwen3-vl:4b" />
-            <div class="help">Used to read handwritten study notes and to find groceries and dates in photos. Good choices: <code>qwen3-vl:4b</code> (fine on 8 GB, and good enough to be your main model too), <code>qwen3-vl:8b</code>, <code>gemma3:4b</code> (<code>ollama pull qwen3-vl:4b</code>).</div>
+            <input type="text" @bind="o.VisionModel" list="ollama-models" placeholder="e.g. qwen3-vl:4b-instruct" />
+            <div class="help">Used to read handwritten study notes and to find groceries and dates in photos. Good choices: <code>qwen3-vl:4b-instruct</code> (fine on 8 GB, and good enough to be your main model too), <code>qwen3-vl:8b-instruct</code>, <code>gemma3:4b</code> (<code>ollama pull qwen3-vl:4b-instruct</code>).</div>
         </div>
         <div class="field">
             <label>Embedding model <span class="muted">(optional — links studies by meaning)</span></label>
             <input type="text" @bind="o.EmbeddingModel" list="ollama-models" placeholder="e.g. nomic-embed-text" />
             <div class="help">Small and fast. Without it, studies are still linked by passages, themes and people.</div>
         </div>
-        <label class="check"><input type="checkbox" @bind="o.Thinking" /> <span>Let "thinking" models reason first <span class="muted small">(qwen3, qwen3-vl, deepseek-r1 — better on big machines, but can take minutes; leave off on small ones)</span></span></label>
+        <label class="check"><input type="checkbox" @bind="o.Thinking" /> <span>Let "thinking" models reason first <span class="muted small">(qwen3, qwen3-vl, deepseek-r1 — better on big machines, but can take minutes; leave off on small ones. Tip: plain <code>qwen3-vl:4b</code> is a thinking model — use <code>qwen3-vl:4b-instruct</code>)</span></span></label>
         <div class="form-grid">
             <div class="field"><label>Timeout (seconds)</label><input type="number" min="10" @bind="o.TimeoutSeconds" /></div>
             <div class="field"><label>Temperature</label><input type="number" min="0" max="1" step="0.05" @bind="o.Temperature" /></div>

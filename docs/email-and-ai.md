@@ -19,7 +19,7 @@ Mailbox ──► LifeHub ──► Ollama (JSON schema) ──► checks & junk
    [Service]
    Environment="OLLAMA_HOST=0.0.0.0"
    ```
-3. Pull a model. On a small machine (8 GB, e.g. Mac mini M-series) use **`qwen3-vl:4b`** for both the
+3. Pull a model. On a small machine (8 GB, e.g. Mac mini M-series) use **`qwen3-vl:4b-instruct`** for both the
    main model and the vision model, so only one model sits in memory.
    Otherwise pull a model: `ollama pull qwen2.5:7b` (the default, and good with dates and JSON).
    `llama3.1:8b` and `mistral-nemo` also work. You need **Ollama 0.5 or later** for structured
@@ -144,7 +144,7 @@ Two optional models help with these. Set them in **Settings → AI**:
 
 | Model | For | Example |
 |---|---|---|
-| Vision model | photos and scans | `ollama pull qwen3-vl:4b` |
+| Vision model | photos and scans | `ollama pull qwen3-vl:4b-instruct` |
 | Embedding model | linking studies by meaning | `ollama pull nomic-embed-text` |
 
 ## Privacy

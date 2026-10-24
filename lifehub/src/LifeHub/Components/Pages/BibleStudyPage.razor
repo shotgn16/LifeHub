@@ -114,7 +114,7 @@
                 }
                 @if (!Studies.HasVision && study.Attachments.Any(a => a.IsImage))
                 {
-                    <div class="help small"><span class="badge warn">Tip</span> Set a vision model (e.g. qwen3-vl:4b) in Settings → AI so photos of handwriting can be read.</div>
+                    <div class="help small"><span class="badge warn">Tip</span> Set a vision model (e.g. qwen3-vl:4b-instruct) in Settings → AI so photos of handwriting can be read.</div>
                 }
                 @if (working is not null)
                 {

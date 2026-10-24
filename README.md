@@ -112,7 +112,7 @@ For Plesk, IIS, Cloudflare Tunnel and development setups, see the **[installatio
 
 - **To run:** Docker, or the ASP.NET Core 8 runtime. The add-on supports amd64 and aarch64.
 - **For AI:** an [Ollama](https://ollama.com) server (0.5 or later) on your network. A 7–8B model
-  such as `qwen2.5:7b` works well. Add a vision model such as `qwen3-vl:4b` for photos and
+  such as `qwen2.5:7b` works well. Add a vision model such as `qwen3-vl:4b-instruct` for photos and
   handwriting.
 - **To build:** the .NET 8 SDK.
 
