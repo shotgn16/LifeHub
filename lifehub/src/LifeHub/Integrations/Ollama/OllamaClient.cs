@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -61,25 +62,60 @@ public sealed class OllamaClient
     private async Task<string> ChatAsync(string system, string user, JsonObject? schema, IReadOnlyList<byte[]>? images, string? model, CancellationToken ct)
     {
         var o = _settings.Current.Ollama;
-        var userMsg = new JsonObject { ["role"] = "user", ["content"] = user };
-        if (images is { Count: > 0 })
-            userMsg["images"] = new JsonArray(images.Select(i => (JsonNode)JsonValue.Create(Convert.ToBase64String(i))!).ToArray());
-        var request = new JsonObject
+        JsonObject Build(bool sendThink)
         {
-            ["model"] = model ?? (images is { Count: > 0 } ? VisionModel : o.Model),
-            ["stream"] = false,
-            ["options"] = new JsonObject { ["temperature"] = o.Temperature },
-            ["messages"] = new JsonArray
+            var userMsg = new JsonObject { ["role"] = "user", ["content"] = user };
+            if (images is { Count: > 0 })
+                userMsg["images"] = new JsonArray(images.Select(i => (JsonNode)JsonValue.Create(Convert.ToBase64String(i))!).ToArray());
+            var request = new JsonObject
             {
-                new JsonObject { ["role"] = "system", ["content"] = system },
-                userMsg
-            }
-        };
-        if (schema is not null) request["format"] = schema;
-        using var r = await Client().PostAsync("api/chat", JsonHttp.Body(request), ct);
-        var body = await r.Content.ReadAsStringAsync(ct);
-        if (!r.IsSuccessStatusCode) throw new InvalidOperationException($"Ollama returned {(int)r.StatusCode}: {body[..Math.Min(300, body.Length)]}");
-        return JsonDocument.Parse(body).RootElement.GetProperty("message").GetProperty("content").GetString() ?? "";
+                ["model"] = model ?? (images is { Count: > 0 } ? VisionModel : o.Model),
+                ["stream"] = false,
+                ["options"] = new JsonObject
+                {
+                    ["temperature"] = o.Temperature,
+                    ["num_ctx"] = Math.Clamp(o.ContextTokens, 2048, 131072),
+                    ["num_predict"] = Math.Clamp(o.MaxAnswerTokens, 256, 16384)
+                },
+                ["messages"] = new JsonArray
+                {
+                    new JsonObject { ["role"] = "system", ["content"] = system },
+                    userMsg
+                }
+            };
+            // Thinking models (qwen3, qwen3-vl…) can otherwise "reason" for minutes before answering.
+            if (sendThink) request["think"] = o.Thinking;
+            if (schema is not null) request["format"] = schema.DeepClone();
+            return request;
+        }
+
+        var (status, body) = await PostChatAsync(Build(sendThink: true), ct);
+        // Older Ollama versions or models without a thinking mode may reject the "think" option.
+        if (status == 400 && body.Contains("think", StringComparison.OrdinalIgnoreCase))
+            (status, body) = await PostChatAsync(Build(sendThink: false), ct);
+        if (status is < 200 or >= 300) throw new InvalidOperationException($"Ollama returned {status}: {body[..Math.Min(300, body.Length)]}");
+        var content = JsonDocument.Parse(body).RootElement.GetProperty("message").GetProperty("content").GetString() ?? "";
+        // Some model templates leak their reasoning into the answer.
+        return Regex.Replace(content, @"<think>[\s\S]*?</think>", "").Trim();
+    }
+
+    private async Task<(int Status, string Body)> PostChatAsync(JsonObject request, CancellationToken ct)
+    {
+        try
+        {
+            using var r = await Client().PostAsync("api/chat", JsonHttp.Body(request), ct);
+            return ((int)r.StatusCode, await r.Content.ReadAsStringAsync(ct));
+        }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            var o = _settings.Current.Ollama;
+            throw new TimeoutException($"Ollama didn't answer within {o.TimeoutSeconds} seconds. The first request after a while loads the model, which can take a minute — " +
+                "try again, raise the timeout in Settings → AI, or use a smaller model.");
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new InvalidOperationException($"Can't reach Ollama at {_settings.Current.Ollama.Url}: {ex.Message}. Check it's running and allows network connections (OLLAMA_HOST / \"Expose Ollama to the network\").");
+        }
     }
 
     public bool HasEmbeddings => IsConfigured && !string.IsNullOrWhiteSpace(_settings.Current.Ollama.EmbeddingModel);

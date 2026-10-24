@@ -24,14 +24,15 @@
         </div>
         <div class="field">
             <label>Vision model <span class="muted">(optional — reads photos)</span></label>
-            <input type="text" @bind="o.VisionModel" list="ollama-models" placeholder="e.g. qwen2.5vl:7b" />
-            <div class="help">Used to read handwritten study notes and to find groceries and dates in photos. Good choices: <code>qwen2.5vl:7b</code>, <code>llama3.2-vision</code>, <code>minicpm-v</code> (<code>ollama pull qwen2.5vl:7b</code>).</div>
+            <input type="text" @bind="o.VisionModel" list="ollama-models" placeholder="e.g. qwen3-vl:4b" />
+            <div class="help">Used to read handwritten study notes and to find groceries and dates in photos. Good choices: <code>qwen3-vl:4b</code> (fine on 8 GB, and good enough to be your main model too), <code>qwen3-vl:8b</code>, <code>gemma3:4b</code> (<code>ollama pull qwen3-vl:4b</code>).</div>
         </div>
         <div class="field">
             <label>Embedding model <span class="muted">(optional — links studies by meaning)</span></label>
             <input type="text" @bind="o.EmbeddingModel" list="ollama-models" placeholder="e.g. nomic-embed-text" />
             <div class="help">Small and fast. Without it, studies are still linked by passages, themes and people.</div>
         </div>
+        <label class="check"><input type="checkbox" @bind="o.Thinking" /> <span>Let "thinking" models reason first <span class="muted small">(qwen3, qwen3-vl, deepseek-r1 — better on big machines, but can take minutes; leave off on small ones)</span></span></label>
         <div class="form-grid">
             <div class="field"><label>Timeout (seconds)</label><input type="number" min="10" @bind="o.TimeoutSeconds" /></div>
             <div class="field"><label>Temperature</label><input type="number" min="0" max="1" step="0.05" @bind="o.Temperature" /></div>
@@ -66,7 +67,7 @@
     <h2 style="margin-bottom:10px">Try it</h2>
     <textarea @bind="sample" placeholder="Paste an email or type a note…"></textarea>
     <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn" @onclick="TryIt" disabled="@(busy || string.IsNullOrWhiteSpace(sample))"><Icon Name="sparkles" Size="15" /> @(busy ? "Thinking…" : "Analyse (nothing is saved)")</button>
+        <button class="btn" @onclick="TryIt" disabled="@(busy || string.IsNullOrWhiteSpace(sample))"><Icon Name="sparkles" Size="15" /> @(busy ? $"Waiting for the AI… {elapsed}s" : "Analyse (nothing is saved)")</button>
         <button class="btn ghost" @onclick="() => showPrompt = !showPrompt">@(showPrompt ? "Hide" : "Show") prompt</button>
     </div>
     @if (tryResult is not null)
@@ -84,6 +85,7 @@
     private List<string> models = new();
     private string? modelsError, tryResult;
     private bool busy, showPrompt;
+    private int elapsed;
     private string sample = "Hi, your annual renewal for example.co.uk is due on 3 November 2026 at £12.99 (was £9.99). Also, can you send me the Q3 report by Friday? Thanks";
 
     protected override void OnInitialized() => o = Settings.Current.Ollama;
@@ -108,6 +110,10 @@
     private async Task TryIt()
     {
         busy = true;
+        elapsed = 0;
+        tryResult = "Sent to Ollama. The first request after a while loads the model into memory, which can take up to a minute…";
+        var started = DateTime.UtcNow;
+        using var tick = new Timer(_ => InvokeAsync(() => { elapsed = (int)(DateTime.UtcNow - started).TotalSeconds; StateHasChanged(); }), null, 1000, 1000);
         await Save();
         try
         {
@@ -120,6 +126,7 @@
                 (string.IsNullOrEmpty(s.Category) ? "" : $" | {s.Category}") + $" | confidence {s.Confidence:0.00}" +
                 (string.IsNullOrEmpty(s.Description) ? "" : $"\n    {s.Description}")));
             if (r.Suggestions.Count == 0) tryResult += "(no actions)";
+            tryResult += $"\n\nTook {(DateTime.UtcNow - started).TotalSeconds:0} seconds.";
         }
         catch (Exception ex) { tryResult = "Error: " + ex.Message; }
         finally { busy = false; }

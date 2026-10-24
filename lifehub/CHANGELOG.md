@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+- Fix: no answer from "thinking" models such as qwen3-vl. Thinking is now off by default (you can
+  turn it on in Settings → AI). Answers are length-capped, errors are clearer, and Try it shows a timer.
+
 ## 1.3.0
 **New: Bible**
 - Verse of the day, the same as the YouVersion app (free YouVersion key), or typed in yourself.

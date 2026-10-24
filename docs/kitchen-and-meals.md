@@ -53,8 +53,8 @@ LifeHub understands most date formats: `12 NOV`, `12 Nov 2026`, `24/10/26`, `24.
 `2026-10-24`, `03/2027` and `NOV 2027` (month-only dates mean the end of that month). The order of
 day and month follows your culture setting.
 
-You need a vision model set in **Settings → AI**: `qwen2.5vl:7b`, `llama3.2-vision` or
-`minicpm-v`.
+You need a vision model set in **Settings → AI**: `qwen3-vl:4b` (8 GB), `qwen3-vl:8b` or
+`gemma3:4b`.
 
 ## Shopping list
 

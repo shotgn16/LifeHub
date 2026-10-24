@@ -9,6 +9,22 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [1.3.1] – 2026-10-24
+
+### Fixed
+- **The AI never answered with "thinking" models such as `qwen3-vl` and `qwen3`.** These models
+  could spend many minutes reasoning before answering, especially on small machines. LifeHub now
+  asks Ollama to skip the thinking step. A new setting in Settings → AI turns it back on for big
+  machines. Older Ollama versions that don't understand the option are retried without it.
+- Answers are capped in length (3072 tokens by default) so a model can't run on for minutes, and
+  the context window is set to 8192 tokens.
+- Clearer errors: "Ollama didn't answer within N seconds…" and "Can't reach Ollama at…", instead
+  of a silent failure.
+- Reasoning text that leaks into an answer (`<think>…</think>`) is removed before it's read.
+
+### Changed
+- **Try it** in Settings → AI shows a running timer while it waits, and how long the answer took.
+
 ## [1.3.0] – 2026-10-21
 
 ### Added
@@ -192,7 +208,8 @@ on the add-on page. That file is a shorter version of this one.
   - Nightly backups.
 - Runs as a Home Assistant add-on (ingress), with Docker, or on Plesk (Docker, .NET Toolkit or IIS).
 
-[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/Shotgn16/LifeHub/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Shotgn16/LifeHub/releases/tag/v1.3.0
 [1.2.1]: https://github.com/Shotgn16/LifeHub/releases/tag/v1.2.1
 

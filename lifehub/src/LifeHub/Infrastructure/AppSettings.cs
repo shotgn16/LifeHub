@@ -103,6 +103,12 @@ public sealed class OllamaSettings
     public string VisionModel { get; set; } = "";
     /// <summary>Optional embedding model for finding related Bible studies, e.g. nomic-embed-text.</summary>
     public string EmbeddingModel { get; set; } = "";
+    /// <summary>Let "thinking" models (qwen3, qwen3-vl, deepseek-r1…) reason before answering. Much slower; off by default.</summary>
+    public bool Thinking { get; set; }
+    /// <summary>Context window in tokens (Ollama's num_ctx). 8192 fits emails, studies and meal plans on small machines.</summary>
+    public int ContextTokens { get; set; } = 8192;
+    /// <summary>Upper limit on the length of an answer, so a model can never run on for minutes.</summary>
+    public int MaxAnswerTokens { get; set; } = 3072;
 }
 
 public sealed class EmailSettings

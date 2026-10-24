@@ -34,6 +34,7 @@
 
 | Symptom | Fix |
 |---|---|
+| The AI never answers / "Waiting for the AI" goes on for minutes | Update LifeHub to 1.3.1 or later: "thinking" models such as qwen3-vl now answer straight away. Leave *Let thinking models reason first* off in Settings → AI on small machines. The first request after a while also loads the model (up to a minute). |
 | Ollama errors or timeouts | Check that `http://<ip>:11434/api/tags` opens from another machine. Set `OLLAMA_HOST=0.0.0.0`, use Ollama 0.5 or later, and raise the timeout for large models on CPU. |
 | `localhost` doesn't work for Ollama | Inside the add-on, `localhost` is the container itself. Use the Ollama machine's IP. |
 | Gmail "authentication failed" | Use an **App password**, and make sure IMAP is enabled in Gmail. |
@@ -49,7 +50,7 @@
 | Verse shows without text | That Bible version isn't licensed for apps like LifeHub. Try BSB (3034) or KJV (1). |
 | App time not counted (Android) | Turn on the Companion app's **Last used app** sensor and tick it in Settings → Bible. Set *Sensor update frequency* to **Fast always**. |
 | App time not counted (iPhone) | Check the Shortcuts automations are set to **Run Immediately** and the URL and API key are right. Your phone must reach LifeHub at that address. |
-| Handwriting not read / "model can't see images" | Set a **vision model** in Settings → AI (`ollama pull qwen2.5vl:7b`). |
+| Handwriting not read / "model can't see images" | Set a **vision model** in Settings → AI (`ollama pull qwen3-vl:4b` on 8 GB machines, `qwen3-vl:8b` with 16 GB or more). |
 | "Biblia Graphia: page didn't contain readable text" | That site builds its pages with JavaScript. Use the link in **Read more**, or turn it off in Settings → Bible. |
 | Photo finds no food | Get closer, use good light, and spread items out with labels facing the camera. One bag per photo. |
 | Dates read wrongly | Check the day/month order follows Settings → General → Culture. You can always correct the date before adding. |

@@ -136,7 +136,7 @@ Both URL patterns are editable in Settings → Bible. You can use the placeholde
 | Purpose | Setting | Suggested |
 |---|---|---|
 | Breakdown and insights | Settings → AI → Model | `qwen2.5:7b` |
-| Reading handwriting and scans | Settings → AI → **Vision model** | `qwen2.5vl:7b`, `llama3.2-vision`, `minicpm-v` |
+| Reading handwriting and scans | Settings → AI → **Vision model** | `qwen3-vl:4b` (8 GB), `qwen3-vl:8b` (16 GB+), `gemma3:4b` |
 | Linking studies by meaning (optional) | Settings → AI → **Embedding model** | `nomic-embed-text` |
 
 ## Home Assistant
