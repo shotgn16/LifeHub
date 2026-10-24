@@ -158,33 +158,152 @@ public sealed class BibleService
 
     // ------------------------------------------------------------------ app time
 
+    public (DateTime From, DateTime To) DayUtc(DateOnly date)
+    {
+        var from = TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(TimeOnly.MinValue), _clock.Zone);
+        return (from, from.AddDays(1));
+    }
+
+    public IReadOnlyList<BibleAppSession> SessionsOn(DateOnly date)
+    {
+        var (from, to) = DayUtc(date);
+        var now = DateTime.UtcNow;
+        return _sessions.Where(s => s.StartUtc < to && (s.EndUtc ?? now) > from).OrderBy(s => s.StartUtc).ToList();
+    }
+
     public double AppMinutes(DateOnly date)
     {
-        var zone = _clock.Zone;
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(TimeOnly.MinValue), zone);
-        var endUtc = startUtc.AddDays(1);
+        var (startUtc, endUtc) = DayUtc(date);
         var now = DateTime.UtcNow;
-        return _sessions.Where(s => s.StartUtc < endUtc && (s.EndUtc ?? now) > startUtc)
+        return SessionsOn(date).Where(s => !s.Ignored)
             .Sum(s => ((s.EndUtc ?? now) < endUtc ? (s.EndUtc ?? now) : endUtc).Subtract(s.StartUtc > startUtc ? s.StartUtc : startUtc).TotalMinutes);
     }
 
-    /// <summary>The Bible app was opened/closed (iPhone Shortcut, the API, or the HA sensor).</summary>
+    /// <summary>The Bible app was opened/closed (iPhone Shortcut or the API).</summary>
     public async Task AppEventAsync(bool opened, string source, string device, DateTime? atUtc = null)
     {
         var at = atUtc ?? DateTime.UtcNow;
         var open = _sessions.Where(s => s.EndUtc is null && s.Device == device).OrderByDescending(s => s.StartUtc).FirstOrDefault();
         if (opened)
         {
-            if (open is not null) return;   // already counting
+            if (open is not null)
+            {
+                // A missed "closed" (phone died, automation didn't run): end the old one at its cap.
+                if (at - open.StartUtc < TimeSpan.FromMinutes(45)) return;
+                open.EndUtc = open.StartUtc.AddMinutes(45);
+                await _sessions.UpsertAsync(open);
+            }
             await _sessions.UpsertAsync(new BibleAppSession { StartUtc = at, Source = source, Device = device });
         }
         else if (open is not null)
         {
-            // Cap forgotten sessions (app left open on the screen) at an hour.
-            open.EndUtc = at - open.StartUtc > TimeSpan.FromHours(1) ? open.StartUtc.AddHours(1) : at;
-            await _sessions.UpsertAsync(open);
+            open.EndUtc = at - open.StartUtc > TimeSpan.FromMinutes(45) ? open.StartUtc.AddMinutes(45) : at;
+            if ((open.EndUtc.Value - open.StartUtc).TotalSeconds < Math.Max(0, S.MinSessionSeconds)) await _sessions.DeleteAsync(open.Id);
+            else await _sessions.UpsertAsync(open);
         }
         await CheckAppReadingAsync();
+    }
+
+    /// <summary>
+    /// Replaces a phone's sessions in a time window with ones rebuilt from Home Assistant history.
+    /// Keeps "not reading" marks and "asked" flags. Returns true if anything changed.
+    /// </summary>
+    public async Task<bool> ReplaceSessionsAsync(string device, DateTime fromUtc, IReadOnlyList<AppInterval> fresh)
+    {
+        var existing = _sessions.Where(s => s.Device == device && s.Source == "ha" && s.StartUtc >= fromUtc).ToList();
+        static bool Same(DateTime a, DateTime b) => Math.Abs((a - b).TotalSeconds) < 90;
+        var desired = fresh.Where(f => f.StartUtc >= fromUtc).Select(f =>
+        {
+            var match = existing.FirstOrDefault(e => Same(e.StartUtc, f.StartUtc));
+            return new BibleAppSession
+            {
+                Id = match?.Id ?? Guid.NewGuid(), CreatedUtc = match?.CreatedUtc ?? DateTime.UtcNow,
+                StartUtc = f.StartUtc, EndUtc = f.EndUtc, Source = "ha", Device = device,
+                Ignored = match?.Ignored ?? false, Asked = match?.Asked ?? false
+            };
+        }).ToList();
+        var unchanged = desired.Count == existing.Count && desired.All(d =>
+            existing.FirstOrDefault(e => e.Id == d.Id) is { } e && e.StartUtc == d.StartUtc && e.EndUtc == d.EndUtc);
+        if (unchanged) return false;
+        var remove = existing.Where(e => desired.All(d => d.Id != e.Id)).Select(e => e.Id).ToList();
+        if (remove.Count > 0) await _sessions.DeleteManyAsync(remove);
+        if (desired.Count > 0) await _sessions.UpsertManyAsync(desired);
+        return true;
+    }
+
+    public async Task SetIgnoredAsync(Guid sessionId, bool ignored)
+    {
+        if (_sessions.Get(sessionId) is not { } s) return;
+        s.Ignored = ignored;
+        await _sessions.UpsertAsync(s);
+        // Ticked only because of app time? Untick if the remaining time no longer counts.
+        var today = _clock.Today;
+        if (ignored && VerseFor(today) is { Read: true, ReadHow: "app" } && AppMinutes(today) < Math.Max(0.5, S.MinMinutes))
+            await MarkVerseReadAsync(today, "app", false);
+        else await CheckAppReadingAsync();
+    }
+
+    // ------------------------------------------------------------------ what did you read?
+
+    public sealed record QuickPick(string Reference, string Why, Guid? PlanItemId = null, bool IsVerse = false);
+
+    /// <summary>One-tap choices for "What did you read?": today's verse and list, then carrying on from where you were.</summary>
+    public IReadOnlyList<QuickPick> QuickPicks()
+    {
+        var today = _clock.Today;
+        var picks = new List<QuickPick>();
+        if (VerseFor(today) is { Read: false } v && !string.IsNullOrWhiteSpace(v.Reference))
+            picks.Add(new QuickPick(v.Reference, "Verse of the day", IsVerse: true));
+        foreach (var p in TodayList().Where(p => !p.Done))
+            picks.Add(new QuickPick(p.Reference, p.Kind == "catch-up" ? "Catch up" : p.Kind == "plan" ? "Reading plan" : "On today's list", p.Id));
+        // Carry on from the last chapter read in each recent book.
+        var recentBooks = _readings.All().OrderByDescending(r => r.Date).ThenByDescending(r => r.CreatedUtc)
+            .SelectMany(r => BibleBooks.Parse(r.Reference).Select(x => (r.Date, Ref: x)))
+            .Where(x => x.Ref.Verse is null || x.Ref.EndVerse is not null || x.Ref.EndChapter is not null)   // chapter-ish readings, not single verses
+            .GroupBy(x => x.Ref.Book).Take(3);
+        foreach (var g in recentBooks)
+        {
+            var last = g.First().Ref;
+            var book = last.BookInfo;
+            var next = last.LastChapter + (last.EndVerse is null || last.Verse is null ? 1 : 0);
+            if (next > book.Chapters) continue;
+            var reference = new BibleRef(book.Index, next).ToString();
+            var why = next == last.LastChapter ? $"Rest of the chapter (you read {last})" : $"Carry on from {last}";
+            if (picks.All(p => p.Reference != reference)) picks.Add(new QuickPick(reference, why));
+        }
+        return picks.Take(8).ToList();
+    }
+
+    /// <summary>Logs a quick pick (and ticks the plan item / verse it came from).</summary>
+    public async Task LogPickAsync(QuickPick pick)
+    {
+        if (pick.IsVerse) await MarkVerseReadAsync(_clock.Today, "manual");
+        else if (pick.PlanItemId is { } id) await CompleteAsync(id);
+        else await LogReadingAsync(_clock.Today, pick.Reference, "manual");
+    }
+
+    /// <summary>
+    /// Something shared from YouVersion (link or text). Logs the passage(s) and ticks matching items on
+    /// today's list (and today's verse). Returns what was logged.
+    /// </summary>
+    public async Task<List<BibleReading>> LogSharedAsync(string shared, string source = "share")
+    {
+        var refs = BibleBooks.FromShared(shared);
+        var today = _clock.Today;
+        var logged = new List<BibleReading>();
+        foreach (var r in refs)
+        {
+            if (await LogReadingAsync(today, r.ToString(), source) is { } reading) logged.Add(reading);
+            if (VerseFor(today) is { Read: false } v && BibleBooks.Parse(v.Reference).Any(x => x.Overlaps(r)))
+                await MarkVerseReadAsync(today, "manual");
+            foreach (var p in TodayList().Where(p => !p.Done && BibleBooks.Parse(p.Reference).Any(x => x.Overlaps(r))))
+            {
+                p.Done = true; p.DoneOn = today;
+                await _plan.UpsertAsync(p);
+                if (p.VerseId is { } vid && _verses.Get(vid) is { } missed) { missed.Read = true; missed.ReadHow = "catch-up"; await _verses.UpsertAsync(missed); }
+            }
+        }
+        return logged;
     }
 
     /// <summary>Enough time in the app today → today's verse counts as read.</summary>

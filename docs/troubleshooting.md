@@ -49,6 +49,8 @@
 |---|---|
 | No verse of the day | Add a YouVersion app key in Settings → Bible, or type the verse on the Bible page. |
 | Verse shows without text | That Bible version isn't licensed for apps like LifeHub. Try BSB (3034) or KJV (1). |
+| App time too high (Android) | Turn on the Companion app's **Interactive** sensor (screen on/off). LifeHub then stops counting when the phone is locked. Mark wrong sessions **Wasn't reading** on Bible → What did I read?. |
+| LifeHub doesn't know which passage I read | Share the verses from YouVersion to LifeHub (Android share menu / iPhone "Log in LifeHub" shortcut), or tap it on **What did I read?**. |
 | App time not counted (Android) | Turn on the Companion app's **Last used app** sensor and tick it in Settings → Bible. Set *Sensor update frequency* to **Fast always**. |
 | App time not counted (iPhone) | Check the Shortcuts automations are set to **Run Immediately** and the URL and API key are right. Your phone must reach LifeHub at that address. |
 | Handwriting not read / "model can't see images" | Set a **vision model** in Settings → AI (`ollama pull qwen3-vl:4b-instruct` on 8 GB machines, `qwen3-vl:8b-instruct` with 16 GB or more). |

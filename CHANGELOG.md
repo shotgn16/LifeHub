@@ -9,6 +9,41 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [1.4.0] – 2026-10-24
+
+### Added
+- **Share from YouVersion to log exactly what you read.**
+  - On Android, LifeHub appears in the share menu once installed to the home screen.
+  - On iPhone, a "Log in LifeHub" shortcut does the same.
+  - The shared bible.com link or text ("John 3:16-18 NIV") is logged as that passage, and it ticks
+    off the verse of the day and any matching readings on today's list.
+  - `POST /api/v1/bible/read` accepts shared links and text as well.
+- **"What did you read?" page** (`/bible/log`) with one-tap choices:
+  - the verse of the day
+  - today's plan and catch-up readings
+  - "carry on" suggestions, such as the next chapter after the last one you read
+  - today's sessions in the app, each with a **Wasn't reading** button
+- **Time in the app is logged automatically** and now shows in **Recently read**, for example
+  "Time in the Bible app · 12 min · 08:02–08:14 · logged automatically". There's nothing to tap;
+  sessions count towards your streak and the verse of the day by themselves.
+- Optional **"Which passage?" prompt:** after a reading session, one notification that links to the
+  quick-log page. It's off by default; turn it on in Settings → Bible.
+
+### Changed
+- **Much more accurate time in the Bible app (Android):**
+  - Sessions are rebuilt every minute from Home Assistant's history, instead of sampling the
+    current state, so short sessions aren't missed and missing data corrects itself.
+  - The phone's **Interactive** (screen on/off) sensor is used automatically when it exists. Time
+    stops counting when the phone is locked, even though "Last used app" still says Bible.
+    Without it, sessions are capped at 30 minutes.
+  - Visits shorter than 45 seconds are ignored (configurable), and brief switches away (up to
+    2 minutes, e.g. replying to a message) are merged into one session.
+  - Marking a session as "Wasn't reading" removes its time. If that was the only reason the verse
+    was ticked, the tick is removed too.
+- iPhone Shortcut sessions are capped at 45 minutes, and a missed "closed" event no longer leaves a
+  session running.
+- The Bible page shows today's sessions in the app.
+
 ## [1.3.2] – 2026-10-24
 
 ### Changed
@@ -215,7 +250,8 @@ on the add-on page. That file is a shorter version of this one.
   - Nightly backups.
 - Runs as a Home Assistant add-on (ingress), with Docker, or on Plesk (Docker, .NET Toolkit or IIS).
 
-[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/Shotgn16/LifeHub/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/Shotgn16/LifeHub/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/Shotgn16/LifeHub/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Shotgn16/LifeHub/releases/tag/v1.3.0

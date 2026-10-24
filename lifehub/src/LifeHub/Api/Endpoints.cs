@@ -196,9 +196,11 @@ public static class Endpoints
                 await bible.MarkVerseReadAsync(clock.Today, "manual");
                 return Results.Ok(new { status = "ok", logged = "verse of the day" });
             }
-            if (BibleBooks.Parse(req.Reference).Count == 0) return Results.BadRequest(new { status = "unknown_reference" });
-            var r = await bible.LogReadingAsync(clock.Today, req.Reference, "api", req.Minutes);
-            return Results.Ok(new { status = "ok", logged = r?.Reference });
+            // Accepts a typed reference, YouVersion share text or a bible.com link (iPhone share-sheet Shortcut).
+            if (BibleBooks.FromShared(req.Reference).Count == 0) return Results.BadRequest(new { status = "unknown_reference" });
+            var logged = await bible.LogSharedAsync(req.Reference, "api");
+            if (req.Minutes is { } m && logged.Count > 0) { logged[0].Minutes = m; await bible.Readings.UpsertAsync(logged[0]); }
+            return Results.Ok(new { status = "ok", logged = string.Join("; ", logged.Select(l => l.Reference)) });
         });
 
         api.MapGet("/bible/today", (BibleService bible, Clock clock) =>

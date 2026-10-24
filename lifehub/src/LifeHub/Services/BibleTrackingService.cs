@@ -11,7 +11,6 @@ public sealed class BibleTrackingService : BackgroundService
 {
     private readonly IServiceProvider _sp;
     private readonly ILogger<BibleTrackingService> _log;
-    private bool _backfilled;
     private DateTime _lastSensorsUtc = DateTime.MinValue;
 
     public string LastStatus { get; private set; } = "";
@@ -40,64 +39,69 @@ public sealed class BibleTrackingService : BackgroundService
         catch (Exception ex) { _log.LogDebug(ex, "Bible step {Step} failed", name); LastStatus = $"{name}: {ex.Message}"; }
     }
 
-    private bool IsBibleApp(string state, string match) =>
-        !string.IsNullOrWhiteSpace(state) &&
-        (state.Contains(match, StringComparison.OrdinalIgnoreCase) ||
-         (match.Length == 0 && (state.Contains("bible", StringComparison.OrdinalIgnoreCase) || state.Contains("youversion", StringComparison.OrdinalIgnoreCase))));
+    /// <summary>Phones whose screen on/off sensor was found (for the settings page).</summary>
+    public Dictionary<string, string?> ScreenSensors { get; } = new();
+    private DateTime _screenLookupUtc = DateTime.MinValue;
 
+    /// <summary>
+    /// Rebuilds today's (and yesterday evening's) sessions from Home Assistant history every minute, using the
+    /// phone's "Last used app" sensor together with its screen on/off ("Interactive") sensor when available.
+    /// Rebuilding from history (rather than sampling the current state) catches short sessions between checks
+    /// and corrects itself if HA was briefly unreachable.
+    /// </summary>
     public async Task WatchAppAsync()
     {
         var ha = S<HomeAssistantClient>();
         var s = S<SettingsService>().Current.Bible;
-        if (!ha.IsConfigured || s.AppSensors.Count == 0) return;
         var bible = S<BibleService>();
-        var match = s.AppMatch.Trim();
-
-        if (!_backfilled)
+        if (ha.IsConfigured && s.AppSensors.Count > 0)
         {
-            _backfilled = true;
-            foreach (var sensor in s.AppSensors) await BackfillAsync(ha, bible, sensor, match);
-        }
-
-        foreach (var sensor in s.AppSensors)
-        {
-            var st = await ha.GetStateAsync(sensor);
-            if (st is null) continue;
-            var active = IsBibleApp(st.State, match);
-            var changed = st.LastChanged == default ? DateTime.UtcNow : st.LastChanged.ToUniversalTime();
-            var open = bible.Sessions.Where(x => x.EndUtc is null && x.Device == sensor).Any();
-            if (active && !open) await bible.AppEventAsync(true, "ha", sensor, changed);
-            else if (!active && open) await bible.AppEventAsync(false, "ha", sensor, changed);
-        }
-        LastStatus = $"Checked {s.AppSensors.Count} phone(s) at {DateTime.Now:HH:mm}";
-        await bible.CheckAppReadingAsync();
-    }
-
-    /// <summary>After a restart: rebuild the last day's Bible-app sessions from HA history.</summary>
-    private async Task BackfillAsync(HomeAssistantClient ha, BibleService bible, string sensor, string match)
-    {
-        try
-        {
-            var since = DateTime.UtcNow.AddHours(-24);
-            var changes = await ha.GetStateHistoryAsync(sensor, since);
-            DateTime? start = null;
-            foreach (var (utc, state) in changes.OrderBy(c => c.Utc))
+            if (DateTime.UtcNow - _screenLookupUtc > TimeSpan.FromMinutes(10))
             {
-                var active = IsBibleApp(state, match);
-                if (active && start is null) start = utc;
-                else if (!active && start is { } st)
+                _screenLookupUtc = DateTime.UtcNow;
+                foreach (var sensor in s.AppSensors)
                 {
-                    var overlap = bible.Sessions.Where(x => x.Device == sensor && x.StartUtc < utc && (x.EndUtc ?? DateTime.UtcNow) > st).Any();
-                    if (!overlap)
-                        await bible.Sessions.UpsertAsync(new BibleAppSession
-                        {
-                            StartUtc = st, EndUtc = utc - st > TimeSpan.FromHours(1) ? st.AddHours(1) : utc, Source = "ha", Device = sensor
-                        });
-                    start = null;
+                    var screen = BibleSessions.ScreenSensorFor(sensor);
+                    ScreenSensors[sensor] = screen is not null && await ha.GetStateAsync(screen) is not null ? screen : null;
                 }
             }
+            var now = DateTime.UtcNow;
+            var (dayStart, _) = bible.DayUtc(S<Clock>().Today);
+            var from = dayStart.AddHours(-6);                 // include late-evening reading from the night before
+            foreach (var sensor in s.AppSensors)
+            {
+                var app = await ha.GetStateHistoryAsync(sensor, from.AddHours(-2));
+                var screenId = ScreenSensors.GetValueOrDefault(sensor);
+                var screen = screenId is null ? null : await ha.GetStateHistoryAsync(screenId, from.AddHours(-2));
+                var sessions = BibleSessions.Build(app, screen, now, s.AppMatch, Math.Max(0, s.MinSessionSeconds));
+                await bible.ReplaceSessionsAsync(sensor, from, sessions);
+            }
+            LastStatus = $"Checked {s.AppSensors.Count} phone(s) at {S<Clock>().Now:HH:mm}";
         }
-        catch (Exception ex) { _log.LogDebug(ex, "Bible app history backfill failed for {Sensor}", sensor); }
+        await bible.CheckAppReadingAsync();
+        if (s.AskWhatIRead) await AskWhatIReadAsync(bible, s);
+    }
+
+    /// <summary>After a real reading session (and nothing logged since it started), ask what was read — once per session.</summary>
+    private async Task AskWhatIReadAsync(BibleService bible, BibleSettings s)
+    {
+        var now = DateTime.UtcNow;
+        var ended = bible.Sessions.Where(x => !x.Ignored && !x.Asked && x.EndUtc is { } e &&
+                                              now - e >= TimeSpan.FromMinutes(2) && now - e <= TimeSpan.FromHours(3) &&
+                                              (e - x.StartUtc).TotalMinutes >= Math.Max(1, s.MinMinutes));
+        foreach (var session in ended.OrderBy(x => x.StartUtc))
+        {
+            session.Asked = true;
+            await bible.Sessions.UpsertAsync(session);
+            // Already told LifeHub what you read (shared it, ticked the plan, logged it)? No need to ask.
+            var logged = bible.Readings.Where(r => r.CreatedUtc >= session.StartUtc.AddMinutes(-5) && r.Source is not "verse");
+            if (logged.Count > 0) continue;
+            var minutes = (int)Math.Round((session.EndUtc!.Value - session.StartUtc).TotalMinutes);
+            var picks = bible.QuickPicks().Take(3).Select(p => p.Reference).ToList();
+            var body = picks.Count > 0 ? "Tap to log it — e.g. " + string.Join(", ", picks) : "Tap to log what you read.";
+            await S<NotificationService>().NotifyAsync($"📖 {minutes} min in the Bible app — what did you read?", body,
+                NoticeLevel.Info, "bible/log", $"bible-ask:{session.Id}", tag: "bible-ask");
+        }
     }
 
     private async Task ReminderAsync()

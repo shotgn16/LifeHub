@@ -31,7 +31,7 @@ ingress URLs need a Home Assistant session, so they don't suit API calls.
 | POST | `/api/v1/scan` | `{"barcode":"5000112637922","mode":"add\|use\|shopping","quantity":1}` | The scan result. Unknown barcodes return 404; scan them once in the app to name them. |
 | GET | `/api/v1/meals` | `?days=1` (1–14) | Planned meals: date, slot, title, servings, cooked |
 | POST | `/api/v1/bible/app` | `{"event":"opened\|closed","device":"iPhone"}` | Times the Bible app (for the iPhone Shortcuts automation). Returns `minutesToday`. |
-| POST | `/api/v1/bible/read` | `{"reference":"Ps 23","minutes":10}` | Logs a reading. Leave out `reference` to mark today's verse as read. |
+| POST | `/api/v1/bible/read` | `{"reference":"Ps 23","minutes":10}` | Logs a reading. `reference` can be typed, YouVersion share text or a bible.com link; matching list items and the verse are ticked. Leave it out to mark today's verse as read. |
 | GET | `/api/v1/bible/today` | | Verse of the day (and text), whether you've read today, the streak, minutes in the app, and what's still to read |
 
 ## Examples

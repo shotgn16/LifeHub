@@ -16,7 +16,7 @@
     </div>
     <div class="actions">
         <a class="btn primary" href="bible/study/new"><Icon Name="plus" Size="15" /> New study</a>
-        <button class="btn" @onclick="() => logOpen = true"><Icon Name="book" Size="15" /> Log reading</button>
+        <a class="btn" href="bible/log"><Icon Name="book" Size="15" /> What did I read?</a>
     </div>
 </div>
 
@@ -113,14 +113,40 @@
                     }
                 </div>
                 <div class="tiny muted" style="margin-top:6px">Darker = read · darkest = studied. Time in the Bible app counts after @Settings.Current.Bible.MinMinutes minutes.</div>
+                @{ var todaySessions = Bible.SessionsOn(today); }
+                @if (todaySessions.Count > 0)
+                {
+                    <div class="small" style="margin-top:10px">
+                        <strong>In the app today:</strong>
+                        @foreach (var s in todaySessions)
+                        {
+                            <span class="badge @(s.Ignored ? "" : "accent")" style="margin:2px;@(s.Ignored ? "text-decoration:line-through" : "")">@Clock.ToLocal(s.StartUtc).ToString("HH:mm")–@(s.EndUtc is { } e ? Clock.ToLocal(e).ToString("HH:mm") : "now")</span>
+                        }
+                        <a href="bible/log" class="small">Log what you read →</a>
+                    </div>
+                }
             </div>
 
             <div class="card flush">
                 <div class="card-head"><h2>Recently read</h2></div>
                 <ul class="list">
-                    @if (recent.Count == 0) { <li class="empty small">Nothing logged yet.</li> }
-                    @foreach (var r in recent)
+                    @if (recent.Count == 0 && appSessions.Count == 0) { <li class="empty small">Nothing logged yet.</li> }
+                    @foreach (var item in Timeline())
                     {
+                        if (item.Session is { } ses)
+                        {
+                            <li class="row" style="@(ses.Ignored ? "opacity:.55" : "")">
+                                <div class="grow">
+                                    <div class="title small @(ses.Ignored ? "strike" : "")">Time in the Bible app · @Math.Max(1, Math.Round(ses.Minutes(DateTime.UtcNow))) min</div>
+                                    <div class="meta"><span>@Fmt.RelDay(DateOnly.FromDateTime(Clock.ToLocal(ses.StartUtc)), today)</span>
+                                        <span>· @Clock.ToLocal(ses.StartUtc).ToString("HH:mm")–@(ses.EndUtc is { } e ? Clock.ToLocal(e).ToString("HH:mm") : "now")</span>
+                                        <span>· logged automatically</span></div>
+                                </div>
+                                <button class="icon-btn" title="@(ses.Ignored ? "Count it" : "Wasn't reading")" @onclick="() => Bible.SetIgnoredAsync(ses.Id, !ses.Ignored)"><Icon Name="@(ses.Ignored ? "undo" : "x")" Size="14" /></button>
+                            </li>
+                            continue;
+                        }
+                        var r = item.Reading!;
                         <li class="row">
                             <div class="grow">
                                 <div class="title small">@r.Reference</div>
@@ -214,6 +240,15 @@ else
     private DailyVerse? verse;
     private List<ReadingPlanItem> todayList = new();
     private List<BibleReading> recent = new();
+    private List<BibleAppSession> appSessions = new();
+
+    private sealed record TimelineItem(DateTime SortUtc, BibleReading? Reading, BibleAppSession? Session);
+
+    /// <summary>Readings and automatic app sessions together, newest first.</summary>
+    private IEnumerable<TimelineItem> Timeline() =>
+        recent.Select(r => new TimelineItem(r.CreatedUtc, r, null))
+            .Concat(appSessions.Select(s => new TimelineItem(s.StartUtc, null, s)))
+            .OrderByDescending(i => i.SortUtc).Take(15);
     private List<BibleStudy> studies = new();
     private IReadOnlyList<BibleDay> heat = Array.Empty<BibleDay>();
     private int streak, readThisWeek;
@@ -244,6 +279,7 @@ else
         verse = Bible.VerseFor(today);
         todayList = Bible.TodayList().ToList();
         recent = Bible.Recent(15).ToList();
+        appSessions = Bible.Sessions.Where(s => s.StartUtc >= DateTime.UtcNow.AddDays(-14)).OrderByDescending(s => s.StartUtc).Take(15).ToList();
         studies = Bible.Studies.All().OrderByDescending(s => s.Date).ThenByDescending(s => s.CreatedUtc).ToList();
         // Start the heatmap on a Monday so the rows line up with weekdays.
         heat = Bible.LastDays(7 * 15 + ((int)today.DayOfWeek + 6) % 7 + 1);

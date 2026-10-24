@@ -21,6 +21,10 @@ public sealed class BibleAppSession : Entity
     public string Source { get; set; } = "ha";
     /// <summary>Phone / sensor it came from.</summary>
     public string Device { get; set; } = "";
+    /// <summary>You said you weren't reading (e.g. the app was just left open).</summary>
+    public bool Ignored { get; set; }
+    /// <summary>A "What did you read?" prompt was sent for this session.</summary>
+    public bool Asked { get; set; }
 
     public double Minutes(DateTime nowUtc) => ((EndUtc ?? nowUtc) - StartUtc).TotalMinutes;
 }

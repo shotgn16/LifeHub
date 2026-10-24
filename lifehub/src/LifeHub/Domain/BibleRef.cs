@@ -280,6 +280,39 @@ public static class BibleBooks
         return found.Distinct().ToList();
     }
 
+    private static readonly Regex BibleComLink = new(
+        @"bible\.com/(?:[a-z]{2}(?:-[a-z]{2})?/)?bible/\d+/([1-3a-z]{3}\.\d+(?:\.[\d,\-+.]+)?)", RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// The passage(s) in something shared from YouVersion or another Bible app: a bible.com link
+    /// (https://bible.com/bible/111/jhn.3.16-18.NIV), share text ("John 3:16-18 NIV …") or a typed reference.
+    /// </summary>
+    public static List<BibleRef> FromShared(string? shared)
+    {
+        if (string.IsNullOrWhiteSpace(shared)) return new();
+        var found = new List<BibleRef>();
+        foreach (Match m in BibleComLink.Matches(shared))
+        {
+            var parts = m.Groups[1].Value.ToUpperInvariant().Split('.', StringSplitOptions.RemoveEmptyEntries);
+            var book = All.FirstOrDefault(b => b.Usfm == parts[0]);
+            if (book is null || parts.Length < 2 || !int.TryParse(parts[1], out var ch) || ch < 1 || ch > book.Chapters) continue;
+            if (parts.Length >= 3 && Regex.IsMatch(parts[2], @"^[\d,\-+]+$"))
+            {
+                // "16-18", "16,18", "16+17+18" → first to last verse
+                var nums = Regex.Matches(parts[2], @"\d+").Select(x => int.Parse(x.Value)).ToList();
+                var first = nums.Min(); var last = nums.Max();
+                found.Add(new BibleRef(book.Index, ch, first, null, last != first ? last : null));
+            }
+            else found.Add(new BibleRef(book.Index, ch));
+        }
+        if (found.Count > 0) return found.Distinct().ToList();
+        // No link: the first line of share text is usually the reference ("John 3:16-18 NIV").
+        var firstLine = shared.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
+        firstLine = Regex.Replace(firstLine, @"\b[A-Z]{2,6}\d{0,4}\s*$", "").Trim();   // drop a version suffix (NIV, ESV, NKJV…)
+        var parsed = Parse(firstLine);
+        return parsed.Count > 0 ? parsed : FindInText(shared);
+    }
+
     /// <summary>Normalises any list of reference strings, dropping what can't be parsed.</summary>
     public static List<string> Normalise(IEnumerable<string> refs) =>
         refs.SelectMany(Parse).Select(r => r.ToString()).Distinct().ToList();

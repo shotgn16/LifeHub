@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+- Share verses from YouVersion to LifeHub to log exactly what you read (Android share menu, or an
+  iPhone shortcut).
+- Time in the Bible app is logged automatically and shown in Recently read.
+- Optional "What did you read?" page and prompt (off by default) to record which passage.
+- More accurate app time: rebuilt from HA history every minute, stops when the screen is locked
+  (Interactive sensor), ignores quick glances. You can mark a session as "Wasn't reading".
+
 ## 1.3.2
 - Model advice: use `qwen3-vl:4b-instruct`. The plain `qwen3-vl:4b` is the slower "thinking" version.
 

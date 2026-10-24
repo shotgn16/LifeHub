@@ -28,20 +28,66 @@ opens the passage in the app on your phone.
 Some versions aren't licensed for apps like LifeHub. In that case you get the reference and link
 but no verse text, so try BSB or KJV.
 
-## Tracking time in the YouVersion app
+## What you read: share from YouVersion (most accurate)
 
-LifeHub can notice when you've been reading in the YouVersion app and tick off the verse of the
-day for you. A few minutes in the app (2 by default) counts as reading.
+Time in the app can't tell LifeHub **which** passage you read, but sharing from YouVersion can.
+
+- **Android.** Open LifeHub in Chrome at your HTTPS address, then ⋮ → **Add to Home screen**
+  (Install). In YouVersion, select the verses (or a whole chapter's worth), then **Share** →
+  **LifeHub**.
+- **iPhone.** Make a shortcut called **Log in LifeHub**:
+  - Turn on *Show in Share Sheet*, accepting URLs and Text.
+  - Add the action **Get Contents of URL**, with URL `https://<your LifeHub address>/api/v1/bible/read`
+    and Method POST.
+  - Add the header `X-Api-Key` (from Settings → Security & API).
+  - Set the request body to JSON, with `reference` = *Shortcut Input*.
+  - Then in YouVersion: select the verses → **Share** → **Log in LifeHub**.
+
+LifeHub reads the bible.com link or the reference in the shared text, for example
+`John 3:16-18 NIV`, and logs that passage. If it matches the verse of the day or something on
+today's list, those are ticked too.
+
+### "What did you read?"
+
+On **Bible → What did I read?** you can log in one tap:
+
+- today's verse
+- your plan and catch-up readings
+- **carry on** suggestions, such as the next chapter after the last one you read, or the rest of a
+  chapter you part-read
+- anything you type
+
+Optionally (Settings → Bible, off by default), LifeHub can send **one** "What did you read?"
+notification after a reading session, linking to this page.
+
+## Time in the YouVersion app (automatic)
+
+Once it's set up, time in YouVersion is **logged automatically**, with nothing to tap:
+
+- each session appears in **Recently read** as "Time in the Bible app · 12 min"
+- it counts towards your streak and heatmap
+- a few minutes in the app (2 by default) ticks off the verse of the day
 
 ### Android (through Home Assistant)
 
 1. In the **Home Assistant Companion app**, go to Settings → Companion app → Manage sensors.
-2. Turn on **Last used app**.
-3. For more accurate timing, set *Sensor update frequency* to **Fast always** on the same screen.
-4. In LifeHub, go to **Settings → Bible** and tick your phone's *Last used app* sensor.
+2. Turn on **Last used app** and **Interactive** (screen on/off).
+3. For better timing, set *Sensor update frequency* to **Fast always** on the same screen.
+4. In LifeHub, go to **Settings → Bible** and tick your phone. A green **screen on/off ✓** shows
+   the Interactive sensor was found.
 
-LifeHub checks every minute. After a restart it rebuilds the last day's sessions from Home
-Assistant's history. How precise the timing is depends on how often the phone updates the sensor.
+How LifeHub works out the time:
+
+- Every minute, sessions are rebuilt from Home Assistant's history.
+- A session counts only while YouVersion is in front **and** the screen is on. "Last used app"
+  keeps saying *Bible* after you lock the phone, so on its own it over-counts.
+- Without the Interactive sensor, sessions are capped at 30 minutes.
+- Visits under 45 seconds are ignored (this is adjustable).
+- Popping out for up to 2 minutes, for example to answer a message, is merged into the same session.
+
+Today's sessions are listed on the Bible page and the "What did you read?" page. Use **Wasn't
+reading** for any that shouldn't count. If that leaves less than the minimum, the automatic verse
+tick is removed.
 
 ### iPhone (Shortcuts)
 
@@ -52,12 +98,11 @@ iOS doesn't share app usage with Home Assistant, so use two small Shortcuts auto
 2. Add the action **Get Contents of URL**:
    - **URL:** `https://<your LifeHub address>/api/v1/bible/app`
    - **Method:** POST
-   - **Header:** `X-Api-Key` set to your key from Settings → Security & API
+   - **Header:** `X-Api-Key`
    - **Request Body:** JSON, with `event` = `opened`
 3. Make a second automation for **Is Closed**, with `event` = `closed`.
 
-Your phone has to be able to reach LifeHub at that address, for example through your
-[Cloudflare Tunnel](remote-access.md).
+Sessions are capped at 45 minutes, in case a "closed" never arrives.
 
 ## Staying on track
 

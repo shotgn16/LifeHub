@@ -1,0 +1,143 @@
+@page "/bible/log"
+@page "/bible/share"
+@inherits LiveComponent
+@inject BibleService Bible
+@inject SettingsService Settings
+@inject Clock Clock
+@inject UiState Ui
+@inject NavigationManager Nav
+
+<PageTitle>What did you read? · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <a class="small" href="bible"><Icon Name="left" Size="13" /> Bible</a>
+        <h1>What did you read?</h1>
+        <div class="sub">Tap what you read today — it's logged and ticked off your list.</div>
+    </div>
+</div>
+
+@if (shared is not null)
+{
+    <div class="card" style="margin-bottom:14px">
+        @if (sharedLogged.Count > 0)
+        {
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <span class="badge ok">Logged</span>
+                <strong>@string.Join("; ", sharedLogged.Select(r => r.Reference))</strong>
+                <button class="btn sm ghost right" @onclick="UndoShared">Undo</button>
+            </div>
+            <div class="help small">Shared from your Bible app. Matching items on today's list were ticked too.</div>
+        }
+        else
+        {
+            <div><span class="badge warn">Not recognised</span> Couldn't find a Bible passage in what was shared.</div>
+            <div class="help small mono" style="word-break:break-all">@shared</div>
+        }
+    </div>
+}
+
+<div class="card" style="margin-bottom:14px">
+    <h3 style="margin-top:0">Quick pick</h3>
+    @if (picks.Count == 0) { <p class="small muted">Nothing to suggest yet — type what you read below.</p> }
+    <div style="display:flex;flex-direction:column;gap:8px">
+        @foreach (var p in picks)
+        {
+            <button class="btn" style="justify-content:flex-start;text-align:left;padding:10px 12px" @onclick="() => Pick(p)">
+                <Icon Name="check" Size="15" /> <strong>@p.Reference</strong> <span class="muted small">· @p.Why</span>
+            </button>
+        }
+    </div>
+    <div class="inline-form" style="margin-top:12px">
+        <input type="text" placeholder="Something else, e.g. Romans 8 or Ps 23:1-4" @bind="typed" @bind:event="oninput" @onkeydown="Key" />
+        <button class="btn primary" @onclick="LogTyped" disabled="@(BibleBooks.Parse(typed).Count == 0)">Log</button>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(typed))
+    {
+        var parsed = BibleBooks.Parse(typed);
+        <div class="help small">@(parsed.Count == 0 ? "Not recognised — check the book name" : "→ " + string.Join("; ", parsed))</div>
+    }
+</div>
+
+<div class="card flush" style="margin-bottom:14px">
+    <div class="card-head"><h2>Time in the Bible app today</h2><span class="small muted right">@Math.Round(Bible.AppMinutes(today)) min</span></div>
+    <ul class="list">
+        @if (sessions.Count == 0) { <li class="empty small">No time recorded today.</li> }
+        @foreach (var s in sessions)
+        {
+            <li class="row" style="@(s.Ignored ? "opacity:.55" : "")">
+                <Icon Name="clock" Size="15" />
+                <div class="grow">
+                    <div class="title small @(s.Ignored ? "strike" : "")">@Clock.ToLocal(s.StartUtc).ToString("HH:mm") – @(s.EndUtc is { } e ? Clock.ToLocal(e).ToString("HH:mm") : "now")
+                        <span class="muted">· @Math.Max(1, Math.Round(s.Minutes(DateTime.UtcNow))) min</span></div>
+                    <div class="meta"><span>@(s.Source == "ha" ? "Home Assistant" : s.Source == "shortcut" ? "iPhone Shortcut" : s.Source)</span></div>
+                </div>
+                <button class="btn sm" @onclick="() => Bible.SetIgnoredAsync(s.Id, !s.Ignored)">@(s.Ignored ? "Count it" : "Wasn't reading")</button>
+            </li>
+        }
+    </ul>
+</div>
+
+<p class="small muted">
+    <strong>Tip:</strong> the most accurate way is to share from YouVersion: select the verses (or the chapter) →
+    <strong>Share</strong> → <strong>LifeHub</strong> (Android, with LifeHub added to your home screen) or your
+    <strong>Log in LifeHub</strong> shortcut (iPhone). See Settings → Bible.
+</p>
+
+@code {
+    [SupplyParameterFromQuery(Name = "title")] public string? Title { get; set; }
+    [SupplyParameterFromQuery(Name = "text")] public string? Text { get; set; }
+    [SupplyParameterFromQuery(Name = "url")] public string? Url { get; set; }
+
+    private DateOnly today;
+    private IReadOnlyList<BibleService.QuickPick> picks = Array.Empty<BibleService.QuickPick>();
+    private List<BibleAppSession> sessions = new();
+    private string typed = "";
+    private string? shared;
+    private List<BibleReading> sharedLogged = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Watch(Bible.Readings); Watch(Bible.Plan); Watch(Bible.Verses); Watch(Bible.Sessions);
+        var incoming = string.Join("\n", new[] { Title, Text, Url }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        if (incoming.Length > 0 && Nav.Uri.Contains("/bible/share"))
+        {
+            shared = incoming;
+            sharedLogged = await Bible.LogSharedAsync(incoming);
+        }
+        Load();
+    }
+
+    protected override void OnDataChanged() => Load();
+
+    private void Load()
+    {
+        today = Clock.Today;
+        picks = Bible.QuickPicks();
+        sessions = Bible.SessionsOn(today).ToList();
+    }
+
+    private async Task Pick(BibleService.QuickPick p)
+    {
+        await Bible.LogPickAsync(p);
+        Ui.Show($"{p.Reference} logged");
+    }
+
+    private async Task Key(KeyboardEventArgs e) { if (e.Key == "Enter") await LogTyped(); }
+
+    private async Task LogTyped()
+    {
+        if (BibleBooks.Parse(typed).Count == 0) return;
+        var logged = await Bible.LogSharedAsync(typed, "manual");
+        Ui.Show($"{string.Join("; ", logged.Select(l => l.Reference))} logged");
+        typed = "";
+    }
+
+    private async Task UndoShared()
+    {
+        await Bible.Readings.DeleteManyAsync(sharedLogged.Select(r => r.Id));
+        sharedLogged.Clear();
+        shared = null;
+        Ui.Show("Removed");
+    }
+}

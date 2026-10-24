@@ -241,6 +241,10 @@ public sealed class BibleSettings
     public int MinMinutes { get; set; } = 2;
     /// <summary>Time in the Bible app counts as reading the verse of the day.</summary>
     public bool AppCountsAsVerse { get; set; } = true;
+    /// <summary>After a reading session in the app, send a "What did you read?" notification with one-tap logging.</summary>
+    public bool AskWhatIRead { get; set; }
+    /// <summary>Visits to the app shorter than this don't count (opened by accident, a quick glance).</summary>
+    public int MinSessionSeconds { get; set; } = 45;
 
     // ---- Verse of the day (YouVersion Platform API, optional) ----
     /// <summary>Free app key from platform.youversion.com. Without it you can type the day's verse yourself.</summary>

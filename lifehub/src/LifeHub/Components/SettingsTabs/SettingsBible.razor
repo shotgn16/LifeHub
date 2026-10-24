@@ -57,7 +57,7 @@
 
             <h3 style="margin-bottom:4px">Android (through Home Assistant)</h3>
             <ol class="small" style="margin-top:4px;padding-left:18px">
-                <li>In the Home Assistant app: Settings → Companion app → Manage sensors → <strong>Last used app</strong> → turn it on.</li>
+                <li>In the Home Assistant app: Settings → Companion app → Manage sensors → turn on <strong>Last used app</strong> and <strong>Interactive</strong> (screen on/off — this stops time counting after you lock the phone).</li>
                 <li>For better timing, set <em>Sensor update frequency</em> to <strong>Fast always</strong> (same screen, top).</li>
                 <li>Tick the phone below.</li>
             </ol>
@@ -70,15 +70,23 @@
                 {
                     <label class="check">
                         <input type="checkbox" checked="@b.AppSensors.Contains(s.EntityId)" @onchange="e => ToggleSensor(s.EntityId, (bool)e.Value!)" />
-                        <span>@s.Name <span class="tiny muted">now: @s.State</span></span>
+                        <span>@s.Name <span class="tiny muted">now: @s.State</span>
+                            @if (b.AppSensors.Contains(s.EntityId) && Tracker.ScreenSensors.TryGetValue(s.EntityId, out var scr))
+                            {
+                                @if (scr is null) { <span class="badge warn">screen sensor not found — turn on "Interactive"</span> }
+                                else { <span class="badge ok">screen on/off ✓</span> }
+                            }
+                        </span>
                     </label>
                 }
             }
             <div class="form-grid" style="margin-top:8px">
                 <div class="field"><label>App identifier</label><input type="text" @bind="b.AppMatch" /><div class="help">YouVersion on Android is <code>com.sirma.mobile.bible.android</code>.</div></div>
                 <div class="field"><label>Minutes that count as reading</label><input type="number" min="1" max="60" @bind="b.MinMinutes" /></div>
+                <div class="field"><label>Ignore visits shorter than (seconds)</label><input type="number" min="0" max="600" @bind="b.MinSessionSeconds" /></div>
             </div>
             <label class="check"><input type="checkbox" @bind="b.AppCountsAsVerse" /> Time in the app ticks off the verse of the day</label>
+            <label class="check"><input type="checkbox" @bind="b.AskWhatIRead" /> After reading in the app, also ask me <em>which passage</em> I read (optional — time is always logged automatically)</label>
 
             <h3 style="margin:14px 0 4px">iPhone (Shortcuts)</h3>
             <ol class="small" style="margin-top:4px;padding-left:18px">
@@ -87,6 +95,13 @@
                 <li>Make a second automation the same way for <em>Is Closed</em> with <code>event</code> = <code>closed</code>.</li>
             </ol>
             <div class="help small">LifeHub must be reachable from your phone at that address (e.g. your Cloudflare hostname).</div>
+
+            <h3 style="margin:14px 0 4px">Log exactly what you read: share from YouVersion</h3>
+            <p class="small" style="margin-top:4px">Time in the app can't tell LifeHub <em>which</em> passage you read. Sharing can:</p>
+            <ul class="small" style="margin-top:4px;padding-left:18px">
+                <li><strong>Android:</strong> open LifeHub in Chrome at your HTTPS address → ⋮ → <strong>Add to Home screen</strong> (Install). Then in YouVersion select the verses → <strong>Share</strong> → <strong>LifeHub</strong>.</li>
+                <li><strong>iPhone:</strong> make a shortcut called <em>Log in LifeHub</em>: turn on <em>Show in Share Sheet</em> (accepts URLs and Text) → action <strong>Get Contents of URL</strong>: <code>@ReadUrl</code>, Method POST, Header <code>X-Api-Key</code>, Request Body JSON with <code>reference</code> = <em>Shortcut Input</em>. Then in YouVersion: select the verses → Share → <em>Log in LifeHub</em>.</li>
+            </ul>
 
             <div class="small" style="margin-top:10px"><strong>Today:</strong> @Math.Round(Bible.AppMinutes(Clock.Today), 1) min in the app @(string.IsNullOrEmpty(Tracker.LastStatus) ? "" : $"· {Tracker.LastStatus}")</div>
         </div>
@@ -111,6 +126,8 @@
     private List<HaState>? appSensors;
 
     private static readonly (int, string)[] Versions = { (3034, "BSB"), (111, "NIV"), (59, "ESV"), (116, "NLT"), (1, "KJV"), (114, "NKJV"), (206, "WEB") };
+
+    private string ReadUrl => ApiUrl.Replace("/bible/app", "/bible/read");
 
     private string ApiUrl
     {
