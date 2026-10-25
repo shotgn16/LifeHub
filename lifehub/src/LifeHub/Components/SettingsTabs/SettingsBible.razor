@@ -106,6 +106,23 @@
             <div class="small" style="margin-top:10px"><strong>Today:</strong> @Math.Round(Bible.AppMinutes(Clock.Today), 1) min in the app @(string.IsNullOrEmpty(Tracker.LastStatus) ? "" : $"· {Tracker.LastStatus}")</div>
         </div>
 
+        <div class="card" style="margin-bottom:16px">
+            <h2 style="margin-bottom:6px">Go deeper</h2>
+            <p class="small muted" style="margin-top:0">The <strong>Go deeper</strong> button on a study reads StudyLight's commentaries on your passage and explains it at a deeper level — how it can be understood, its background, what it could look like in everyday life and how to apply it. Shown in purple; your notes are never changed.</p>
+            <div class="field"><label>How deep</label>
+                <div class="choice-list">
+                    @foreach (var (lvl, name, desc) in Levels)
+                    {
+                        <label class="check"><input type="radio" name="deeper" checked="@(b.DeeperLevel == lvl)" @onchange="() => b.DeeperLevel = lvl" />
+                            <span><strong>@name</strong> — @desc</span></label>
+                    }
+                </div>
+            </div>
+            <label class="check"><input type="checkbox" @bind="b.DeeperWordStudies" /> Include original-language word studies (Greek / Hebrew)</label>
+            <label class="check"><input type="checkbox" @bind="b.DeeperReflection" /> Include reflection questions and a prayer</label>
+            <div class="field"><label>Focus the application on (optional)</label><input type="text" @bind="b.DeeperFocus" placeholder="e.g. family life, leading a small group, work" /></div>
+        </div>
+
         <div class="card">
             <h2 style="margin-bottom:6px">Study helpers</h2>
             <p class="small muted" style="margin-top:0">Only used when you press <strong>Ask for insights</strong> on a study. LifeHub fetches the page for your passage, and your local AI compares it with your notes. AI notes are shown in purple and never change your own notes.</p>
@@ -124,6 +141,13 @@
 @code {
     private BibleSettings b = new();
     private List<HaState>? appSensors;
+
+    private static readonly (int, string, string)[] Levels =
+    {
+        (1, "Overview", "one commentary page, a short summary. Quickest (about a minute on a small machine)."),
+        (2, "Detailed", "two pages per passage, several commentators, fuller applications. A few minutes."),
+        (3, "In-depth study", "up to six pages, where traditions differ, word studies and more scenarios. Slowest — best on a bigger machine.")
+    };
 
     private static readonly (int, string)[] Versions = { (3034, "BSB"), (111, "NIV"), (59, "ESV"), (116, "NLT"), (1, "KJV"), (114, "NKJV"), (206, "WEB") };
 

@@ -146,12 +146,79 @@ public sealed class OllamaClient
     {
         content = content.Trim();
         try { return JsonDocument.Parse(content).RootElement.Clone(); }
-        catch (JsonException)
+        catch (JsonException) { }
+        // Wrapped in ``` fences or prose.
+        var start = content.IndexOf('{');
+        var end = content.LastIndexOf('}');
+        if (start >= 0 && end > start)
         {
-            var start = content.IndexOf('{');
-            var end = content.LastIndexOf('}');
-            if (start >= 0 && end > start) return JsonDocument.Parse(content[start..(end + 1)]).RootElement.Clone();
-            throw new InvalidOperationException("The model did not return JSON: " + content[..Math.Min(200, content.Length)]);
+            try { return JsonDocument.Parse(content[start..(end + 1)]).RootElement.Clone(); }
+            catch (JsonException) { }
         }
+        // Cut off part-way (ran out of room): keep every complete item.
+        if (Salvage(content) is { } repaired)
+        {
+            try { return JsonDocument.Parse(repaired).RootElement.Clone(); }
+            catch (JsonException) { }
+        }
+        throw new AiFormatException("The AI's answer was cut off or wasn't in the expected format. Please try again — " +
+            "if it keeps happening, use a shorter study or raise \"Context\" in Settings → AI.");
+    }
+
+    /// <summary>
+    /// Repairs JSON that stopped part-way: cuts back to the last complete array element (or closed object)
+    /// and closes whatever is still open. Incomplete items are dropped rather than half-kept.
+    /// </summary>
+    public static string? Salvage(string text)
+    {
+        var start = text.IndexOf('{');
+        if (start < 0) return null;
+        var stack = new Stack<char>();
+        bool inString = false, escaped = false;
+        var lastSafe = -1;
+        char[]? safeStack = null;
+        for (var i = start; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (inString)
+            {
+                if (escaped) escaped = false;
+                else if (c == '\\') escaped = true;
+                else if (c == '"') inString = false;
+                continue;
+            }
+            switch (c)
+            {
+                case '"': inString = true; break;
+                case '{': case '[': stack.Push(c); break;
+                case '}': case ']':
+                    if (stack.Count == 0) return null;
+                    stack.Pop();
+                    if (stack.Count == 0) return text[start..(i + 1)];
+                    lastSafe = i; safeStack = stack.ToArray();
+                    break;
+                case ',':
+                    // Between two array elements the previous one is complete.
+                    if (stack.Count > 0 && stack.Peek() == '[') { lastSafe = i - 1; safeStack = stack.ToArray(); }
+                    break;
+            }
+        }
+        if (lastSafe < 0 || safeStack is null) return null;
+        var sb = new System.Text.StringBuilder(text[start..(lastSafe + 1)].TrimEnd().TrimEnd(','));
+        foreach (var open in safeStack) sb.Append(open == '{' ? '}' : ']');   // safeStack is top-first
+        return sb.ToString();
+    }
+
+    /// <summary>Rough token estimate (≈3.5 characters per token for English).</summary>
+    public static int EstimateTokens(string text) => (int)Math.Ceiling(text.Length / 3.5);
+
+    /// <summary>How many characters of input fit in the context window, leaving room for the answer.</summary>
+    public int InputCharBudget()
+    {
+        var o = _settings.Current.Ollama;
+        var tokens = Math.Max(1500, Math.Clamp(o.ContextTokens, 2048, 131072) - Math.Clamp(o.MaxAnswerTokens, 256, 16384) - 400);
+        return (int)(tokens * 3.2);
     }
 }
+
+public sealed class AiFormatException(string message) : InvalidOperationException(message);

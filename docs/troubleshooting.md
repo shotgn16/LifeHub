@@ -54,6 +54,8 @@
 | App time not counted (Android) | Turn on the Companion app's **Last used app** sensor and tick it in Settings → Bible. Set *Sensor update frequency* to **Fast always**. |
 | App time not counted (iPhone) | Check the Shortcuts automations are set to **Run Immediately** and the URL and API key are right. Your phone must reach LifeHub at that address. |
 | Handwriting not read / "model can't see images" | Set a **vision model** in Settings → AI (`ollama pull qwen3-vl:4b-instruct` on 8 GB machines, `qwen3-vl:8b-instruct` with 16 GB or more). |
+| "The model did not return JSON" / "answer was cut off" | Update to 1.5.0 or later, which keeps requests within the AI's working memory and rescues cut-off answers. On bigger machines you can raise **Context** in Settings → AI. |
+| "Go deeper" takes a long time | Choose **Overview** or **Detailed** in Settings → Bible. **In-depth study** reads up to six commentary pages and is slow on 8 GB machines. |
 | "Biblia Graphia: page didn't contain readable text" | That site builds its pages with JavaScript. Use the link in **Read more**, or turn it off in Settings → Bible. |
 | Photo finds no food | Get closer, use good light, and spread items out with labels facing the camera. One bag per photo. |
 | Dates read wrongly | Check the day/month order follows Settings → General → Culture. You can always correct the date before adding. |

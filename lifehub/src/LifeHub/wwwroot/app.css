@@ -561,3 +561,10 @@ table.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
   .pantry-row .grow { flex-basis: 100%; }
   .pantry-row .badge { margin-right: auto; }
 }
+
+.ai-block.deep details { margin: 6px 0; }
+.ai-block.deep summary { cursor: pointer; list-style: none; }
+.ai-block.deep summary::-webkit-details-marker { display: none; }
+.ai-block.deep summary::before { content: "▸"; display: inline-block; width: 1em; color: var(--ai); transition: transform .15s; }
+.ai-block.deep details[open] > summary::before { transform: rotate(90deg); }
+.ai-block.deep summary h4 { margin: 6px 0 2px; }

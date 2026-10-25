@@ -103,6 +103,7 @@
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <button class="btn ai" @onclick="Process" disabled="@(working is not null || isNew)"><Icon Name="sparkle" Size="15" /> @(study.Breakdown is null ? "Read & break down" : "Break down again")</button>
                     <button class="btn ai" @onclick="Insights" disabled="@(working is not null || isNew || StudyBibleRefs.Count == 0)" title="@(StudyBibleRefs.Count == 0 ? "Add the passages you studied first" : "")"><Icon Name="book" Size="15" /> Ask for insights</button>
+                    <button class="btn ai" @onclick="GoDeeper" disabled="@(working is not null || isNew || StudyBibleRefs.Count == 0)" title="@(StudyBibleRefs.Count == 0 ? "Add the passages you studied first" : "")"><Icon Name="down" Size="15" /> Go deeper</button>
                 </div>
                 @if (Settings.Current.Bible is { StudyLightEnabled: false, BibliaGraphiaEnabled: false })
                 {
@@ -110,7 +111,9 @@
                 }
                 else
                 {
-                    <div class="help small">Insights look up @string.Join(" and ", Sources) for your passages and compare them with your notes and other studies.</div>
+                    <div class="help small">Insights look up @string.Join(" and ", Sources) for your passages and compare them with your notes and other studies.
+                        <strong>Go deeper</strong> reads StudyLight's commentaries to explain the passage at a deeper level, what it could look like and how to apply it
+                        (level: <a href="settings?tab=bible">@BibleStudyService.LevelName(Settings.Current.Bible.DeeperLevel)</a>).</div>
                 }
                 @if (!Studies.HasVision && study.Attachments.Any(a => a.IsImage))
                 {
@@ -150,6 +153,59 @@
                 @if (b.Questions.Count > 0) { <h4>Questions</h4><ul>@foreach (var q in b.Questions) { <li>@q</li> }</ul> }
                 @if (b.Applications.Count > 0) { <h4>Applications & prayer</h4><ul>@foreach (var a in b.Applications) { <li>@a</li> }</ul> }
                 <div class="src">Generated @Fmt.Ago(b.GeneratedUtc) · @b.Model</div>
+            </div>
+        }
+
+        @if (study.Deeper is { } d)
+        {
+            <div class="ai-block deep" style="margin-bottom:14px">
+                <div class="ai-label"><Icon Name="sparkle" Size="12" /> Go deeper · @BibleStudyService.LevelName(d.Level) · @string.Join("; ", d.Passages)</div>
+                @if (!string.IsNullOrWhiteSpace(d.Overview)) { <p>@d.Overview</p> }
+                @if (d.Interpretations.Count > 0)
+                {
+                    <details open><summary><h4 style="display:inline">How it can be understood</h4></summary>
+                        @foreach (var i in d.Interpretations)
+                        {
+                            <p><strong>@i.Title</strong>@(string.IsNullOrWhiteSpace(i.Note) ? "" : $" — {i.Note}")<br />@i.Body</p>
+                        }
+                    </details>
+                }
+                @if (!string.IsNullOrWhiteSpace(d.Context)) { <details open><summary><h4 style="display:inline">Background</h4></summary><p>@d.Context</p></details> }
+                @if (d.Words.Count > 0)
+                {
+                    <details><summary><h4 style="display:inline">Word studies</h4></summary>
+                        <ul>@foreach (var w in d.Words) { <li><strong>@w.Title</strong> @(string.IsNullOrWhiteSpace(w.Note) ? "" : $"({w.Note})") — @w.Body</li> }</ul>
+                    </details>
+                }
+                @if (d.CrossReferences.Count > 0)
+                {
+                    <details><summary><h4 style="display:inline">Cross-references</h4></summary>
+                        <ul>@foreach (var c in d.CrossReferences) { <li><a href="@Bible.LinkFor(c.Title)" target="_blank" rel="noopener">@c.Title</a> — @c.Body</li> }</ul>
+                    </details>
+                }
+                @if (d.Themes.Count > 0) { <p>@foreach (var t in d.Themes) { <span class="badge ai" style="margin-right:4px">@t</span> }</p> }
+                @if (d.LooksLike.Count > 0)
+                {
+                    <details open><summary><h4 style="display:inline">What this could look like</h4></summary>
+                        <ul>@foreach (var l in d.LooksLike) { <li><strong>@l.Title:</strong> @l.Body</li> }</ul>
+                    </details>
+                }
+                @if (d.Applications.Count > 0)
+                {
+                    <details open><summary><h4 style="display:inline">How to apply it</h4></summary>
+                        <ul>@foreach (var a in d.Applications) { <li><strong>@a.Title:</strong> @a.Body</li> }</ul>
+                    </details>
+                }
+                @if (d.Questions.Count > 0)
+                {
+                    <details><summary><h4 style="display:inline">Questions to reflect on</h4></summary><ul>@foreach (var q in d.Questions) { <li>@q</li> }</ul></details>
+                }
+                @if (!string.IsNullOrWhiteSpace(d.Prayer)) { <details><summary><h4 style="display:inline">Prayer</h4></summary><p style="font-style:italic">@d.Prayer</p></details> }
+                <div class="src">
+                    @if (d.Sources.Count == 0) { <span>General knowledge (no commentary text was available)</span> }
+                    @foreach (var src in d.Sources) { <span><a href="@src.Note" target="_blank" rel="noopener">@src.Title</a>@(string.IsNullOrWhiteSpace(src.Body) ? "" : $" ({src.Body})") · </span> }
+                    Generated @Fmt.Ago(d.GeneratedUtc) · @d.Model
+                </div>
             </div>
         }
 
@@ -363,6 +419,13 @@
     {
         await SaveInternal();
         Studies.StartInsights(study.Id);
+        working = Studies.Working(study.Id);
+    }
+
+    private async Task GoDeeper()
+    {
+        await SaveInternal();
+        Studies.StartDeeper(study.Id);
         working = Studies.Working(study.Id);
     }
 

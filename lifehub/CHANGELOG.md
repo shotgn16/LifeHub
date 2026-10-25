@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+- New **Go deeper** button on Bible studies: StudyLight commentaries turned into a deeper explanation
+  — interpretations, background, word studies, what it could look like and how to apply it. Depth
+  (Overview / Detailed / In-depth) is set in Settings → Bible.
+- Fix: "The model did not return JSON" on Ask for insights (the answer was cut off on small machines).
+
 ## 1.4.0
 - Share verses from YouVersion to LifeHub to log exactly what you read (Android share menu, or an
   iPhone shortcut).

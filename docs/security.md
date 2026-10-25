@@ -38,7 +38,7 @@ LifeHub only connects to outside services you've set up:
 |---|---|---|
 | Open Food Facts | unknown barcode scanned | the barcode number |
 | YouVersion Platform API | once a day, if you added a key | the day of the year, and your app key |
-| StudyLight / Biblia Graphia | only when you press **Ask for insights** | a page request for the passage (no notes) |
+| StudyLight / Biblia Graphia | only when you press **Ask for insights** or **Go deeper** | a page request for the passage (no notes) |
 | Web push services (Google, Apple, Mozilla) | when LifeHub's own notifications are on | the encrypted message, which only your device can read |
 | Microsoft Graph / your mail servers | email sync | your sign-in |
 

@@ -9,6 +9,38 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [1.5.0] – 2026-10-25
+
+### Added
+- **Go deeper** button on Bible studies.
+  - It reads StudyLight's commentaries on your passage, spread through it (for example verses 28
+    and 39 of Romans 8:28-39).
+  - It explains the passage at a deeper level:
+    - how it can be understood, and who holds each view
+    - background
+    - original-language word studies
+    - cross-references and themes
+    - **what this could look like** in everyday situations
+    - **how to apply it**
+    - reflection questions and a prayer
+  - Shown in purple and kept separate from your notes; sources and commentators are credited.
+  - It works on small machines: each commentary piece is summarised on its own first, then the
+    study is written from those summaries.
+- **Settings → Bible → Go deeper**:
+  - How deep: **Overview** (quick), **Detailed** or **In-depth study** (more commentary pages and
+    commentators, where traditions differ, more scenarios)
+  - word studies on or off
+  - questions and prayer on or off
+  - an optional focus for the applications ("family life, my small group")
+- Settings → AI: **Context** and **Longest answer** sizes.
+
+### Fixed
+- **"The model did not return JSON" on Ask for insights.** Your notes plus long StudyLight pages
+  filled the model's working memory, so its answer was cut off part-way. LifeHub now:
+  - keeps each request within the context size, leaving room for the answer
+  - rescues a cut-off answer by keeping every complete item
+  - shows a friendly message instead of the raw model output
+
 ## [1.4.0] – 2026-10-24
 
 ### Added
@@ -250,7 +282,8 @@ on the add-on page. That file is a shorter version of this one.
   - Nightly backups.
 - Runs as a Home Assistant add-on (ingress), with Docker, or on Plesk (Docker, .NET Toolkit or IIS).
 
-[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/Shotgn16/LifeHub/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Shotgn16/LifeHub/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/Shotgn16/LifeHub/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/Shotgn16/LifeHub/compare/v1.3.0...v1.3.1

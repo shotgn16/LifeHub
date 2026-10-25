@@ -176,6 +176,36 @@ insights survive a refresh) and dismiss the rest.
 Both URL patterns are editable in Settings → Bible. You can use the placeholders `{book}`,
 `{name}`, `{chapter}`, `{verse}` and `{usfm}`.
 
+### Go deeper
+
+**Go deeper** turns StudyLight's commentaries on your passage into a deeper explanation. It covers:
+
+- **How it can be understood:** the main interpretations, with who holds each (for example
+  "Barnes, Clarke"), including where Christian traditions differ
+- **Background:** historical, cultural and literary context
+- **Word studies:** key Greek or Hebrew words and what they mean
+- **Cross-references** and **themes**
+- **What this could look like:** everyday situations where the passage is lived out
+- **How to apply it:** concrete practices for different areas of life
+- **Questions to reflect on** and a short **prayer**
+
+It's shown in purple below your study, with the StudyLight pages and commentators credited. Your
+notes are never changed. Press it again to regenerate, for example after changing the depth.
+
+Set it up in **Settings → Bible → Go deeper**:
+
+| Option | Effect |
+|---|---|
+| How deep: **Overview** | One commentary page, a short summary. About a minute on an 8 GB Mac. |
+| How deep: **Detailed** (default) | Two pages per passage, several commentators, fuller applications. A few minutes. |
+| How deep: **In-depth study** | Up to six pages, differing views, more word studies and scenarios. Slowest, so best on a bigger machine. |
+| Word studies | Include Greek/Hebrew word studies, or leave them out |
+| Questions and prayer | Include them, or leave them out |
+| Focus | Where the applications should focus, e.g. "family life, my small group, work" |
+
+To fit small machines, LifeHub reads the commentary in pieces and summarises each piece on its own
+before writing the study. Deeper levels make more of these calls, which is why they take longer.
+
 ### Models
 
 | Purpose | Setting | Suggested |

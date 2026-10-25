@@ -83,6 +83,8 @@ public sealed class BibleStudy : Entity
     /// <summary>AI: insights from reference sites and your other studies. Shown separately, never merged into Notes.</summary>
     public List<AiInsight> Insights { get; set; } = new();
     /// <summary>none · working · done · failed (+ message in AiError)</summary>
+    /// <summary>AI: "Go deeper" study built from StudyLight commentaries. Never merged into Notes.</summary>
+    public DeepStudy? Deeper { get; set; }
     public string AiStatus { get; set; } = "none";
     public string AiError { get; set; } = "";
     public float[]? Embedding { get; set; }
@@ -134,4 +136,37 @@ public sealed class AiInsight
     public Guid? RelatedStudyId { get; set; }
     public bool Pinned { get; set; }
     public bool Dismissed { get; set; }
+}
+
+/// <summary>A deeper look at the passage: interpretations, context, what it could look like, how to apply it.</summary>
+public sealed class DeepStudy
+{
+    public int Level { get; set; }
+    public DateTime GeneratedUtc { get; set; }
+    public string Model { get; set; } = "";
+    public List<string> Passages { get; set; } = new();
+    public string Overview { get; set; } = "";
+    /// <summary>Ways the passage can be read at a deeper level (Note = who holds this view).</summary>
+    public List<DeepItem> Interpretations { get; set; } = new();
+    public string Context { get; set; } = "";
+    /// <summary>Title = word, Note = original (Greek/Hebrew + Strong's), Body = meaning.</summary>
+    public List<DeepItem> Words { get; set; } = new();
+    /// <summary>Title = reference, Body = why it helps.</summary>
+    public List<DeepItem> CrossReferences { get; set; } = new();
+    public List<string> Themes { get; set; } = new();
+    /// <summary>"What this could look like": Title = situation, Body = description.</summary>
+    public List<DeepItem> LooksLike { get; set; } = new();
+    /// <summary>Title = area of life, Body = practical step.</summary>
+    public List<DeepItem> Applications { get; set; } = new();
+    public List<string> Questions { get; set; } = new();
+    public string Prayer { get; set; } = "";
+    /// <summary>Title = site, Body = commentators drawn on, Note = URL.</summary>
+    public List<DeepItem> Sources { get; set; } = new();
+}
+
+public sealed class DeepItem
+{
+    public string Title { get; set; } = "";
+    public string Body { get; set; } = "";
+    public string Note { get; set; } = "";
 }

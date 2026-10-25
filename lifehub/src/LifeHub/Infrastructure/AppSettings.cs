@@ -270,6 +270,16 @@ public sealed class BibleSettings
     /// <summary>{book} {chapter} {verse} {usfm} placeholders.</summary>
     public string StudyLightUrl { get; set; } = "https://www.studylight.org/commentary/{book}/{chapter}-{verse}.html";
     public bool BibliaGraphiaEnabled { get; set; } = true;
+
+    // ---- Go deeper ----
+    /// <summary>1 = Overview (quick), 2 = Detailed, 3 = In-depth study. Deeper reads more StudyLight commentary and takes longer.</summary>
+    public int DeeperLevel { get; set; } = 2;
+    /// <summary>Include original-language (Hebrew/Greek) word studies.</summary>
+    public bool DeeperWordStudies { get; set; } = true;
+    /// <summary>Include reflection questions and a prayer.</summary>
+    public bool DeeperReflection { get; set; } = true;
+    /// <summary>Where you'd like application to focus, e.g. "family life, my small group, work".</summary>
+    public string DeeperFocus { get; set; } = "";
     public string BibliaGraphiaUrl { get; set; } = "https://bibliagraphia.com/";
 }
 

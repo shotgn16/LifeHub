@@ -37,6 +37,8 @@
             <div class="field"><label>Timeout (seconds)</label><input type="number" min="10" @bind="o.TimeoutSeconds" /></div>
             <div class="field"><label>Temperature</label><input type="number" min="0" max="1" step="0.05" @bind="o.Temperature" /></div>
             <div class="field"><label>Max email characters sent</label><input type="number" min="500" step="500" @bind="o.MaxEmailChars" /></div>
+            <div class="field"><label>Context (tokens)</label><input type="number" min="2048" step="1024" @bind="o.ContextTokens" /><div class="help">The AI's working memory. 8192 suits 8 GB machines; 16384+ on bigger ones gives longer, richer answers.</div></div>
+            <div class="field"><label>Longest answer (tokens)</label><input type="number" min="512" step="256" @bind="o.MaxAnswerTokens" /></div>
         </div>
         @if (models.Count > 0 || modelsError is not null)
         {
