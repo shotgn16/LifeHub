@@ -157,6 +157,7 @@
     protected override void OnInitialized()
     {
         Load();
+        me = UserScope.Current;
         Settings.Changed += OnChanged;
         // While a Microsoft sign-in is in progress, refresh its status line.
         refresh = new Timer(_ => { if (device is not null) InvokeAsync(StateHasChanged); }, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
@@ -174,7 +175,8 @@
         deleteTasksWithEmail = e.DeleteTasksWithEmail;
     }
 
-    private void OnChanged() => InvokeAsync(() => { accounts = Settings.Current.Email.Accounts; StateHasChanged(); });
+    private UserScope.State? me;
+    private void OnChanged() => InvokeAsync(() => { using (UserScope.Use(me)) { accounts = Settings.Current.Email.Accounts; StateHasChanged(); } });
 
     private static string KindLabel(EmailAccountKind k) => k switch
     {

@@ -40,6 +40,15 @@ public sealed class NotificationService
     public async Task<bool> NotifyAsync(string title, string message, NoticeLevel level = NoticeLevel.Info, string link = "", string dedupeKey = "",
         bool push = true, string? tag = null, IEnumerable<string>? onlyTo = null, string? person = null)
     {
+        // Household-level messages (backups, upgrades, a job running for nobody in particular) go to everyone.
+        if (UserScope.UserId is null)
+        {
+            var sent = false;
+            foreach (var user in _settings.Users)
+                using (UserScope.As(user.Id))
+                    sent |= await NotifyAsync(title, message, level, link, dedupeKey, push, tag, onlyTo, person);
+            return sent;
+        }
         if (!string.IsNullOrEmpty(dedupeKey) && _repo.Where(n => n.DedupeKey == dedupeKey).Count > 0) return false;
         await _repo.UpsertAsync(new Notice { Title = title, Message = message, Level = level, Link = link, DedupeKey = dedupeKey });
         if (!push) return true;

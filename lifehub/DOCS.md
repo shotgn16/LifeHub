@@ -1,7 +1,8 @@
 # LifeHub
 
 Open **LifeHub** from the Home Assistant sidebar. You're signed in automatically because Home
-Assistant has already authenticated you.
+Assistant has already authenticated you. Once you add more people (Settings → People), LifeHub
+asks **"Who's using LifeHub?"** instead. Each person can add a PIN.
 
 Full documentation: <https://github.com/Shotgn16/LifeHub/tree/main/docs>
 
@@ -17,7 +18,9 @@ Full documentation: <https://github.com/Shotgn16/LifeHub/tree/main/docs>
 4. **Settings → Bible** (optional): a YouVersion key for the verse of the day, and tick your phone's
    *Last used app* sensor to track time in the YouVersion app.
 5. **Settings → Notifications**: Home Assistant app, LifeHub's own notifications, or both.
-6. **Settings → Security & API** (optional). Set a LifeHub username and password if you also want
+6. **Settings → People** (optional): add the rest of the household and choose what's shared
+   (food & shopping, meals, renewals). Tasks, email, Bible and notes are always each person's own.
+7. **Settings → Security & API** (optional). Set a LifeHub username and password if you also want
    to use the direct port (8099) or your own hostname, and copy the API key for `rest_command`s.
 
 ## Access from other devices
@@ -43,6 +46,9 @@ These refresh every 5 minutes, and their attributes include the item lists:
 - `sensor.lifehub_shopping_list`
 - `sensor.lifehub_ai_pending`
 - `sensor.lifehub_bible_streak`
+
+With several people, others also get `sensor.lifehub_tasks_due_<name>` and
+`sensor.lifehub_bible_streak_<name>`.
 
 ## Data
 

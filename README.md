@@ -14,9 +14,14 @@ different places:
 - **kitchen stock, shopping and meal planning**
 - your **schedule**
 - your **daily Bible reading and studies**
+- quick **notes** that sort themselves
+- **deals** at supermarkets near you, turned into meal ideas
 - **Home Assistant**
 - a **local-AI email assistant**, powered by [Ollama](https://ollama.com), that turns emails into
   tasks, calendar events, renewal updates and shopping items without your mail leaving the house
+
+**Several people** can use one LifeHub. Each person has their own tasks, email, Bible tracking and
+notes. Food stock, meal planning and renewals can be shared or kept separate.
 
 It's written in **C# / ASP.NET Core 8 + Blazor Server**, with no JavaScript framework. Data is
 stored as JSON files in one folder. It ships as one Docker image that runs as a **Home Assistant
@@ -47,7 +52,10 @@ add-on**, on **Plesk Obsidian**, or anywhere Docker or .NET 8 runs.
 | **Scan** | Phone barcode scanner with three modes: stock in, use up, and add to the shopping list. It looks products up on Open Food Facts, learns them after the first scan, and lets you undo. |
 | **Shopping** | Grouped by aisle. Only you add items: typed, scanned, from the HA list you choose (two-way, so Assist works) or from the meal planner. Staples running low appear as suggestions. Ticked items go into stock when you put them away. |
 | **Meals** | Plan up to two weeks around your calendar and energy. See what to buy, and get AI ideas that move meals, use up food, meet dietary needs (gluten free etc.) and improve recipes. You apply each idea yourself. |
-| **Bible** | Verse of the day (same as YouVersion), time in the YouVersion app (HA sensor or iPhone Shortcut), missed readings carried over, reading plan, streaks and coverage. **Studies** with photo/PDF proof, AI reading of handwriting, breakdowns, links between studies, and StudyLight insights shown in purple, never mixed into your notes. |
+| **People** | Add everyone in the household. Each person has their own tasks, email accounts, AI inbox, schedule, Bible reading, studies, notes, phones and API key. Choose whether food stock and shopping, meal planning, and renewals are shared. In the HA app, LifeHub asks who's using it, with an optional PIN. |
+| **Notes** | Drop in bits of text (ideas, links, gift ideas, door codes). The local AI files each one into a category, reusing yours, with tags. **Tidy up** merges near-duplicate categories. Notes are private, or shared one by one. |
+| **Deals** | Optional: checks offers at supermarkets near your town or postcode (offers pages, supermarket emails, pasted offers, leaflet photos), matches them to your shopping list, staples, recipes and dietary needs, and suggests meals on days that suit plus when to shop. |
+| **Bible** | Verse of the day (same as YouVersion), time in the YouVersion app (HA sensor or iPhone Shortcut), missed readings carried over, reading plan, streaks and coverage. **Studies** with photo/PDF proof, AI reading of handwriting, breakdowns, links between studies, and StudyLight insights shown in purple, never mixed into your notes. **Start a study from a verse**: choose a level and what it's for (personal, home group, preaching, teaching, youth, word study, one-to-one) and get starter notes. |
 | **Home** | Home Assistant runs the house; LifeHub gives you one place to see and nudge it. Rooms, lights, climate, scenes, who's home and energy, all shown with friendly names. Setup is automatic. |
 | **AI Inbox** | Reads Gmail/IMAP, Microsoft 365 and on-prem Exchange. A local Ollama model classifies each email and proposes actions. Safe actions are applied automatically and can be undone. |
 | **Promotions** | Adverts and newsletters go into their own list instead of becoming tasks or shopping items, and clear themselves when they expire. |
@@ -83,8 +91,10 @@ For Plesk, IIS, Cloudflare Tunnel and development setups, see the **[installatio
 | [Home Assistant](docs/home-assistant.md) | What's automatic, rooms, shared lists, notifications, sensors, automations |
 | [Email & AI](docs/email-and-ai.md) | Ollama, Gmail/IMAP, Microsoft 365, Exchange, classification, auto-apply and undo |
 | [Barcode scanner](docs/scanner.md) | Phone camera, photo, USB scanners, product learning |
-| [Kitchen, shopping & meals](docs/kitchen-and-meals.md) | Use-by vs best-before, add from photo, shopping rules, meal planner |
-| [Bible](docs/bible.md) | Verse of the day, YouVersion app tracking, carry-over, studies and AI insights |
+| [People & sharing](docs/people.md) | Several people, what's shared, signing in, PINs, per-person API keys |
+| [Notes](docs/notes.md) | Quick notes, automatic categories, tidy up, sharing |
+| [Kitchen, shopping & meals](docs/kitchen-and-meals.md) | Use-by vs best-before, add from photo, shopping rules, meal planner, deals |
+| [Bible](docs/bible.md) | Verse of the day, YouVersion app tracking, carry-over, studies, starter notes and AI insights |
 | [REST API](docs/api.md) | Endpoints and Home Assistant `rest_command` examples |
 | [Architecture](docs/architecture.md) | How the code is organised |
 | [Extending LifeHub](docs/extending.md) | New AI actions, mail providers, pages, storage |

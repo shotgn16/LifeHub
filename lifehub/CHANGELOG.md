@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.0.0
+**Several people in one LifeHub.**
+- Each person has their own tasks, email, AI inbox, Bible tracking, studies, notes, phones and API
+  key.
+- You choose whether food stock & shopping, meal planning and renewals are shared.
+- In Home Assistant, LifeHub asks "Who's using LifeHub?" (optional PIN). Add people in
+  Settings → People.
+- Upgrading changes nothing until you add someone.
+
+**Also new:**
+- **Notes**: drop in bits of text; the AI files them into categories. Tidy up, tags and sharing.
+- **Bible: start a study from a verse**: choose a level and what it's for (home group, preaching,
+  teaching, youth, word study, one-to-one, personal) to get starter notes.
+- **Deals** (Meals → Deals, can be switched off): offers at supermarkets near your town or
+  postcode, matched to your shopping list and recipes, with meal ideas on days that suit and when
+  to shop.
+
 ## 1.5.0
 - New **Go deeper** button on Bible studies: StudyLight commentaries turned into a deeper explanation
   — interpretations, background, word studies, what it could look like and how to apply it. Depth

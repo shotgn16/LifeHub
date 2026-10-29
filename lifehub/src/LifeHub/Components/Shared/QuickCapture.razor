@@ -3,6 +3,7 @@
 @inject KitchenService Kitchen
 @inject SettingsService Settings
 @inject UiState Ui
+@inject NotesService Notes
 
 <Modal Open="Open" OpenChanged="OpenChanged" Title="Quick capture">
     <ChildContent>
@@ -57,11 +58,12 @@
         }
     </ChildContent>
     <Footer>
+        <button class="btn @(Ai.IsAvailable ? "left" : "")" disabled="@string.IsNullOrWhiteSpace(text)" @onclick="AddNote" title="Keep it as a note — LifeHub files it into a category"><Icon Name="note" Size="15" /> Note</button>
         @if (Ai.IsAvailable)
         {
             @if (results?.Any(r => r.Status == SuggestionStatus.Pending) == true)
             {
-                <button class="btn left" @onclick="ApplyAll">Apply all</button>
+                <button class="btn" @onclick="ApplyAll">Apply all</button>
             }
             <button class="btn primary" disabled="@(busy || string.IsNullOrWhiteSpace(text))" @onclick="Capture">
                 <Icon Name="sparkles" Size="15" /> @(busy ? "Thinking…" : "Capture")
@@ -119,6 +121,14 @@
         foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             await Tasks.QuickAddAsync(line, category, due);
         Ui.Show("Task added");
+        text = "";
+        await OpenChanged.InvokeAsync(false);
+    }
+
+    private async Task AddNote()
+    {
+        await Notes.AddAsync(text, source: "capture");
+        Ui.Show("Saved to Notes");
         text = "";
         await OpenChanged.InvokeAsync(false);
     }

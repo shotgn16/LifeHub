@@ -25,7 +25,7 @@ public sealed class BibleService
     private readonly Clock _clock;
     private readonly ILogger<BibleService> _log;
     private readonly SemaphoreSlim _rollLock = new(1, 1);
-    private DateTime _lastVerseAttemptUtc = DateTime.MinValue;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, DateTime> _lastVerseAttemptUtc = new();   // per person
 
     public BibleService(IRepository<BibleReading> readings, IRepository<BibleAppSession> sessions, IRepository<DailyVerse> verses,
         IRepository<ReadingPlanItem> plan, IRepository<BibleStudy> studies, SettingsService settings, IHttpClientFactory http,
@@ -95,6 +95,25 @@ public sealed class BibleService
         catch (Exception ex) { _log.LogInformation(ex, "Verse text fetch failed"); }
         await _verses.UpsertAsync(verse);
         return verse;
+    }
+
+    /// <summary>The text of a passage in your chosen version (empty without a YouVersion key, or if the version isn't licensed).</summary>
+    public async Task<string> PassageTextAsync(BibleRef r, CancellationToken ct = default)
+    {
+        if (!HasYouVersion) return "";
+        try
+        {
+            using var c = YouVersion();
+            using var t = await c.GetAsync($"v1/bibles/{S.VersionId}/passages/{Uri.EscapeDataString(r.Usfm)}?format=text", ct);
+            if (!t.IsSuccessStatusCode) return "";
+            var pj = JsonDocument.Parse(await t.Content.ReadAsStringAsync(ct)).RootElement;
+            return pj.TryGetProperty("content", out var content) ? (content.GetString() ?? "").Trim() : "";
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _log.LogInformation("Passage text fetch failed: {Message}", ex.Message);
+            return "";
+        }
     }
 
     /// <summary>You set the day's verse yourself (no app key, or a different plan).</summary>
@@ -359,9 +378,9 @@ public sealed class BibleService
             if (s.PlanEnabled && !_plan.Where(p => p.Kind == "plan" && (p.Date == today || !p.Done)).Any())
                 await AddPlanChaptersAsync(today, s);
 
-            if (HasYouVersion && VerseFor(today) is null && DateTime.UtcNow - _lastVerseAttemptUtc > TimeSpan.FromMinutes(30))
+            if (HasYouVersion && VerseFor(today) is null && DateTime.UtcNow - _lastVerseAttemptUtc.GetValueOrDefault(UserScope.UserId ?? Guid.Empty) > TimeSpan.FromMinutes(30))
             {
-                _lastVerseAttemptUtc = DateTime.UtcNow;
+                _lastVerseAttemptUtc[UserScope.UserId ?? Guid.Empty] = DateTime.UtcNow;
                 try { await FetchVerseAsync(today, ct); }
                 catch (Exception ex) { _log.LogInformation("Verse of the day not fetched yet: {Message}", ex.Message); }
             }

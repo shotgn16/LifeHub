@@ -9,6 +9,94 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [2.0.0] – 2026-10-29
+
+**Several people can now use one LifeHub.** Upgrading changes nothing until you add someone. Your
+login, API key, phones, calendars, schedule, Bible settings and data become the first person's,
+and existing Shortcuts and automations keep working.
+
+### Added
+- **People** (Settings → People, admins only).
+  - **Each person's own:**
+    - tasks and schedule
+    - email accounts, AI inbox and promotions
+    - Bible reading, verse, reading plan, app time, streak and reminder
+    - studies
+    - notes
+    - phones and devices
+    - calendars
+    - HA tasks list
+    - reminders and digest
+    - API key
+  - **Household sharing switches** for:
+    - food stock, shopping list and purchase history
+    - meal planning (recipes, plan, dietary needs, deals)
+    - renewals and subscriptions
+
+    Turning sharing off keeps the existing list with the main person; turning it back on merges
+    everyone's lists.
+  - **Signing in.**
+    - In Home Assistant, **"Who's using LifeHub?"**, with an optional PIN per person.
+    - On the direct port, each person has their own username and password.
+    - Each person has their own **API key**, which acts as them.
+  - **Switch person** in the menu.
+  - Admins manage household settings; everyone else sees their personal settings tabs.
+  - Shared meal planning takes everyone's calendars into account ("Sam: football 18:00").
+  - New sensors for each extra person: `sensor.lifehub_tasks_due_<name>` and
+    `sensor.lifehub_bible_streak_<name>`.
+  - Removing a person deletes their personal data and keeps what they added to shared areas.
+- **Notes.**
+  - Drop in bits of text from:
+    - the Notes page
+    - Quick capture
+    - the phone share sheet
+    - `POST /api/v1/notes`
+  - The local AI files each note into a category (reusing yours where they fit), adds tags, and
+    gives long notes a short heading. It never changes the text.
+  - **Tidy up** files everything again and merges near-duplicate categories.
+  - You can:
+    - move notes yourself (they then stay put)
+    - rename or merge categories
+    - use `#tags`
+    - pin, archive and search
+  - Notes are private by default; share one at a time.
+- **Bible: start a study from a verse.**
+  - Type a passage and choose:
+    - **how deep**: Getting started, Going further or In depth
+    - **what it's for**: personal study, **home group**, **preaching**, teaching, youth & children,
+      word & theme study, or one-to-one
+  - LifeHub reads the passage text and StudyLight's commentaries, then writes **starter notes** in
+    purple, shaped for that purpose. For example:
+    - a home group gets an icebreaker, leader's notes and observation / interpretation /
+      application questions
+    - preaching gets a big idea, exegetical notes and an outline with illustration ideas
+  - Studies have a **What it's for** type, can be filtered by it, and Go deeper tailors its
+    applications to it.
+- **Deals & offers** (Meals → Deals, off by default).
+  - Set a town, city or postcode. LifeHub finds the nearest branch of each store using
+    postcodes.io / OpenStreetMap.
+  - It checks offers periodically, every 24 hours by default. Sources:
+    - store offers pages (structured product data or the local AI)
+    - supermarket emails you already get
+    - pasted offers
+    - leaflet photos
+  - Deals are matched to your shopping list, staples and (planned) recipes. Dietary clashes are
+    flagged.
+  - The AI suggests meals on days that suit (quick meals on busy days), ingredients worth picking
+    up, and **when to shop** in a free slot before offers end.
+  - **Add to Thursday** plans the meal and lists its deal items.
+  - Default stores: Tesco, Sainsbury's, Asda, Morrisons, Aldi, Lidl, Co-op, M&S, Waitrose and
+    Iceland, all editable. Meal suggestions also consider nearby deals.
+- Notes and per-person keys in the REST API; new guides: [People & sharing](docs/people.md) and
+  [Notes](docs/notes.md).
+
+### Changed
+- Reminders (tasks, renewals, food), the morning digest and auto-planning now run per person, to
+  their own phones and devices.
+- Household-wide notices go to everyone.
+- The HA shopping list stays the household's. When food isn't shared, it syncs with the main
+  person's list.
+
 ## [1.5.0] – 2026-10-25
 
 ### Added

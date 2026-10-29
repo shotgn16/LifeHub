@@ -119,6 +119,49 @@ Sessions are capped at 45 minutes, in case a "closed" never arrives.
 - **Recently read** lists every passage logged, wherever it came from: verse of the day, plan,
   catch-up, study, typed in, or the API.
 
+## Start a study from a verse
+
+On **Bible → Studies**, use **Start a study from a verse**. Type a passage (for example `John 15:1-8`),
+choose how deep to go and what the study is for, then press **Create starter notes**.
+
+<img src="images/starter.png" alt="Starter notes" width="80%">
+
+| How deep | |
+|---|---|
+| **Getting started** | Plain language, the main points, no background needed |
+| **Going further** | More background, some original-language words, fuller notes |
+| **In depth** | Detailed exegesis, Greek/Hebrew, where interpreters differ, more cross-references |
+
+| What it's for | The starter notes contain |
+|---|---|
+| **Personal study** | Read and notice, what it shows about God, reflect and respond, prayer |
+| **Home group** | Icebreaker, how to read it together, look closer, what it means, live it out, leader's notes (timings, sensitive topics), observation / interpretation / application questions, prayer points |
+| **Preaching** | Big idea, verse-by-verse exegetical notes, a 3–4 point outline with illustration ideas, introduction ideas, application, conclusion and response, things to watch out for |
+| **Teaching** | Learning aims, background, a lesson plan with timings, key truths, activities |
+| **Youth & children** | Opening activity, the story in simple words, the big truth, a response activity |
+| **Word & theme study** | Key words in Greek/Hebrew, the theme across Scripture, what it teaches |
+| **One-to-one** | Reading together, conversation starters, what it means for us, a challenge for the week |
+
+Add anything to keep in mind, such as "8 people, 45 minutes, some new to the Bible" or
+"25-minute sermon, part of a series on John".
+
+LifeHub creates a new study and writes the starter notes from:
+
+- the passage text, in your Bible version (with a YouVersion key)
+- StudyLight's commentaries, read in small pieces like **Go deeper**
+- your local AI
+
+The notes are shown in **purple** above your own notes, which stay empty for you to write in. You
+can then use **Go deeper**, **Ask for insights** and the rest as usual. Go deeper also shapes its
+applications for the study's type.
+
+On an existing study you can:
+
+- set **What it's for**
+- press **Starter notes**, or **Rewrite starter notes**, at a different depth
+
+The Studies list can be filtered by type, for example all your home group studies or sermons.
+
 ## Bible studies
 
 Press **New study** and add:
@@ -233,6 +276,14 @@ automation:
       - action: light.turn_on
         target: { entity_id: light.reading_lamp }
 ```
+
+## Several people
+
+Each person has their own reading, verse of the day, app sensor, reading plan, reminder, streak and
+studies (see [people.md](people.md)). The YouVersion app key and the study sites are set once for
+everyone by an admin. With several people, each gets `sensor.lifehub_bible_streak_<name>`; the main
+person keeps `sensor.lifehub_bible_streak`. In iPhone Shortcuts, use **your own** API key so the
+time is logged to you.
 
 ## API
 

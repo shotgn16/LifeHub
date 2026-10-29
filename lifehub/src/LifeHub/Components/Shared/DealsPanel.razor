@@ -1,0 +1,318 @@
+@inherits LiveComponent
+@inject DealsService Deals
+@inject SettingsService Settings
+@inject OllamaClient Ollama
+@inject Clock Clock
+@inject UiState Ui
+
+<div class="grid cols-2" style="align-items:start;margin-bottom:14px">
+    <div class="card">
+        <div class="card-head">
+            <h2><Icon Name="tag" Size="16" /> Deals & offers</h2>
+            <label class="switch right" title="Turn deal checking on or off">
+                <input type="checkbox" checked="@d.Enabled" @onchange="Toggle" />
+                <span>@(d.Enabled ? "On" : "Off")</span>
+            </label>
+        </div>
+        <p class="small muted" style="margin-top:0">LifeHub checks the offers at stores near you, picks out the ones that suit your shopping list, staples, recipes and dietary needs, and suggests meals on days that fit — plus when to fit in the shop.</p>
+        <div class="deal-area">
+            <div class="field">
+                <label>Your area</label>
+                <input type="text" @bind="d.Area" @bind:event="oninput" placeholder="Town, city or postcode — e.g. Leeds or LS1 4AP" />
+            </div>
+            <div class="field" style="max-width:120px">
+                <label>Within</label>
+                <select @bind="d.RadiusMiles">
+                    @foreach (var m in new[] { 1, 2, 3, 5, 10, 15, 20 }) { <option value="@m">@m mile@(m == 1 ? "" : "s")</option> }
+                </select>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn" @onclick="Locate" disabled="@(busy || string.IsNullOrWhiteSpace(d.Area))"><Icon Name="store" Size="15" /> Find stores near me</button>
+            <button class="btn primary" @onclick="CheckNow" disabled="@(busy || !d.Enabled)"><Icon Name="refresh" Size="15" /> @(busy ? (Deals.Progress.Length > 0 ? Deals.Progress : "Checking…") : "Check now")</button>
+        </div>
+        @if (!string.IsNullOrEmpty(d.AreaLabel))
+        {
+            <div class="small" style="margin-top:10px">
+                <strong>@d.AreaLabel</strong>
+                @if (d.Nearby.Count == 0) { <span class="muted"> · no stores from your list found within @d.RadiusMiles miles</span> }
+                else
+                {
+                    <div class="chips" style="margin-top:6px">
+                        @foreach (var n in d.Nearby) { <span class="badge" title="@n.Name">@n.Store · @n.Miles mi</span> }
+                    </div>
+                    <div class="tiny muted" style="margin-top:4px">Store locations © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+                }
+            </div>
+        }
+        @if (d.LastCheckUtc is { } last)
+        {
+            <p class="tiny muted" style="margin-bottom:0">Last checked @Fmt.Ago(last) · @d.LastResult@(d.Enabled ? $" · checks every {d.CheckEveryHours} hours" : "")</p>
+        }
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:6px">Add offers yourself</h2>
+        <p class="small muted" style="margin-top:0">Many supermarkets build their offers pages in the browser or block automated visits. Supermarket emails are read automatically; you can also paste offers from an app or website, or photograph the leaflet.</p>
+        <div class="field">
+            <label>Store</label>
+            <select @bind="manualStore">
+                @foreach (var s in d.Stores) { <option>@s.Name</option> }
+            </select>
+        </div>
+        <textarea rows="4" @bind="pasteText" @bind:event="oninput" placeholder="Paste offers here, e.g. “Chicken thighs 1kg £2.49 (was £3.50) until Sunday”"></textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button class="btn" @onclick="Paste" disabled="@(busyManual || string.IsNullOrWhiteSpace(pasteText) || !Ollama.IsConfigured)"><Icon Name="sparkle" Size="15" /> Read offers</button>
+            <label class="btn @(Ollama.HasVision ? "" : "disabled")" title="@(Ollama.HasVision ? "" : "Needs a vision model (Settings → AI)")">
+                <Icon Name="camera" Size="15" /> Leaflet photo
+                <InputFile OnChange="Photo" accept="image/*" style="display:none" disabled="@(!Ollama.HasVision || busyManual)" />
+            </label>
+            @if (busyManual) { <span class="small muted">Reading…</span> }
+        </div>
+    </div>
+</div>
+
+@if (!d.Enabled && offers.Count == 0)
+{
+    <div class="card empty">Turn deals on, set your area and press <strong>Check now</strong>. You can switch it off again at any time.</div>
+}
+
+@if (ideas.Count > 0)
+{
+    <h3 style="margin:4px 0 8px">This week's ideas <span class="badge ai">AI</span></h3>
+    <div class="deal-ideas">
+        @foreach (var i in ideas)
+        {
+            <div class="ai-block">
+                <div style="display:flex;align-items:center;gap:6px">
+                    <span class="ai-label">@(i.Kind switch { "trip" => "When to shop", "meal" => "Meal idea", _ => "Pick up" })</span>
+                    @if (i.Day is { } day) { <span class="badge">@Fmt.RelDay(day, Clock.Today)@(string.IsNullOrEmpty(i.Time) ? "" : " · " + i.Time)</span> }
+                    <button class="icon-btn right" style="width:28px;height:28px" title="Dismiss" @onclick="() => Deals.DismissIdeaAsync(i.Id)"><Icon Name="x" Size="14" /></button>
+                </div>
+                <h4>@i.Title</h4>
+                <p>@i.Body</p>
+                @{ var used = i.DealIds.Select(id => offers.FirstOrDefault(o => o.Id == id)).Where(o => o is not null).ToList(); }
+                @if (used.Count > 0 && i.Kind != "ingredient")
+                {
+                    <div class="small muted">@string.Join(" · ", used.Select(o => $"{o!.Item} {DealsService.PriceText(o)}"))</div>
+                }
+                <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+                    @if (i.Kind == "meal")
+                    {
+                        <button class="btn sm primary" @onclick="() => Plan(i)"><Icon Name="plus" Size="13" /> Add to @(i.Day is { } dd ? dd.ToString("dddd", Fmt.Culture) : "the plan")</button>
+                    }
+                    else if (i.Kind == "ingredient" && used.FirstOrDefault() is { } one)
+                    {
+                        <button class="btn sm" disabled="@one.AddedToList" @onclick="() => AddToList(one)"><Icon Name="cart" Size="13" /> @(one.AddedToList ? "On the list" : "Add to shopping list")</button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (offers.Count > 0)
+{
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 10px">
+        <div class="chips">
+            <button class="chip @(filter == "suits" ? "on" : "")" @onclick='() => filter = "suits"'>Suits you <span class="muted">@offers.Count(o => o.Score >= 4)</span></button>
+            <button class="chip @(filter == "all" ? "on" : "")" @onclick='() => filter = "all"'>All food <span class="muted">@offers.Count(o => o.Food)</span></button>
+            @foreach (var g in offers.GroupBy(o => o.Store).OrderBy(g => g.Key))
+            {
+                <button class="chip @(filter == g.Key ? "on" : "")" @onclick="() => filter = g.Key">@g.Key <span class="muted">@g.Count()</span></button>
+            }
+        </div>
+    </div>
+    var shown = Shown().ToList();
+    <div class="card flush">
+        <ul class="list">
+            @if (shown.Count == 0) { <li class="empty">Nothing here — try <em>All food</em>.</li> }
+            @foreach (var o in shown)
+            {
+                <li class="row">
+                    <div class="grow">
+                        <div class="title">@o.Item <span class="badge">@o.Store</span></div>
+                        <div class="meta">
+                            <strong class="deal-price">@DealsService.PriceText(o)</strong>
+                            @if (o.ValidUntil is { } v) { <span>· until @v.ToString("ddd d MMM", Fmt.Culture)</span> }
+                            <span>· @SourceLabel(o.Source)</span>
+                            @foreach (var m in o.Matches) { <span class="badge ok">@m</span> }
+                            @if (o.DietWarning.Length > 0) { <span class="badge warn" title="May not meet your dietary needs">check: @o.DietWarning</span> }
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(o.Url)) { <a class="icon-btn" href="@o.Url" target="_blank" rel="noopener" title="Open"><Icon Name="right" Size="15" /></a> }
+                    <button class="btn sm" disabled="@o.AddedToList" @onclick="() => AddToList(o)">@(o.AddedToList ? "On list" : "Add")</button>
+                    <button class="icon-btn" title="Not interested" @onclick="() => Deals.DismissAsync(o.Id)"><Icon Name="x" Size="15" /></button>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+<details class="card" style="margin-top:14px">
+    <summary><strong>Deal settings</strong> <span class="small muted">stores, emails, how often</span></summary>
+    <div style="margin-top:12px">
+        <label class="check"><input type="checkbox" @bind="d.NearbyOnly" /> Only check stores with a branch within @d.RadiusMiles miles</label>
+        <label class="check"><input type="checkbox" @bind="d.UseEmails" /> Use offers from supermarket emails (newsletters already in your inbox)</label>
+        <label class="check"><input type="checkbox" @bind="d.SuggestMeals" /> Suggest meals and ingredients from the deals (local AI)</label>
+        <label class="check"><input type="checkbox" @bind="d.Notify" /> Tell me when new deals suit us</label>
+        <div class="field" style="max-width:220px">
+            <label>Check every</label>
+            <select @bind="d.CheckEveryHours">
+                @foreach (var h in new[] { 12, 24, 48, 72, 168 }) { <option value="@h">@(h < 48 ? $"{h} hours" : h == 168 ? "week" : $"{h / 24} days")</option> }
+            </select>
+        </div>
+        <h4 style="margin:12px 0 6px">Stores</h4>
+        <div class="deal-stores">
+            @foreach (var s in d.Stores)
+            {
+                <div class="deal-store">
+                    <label class="check" style="margin:0"><input type="checkbox" @bind="s.Enabled" /> <strong>@s.Name</strong></label>
+                    <input type="url" @bind="s.OffersUrl" class="mono small" placeholder="Offers page (optional)" />
+                    @if (d.StoreStatus.TryGetValue(s.Name, out var st)) { <span class="tiny muted">@st</span> }
+                </div>
+            }
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <input type="text" @bind="newStore" placeholder="Add a store, e.g. Farmfoods" style="max-width:220px" />
+            <button class="btn sm" @onclick="AddStore" disabled="@string.IsNullOrWhiteSpace(newStore)">Add store</button>
+        </div>
+        <p class="tiny muted">Only the area you type is sent to postcodes.io / OpenStreetMap to find nearby stores. Offers pages are fetched like a browser would; nothing about you is sent.</p>
+        <button class="btn primary" @onclick="Save">Save deal settings</button>
+    </div>
+</details>
+
+@code {
+    private DealSettings d = new();
+    private List<DealOffer> offers = new();
+    private List<DealIdea> ideas = new();
+    private string filter = "suits", pasteText = "", manualStore = "", newStore = "";
+    private bool busy, busyManual;
+    private Timer? tick;
+
+    protected override void OnInitialized()
+    {
+        Watch(Deals.Offers); Watch(Deals.Ideas);
+        d = Deals.Config;
+        manualStore = d.Stores.FirstOrDefault()?.Name ?? "";
+        Load();
+        tick = new Timer(_ => { if (busy || Deals.Busy) InvokeAsync(StateHasChanged); }, null, 1000, 1000);
+    }
+
+    protected override void OnDataChanged() => Load();
+
+    private void Load()
+    {
+        offers = Deals.Current().ToList();
+        ideas = Deals.OpenIdeas().ToList();
+        if (filter == "suits" && offers.Count > 0 && offers.All(o => o.Score < 4)) filter = "all";
+    }
+
+    private IEnumerable<DealOffer> Shown() => filter switch
+    {
+        "suits" => offers.Where(o => o.Score >= 4),
+        "all" => offers.Where(o => o.Food),
+        _ => offers.Where(o => o.Store == filter)
+    };
+
+    private static string SourceLabel(string s) => s switch { "email" => "from an email", "leaflet" => "leaflet photo", "paste" => "pasted", _ => "offers page" };
+
+    private async Task SaveSettings(bool quiet = false)
+    {
+        var copy = Json.Clone(d);
+        await Settings.UpdateAsync(s =>
+        {
+            // Keep the lookup results the service wrote; take everything you can edit here.
+            copy.Latitude = s.Deals.Latitude; copy.Longitude = s.Deals.Longitude; copy.AreaLabel = s.Deals.AreaLabel;
+            copy.LocatedArea = s.Deals.LocatedArea; copy.Nearby = s.Deals.Nearby; copy.LastCheckUtc = s.Deals.LastCheckUtc;
+            copy.LastResult = s.Deals.LastResult; copy.StoreStatus = s.Deals.StoreStatus;
+            s.Deals = copy;
+        });
+        if (!quiet) Ui.Show("Saved");
+    }
+
+    private async Task Save() => await SaveSettings();
+
+    private async Task Toggle(ChangeEventArgs e)
+    {
+        d.Enabled = (bool)e.Value!;
+        await SaveSettings(quiet: true);
+        Ui.Show(d.Enabled ? "Deals on — LifeHub will check every " + d.CheckEveryHours + " hours" : "Deals off");
+    }
+
+    private async Task Locate()
+    {
+        busy = true;
+        try
+        {
+            await SaveSettings(quiet: true);
+            var r = await Deals.LocateAsync();
+            d = Deals.Config;
+            Ui.Show(r);
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task CheckNow()
+    {
+        busy = true;
+        try
+        {
+            await SaveSettings(quiet: true);
+            var r = await Deals.CheckAsync();
+            d = Deals.Config;
+            Load();
+            Ui.Show(r);
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task Paste()
+    {
+        busyManual = true;
+        try
+        {
+            var n = await Deals.AddFromTextAsync(manualStore, pasteText);
+            pasteText = "";
+            Load();
+            Ui.Show(n == 0 ? "No offers found in that text" : $"{n} offer{(n == 1 ? "" : "s")} added");
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busyManual = false; }
+    }
+
+    private async Task Photo(InputFileChangeEventArgs e)
+    {
+        busyManual = true;
+        try
+        {
+            using var ms = new MemoryStream();
+            await e.File.OpenReadStream(15 * 1024 * 1024).CopyToAsync(ms);
+            var n = await Deals.AddFromPhotoAsync(manualStore, ms.ToArray());
+            Load();
+            Ui.Show(n == 0 ? "No offers found in the photo" : $"{n} offer{(n == 1 ? "" : "s")} added");
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busyManual = false; }
+    }
+
+    private async Task AddToList(DealOffer o) => await Ui.Try(async () => { await Deals.AddToShoppingAsync(o.Id); Load(); }, $"{o.Item} added to the shopping list");
+
+    private async Task Plan(DealIdea i) => await Ui.Try(async () => Ui.Show(await Deals.PlanAsync(i.Id)));
+
+    private void AddStore()
+    {
+        var name = newStore.Trim();
+        if (name.Length == 0 || d.Stores.Any(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) return;
+        d.Stores.Add(new DealStore { Name = name, Match = new() { name.ToLowerInvariant() } });
+        newStore = "";
+    }
+
+    public override void Dispose()
+    {
+        tick?.Dispose();
+        base.Dispose();
+    }
+}

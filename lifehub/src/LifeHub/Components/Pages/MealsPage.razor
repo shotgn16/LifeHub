@@ -30,9 +30,14 @@
     <button class="tab @(tab == "buy" ? "on" : "")" @onclick='() => tab = "buy"'>What to buy @if (needCount > 0) { <span class="count">@needCount</span> }</button>
     <button class="tab @(tab == "recipes" ? "on" : "")" @onclick='() => tab = "recipes"'>Recipes <span class="muted">· @recipes.Count</span></button>
     <button class="tab @(tab == "needs" ? "on" : "")" @onclick='() => tab = "needs"'>Dietary needs</button>
+    <button class="tab @(tab == "deals" ? "on" : "")" @onclick='() => tab = "deals"'>Deals @if (Settings.Current.Deals.Enabled) { <span class="dot on" style="margin-left:4px"></span> }</button>
 </div>
 
-@if (tab == "plan")
+@if (tab == "deals")
+{
+    <DealsPanel />
+}
+else if (tab == "plan")
 {
     <div class="small" style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <span class="muted">Requirements:</span>
@@ -305,6 +310,7 @@ else
 
 @code {
     private string tab = "plan";
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
     private int days = 7;
     private DateOnly today, to;
     private bool busy;
@@ -336,6 +342,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        if (Tab is "deals" or "buy" or "recipes" or "needs") tab = Tab;
         Watch(Meals.Entries); Watch(Meals.Recipes); Watch(Meals.Suggestions); Watch(Meals.Notes); Watch(Kitchen.Pantry); Watch(Kitchen.Shopping);
         var m = Settings.Current.Meals;
         reqs = m.Requirements.ToList(); slots = m.Slots.ToList(); prefs = m.Preferences; servings = m.DefaultServings;

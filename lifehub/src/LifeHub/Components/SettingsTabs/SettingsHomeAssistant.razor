@@ -6,7 +6,14 @@
 @inject NotificationService Notices
 @inject DataPaths Paths
 @inject UiState Ui
+@inject UserContext User
 
+@if (!User.IsAdmin)
+{
+    <p class="small muted">Home Assistant is set up by an admin. Choose <strong>your</strong> phones, calendars and tasks list here.</p>
+}
+else
+{
 <div class="grid cols-2" style="margin-bottom:16px">
     <div class="card">
         <h2 style="margin-bottom:12px">Connection</h2>
@@ -41,10 +48,13 @@
         <button class="btn" @onclick="Save">Save</button>
     </div>
 </div>
+}
 
 @if (loaded)
 {
     <div class="grid cols-2">
+        @if (User.IsAdmin)
+        {
         <div class="card">
             <h2 style="margin-bottom:10px"><Icon Name="presence" /> People</h2>
             @if (people.Count == 0) { <p class="small muted">No people in Home Assistant (Settings → People).</p> }
@@ -52,10 +62,12 @@
             {
                 <label class="check" title="@p.Id"><input type="checkbox" checked="@h.PresenceEntities.Contains(p.Id)" @onchange="e => Toggle(h.PresenceEntities, p.Id, (bool)e.Value!)" /> @p.Name <span class="muted small">· @p.StateText</span></label>
             }
+            <p class="tiny muted">Link each LifeHub person to their HA person in Settings → People.</p>
         </div>
+        }
 
         <div class="card">
-            <h2 style="margin-bottom:10px"><Icon Name="bell" /> Phones for reminders</h2>
+            <h2 style="margin-bottom:10px"><Icon Name="bell" /> @(User.Multi ? "Your phones" : "Phones") for reminders</h2>
             @if (phones.Count == 0) { <p class="small muted">No phones found — install the Home Assistant Companion app on your phone and sign in.</p> }
             @foreach (var ph in phones)
             {
@@ -65,8 +77,8 @@
         </div>
 
         <div class="card">
-            <h2 style="margin-bottom:10px"><Icon Name="calendar" /> Calendars</h2>
-            <p class="small muted" style="margin-top:0">Ticked calendars set your busy times; work/free periods fill the rest.</p>
+            <h2 style="margin-bottom:10px"><Icon Name="calendar" /> @(User.Multi ? "Your calendars" : "Calendars")</h2>
+            <p class="small muted" style="margin-top:0">Ticked calendars set your busy times; work/free periods fill the rest.@(User.Multi ? " With meal planning shared, everyone's busy times are taken into account." : "")</p>
             @foreach (var c in calendars)
             {
                 <label class="check" title="@c.Id">
@@ -88,15 +100,18 @@
         <div class="card">
             <h2 style="margin-bottom:10px"><Icon Name="list" /> Shared lists</h2>
             <p class="small muted" style="margin-top:0">The same list in both apps — "Add milk to my shopping list" with Assist, or tick things off in the HA app.</p>
+            @if (User.IsAdmin)
+            {
             <div class="field">
-                <label>Shopping list</label>
+                <label>Shopping list@(User.Multi ? " (household)" : "")</label>
                 <select @bind="h.ShoppingTodoEntity">
                     <option value="">— not shared —</option>
                     @foreach (var t in todos) { <option value="@t.Id">@t.Name</option> }
                 </select>
             </div>
+            }
             <div class="field">
-                <label>Tasks</label>
+                <label>@(User.Multi ? "Your tasks" : "Tasks")</label>
                 <select @bind="h.TasksTodoEntity">
                     <option value="">— not shared —</option>
                     @foreach (var t in todos.Where(t => t.Id != h.ShoppingTodoEntity)) { <option value="@t.Id">@t.Name</option> }
@@ -106,6 +121,8 @@
             @if (ListSync.LastRunUtc is { } lastSync) { <p class="tiny muted">Last sync @Fmt.Ago(lastSync): @ListSync.LastResult</p> }
         </div>
 
+        @if (User.IsAdmin)
+        {
         <div class="card span-2">
             <h2 style="margin-bottom:10px"><Icon Name="bolt" /> Energy</h2>
             <p class="small muted" style="margin-top:0">Shown with 24-hour charts on the Home page and dashboard.</p>
@@ -120,6 +137,7 @@
             </div>
             @if (energySensors.Count == 0) { <p class="small muted">No power or energy sensors found.</p> }
         </div>
+        }
     </div>
     <div style="margin-top:16px"><button class="btn primary" @onclick="Save">Save Home Assistant settings</button></div>
 }

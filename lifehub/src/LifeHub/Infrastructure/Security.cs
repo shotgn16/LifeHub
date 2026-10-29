@@ -58,6 +58,19 @@ public static class AuthConstants
 
     public static ClaimsPrincipal Principal(string name, string scheme) =>
         new(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, name), new Claim(ClaimTypes.Role, AdminRole) }, scheme));
+
+    /// <summary>A signed-in LifeHub person. <paramref name="via"/> is "ingress" for the Home Assistant "Who's using LifeHub?" picker.</summary>
+    public static ClaimsPrincipal Principal(UserProfile user, string scheme, string via = "password")
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.Name, user.Name.Length > 0 ? user.Name : user.Username),
+            new(UserScope.ClaimUserId, user.Id.ToString()),
+            new(UserScope.ClaimVia, via)
+        };
+        if (user.IsAdmin) claims.Add(new Claim(ClaimTypes.Role, AdminRole));
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, scheme));
+    }
 }
 
 /// <summary>Authenticates REST API calls (e.g. from Home Assistant rest_command) with X-Api-Key or a Bearer token.</summary>
@@ -70,18 +83,20 @@ public sealed class ApiKeyAuthHandler : AuthenticationHandler<AuthenticationSche
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var key = _settings.Current.Auth.ApiKey;
-        if (string.IsNullOrEmpty(key)) return Task.FromResult(AuthenticateResult.NoResult());
-
         string? supplied = Request.Headers["X-Api-Key"].FirstOrDefault();
         var auth = Request.Headers.Authorization.FirstOrDefault();
         if (supplied is null && auth?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true) supplied = auth[7..].Trim();
         if (supplied is null) return Task.FromResult(AuthenticateResult.NoResult());
 
-        var ok = CryptographicOperations.FixedTimeEquals(System.Text.Encoding.UTF8.GetBytes(supplied), System.Text.Encoding.UTF8.GetBytes(key));
-        return Task.FromResult(ok
-            ? AuthenticateResult.Success(new AuthenticationTicket(AuthConstants.Principal("api", Scheme.Name), Scheme.Name))
-            : AuthenticateResult.Fail("Invalid API key"));
+        // Each person has their own key, so a Shortcut or HA automation acts for that person.
+        var bytes = System.Text.Encoding.UTF8.GetBytes(supplied);
+        foreach (var user in _settings.Users)
+        {
+            if (string.IsNullOrEmpty(user.ApiKey)) continue;
+            if (CryptographicOperations.FixedTimeEquals(bytes, System.Text.Encoding.UTF8.GetBytes(user.ApiKey)))
+                return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(AuthConstants.Principal(user, Scheme.Name, "api"), Scheme.Name)));
+        }
+        return Task.FromResult(AuthenticateResult.Fail("Invalid API key"));
     }
 }
 
@@ -132,24 +147,108 @@ public sealed class SetupAndIngressAuthMiddleware
 
     public async Task Invoke(HttpContext ctx, SettingsService settings)
     {
-        var s = settings.Current.Auth;
+        var s = settings.Household.Auth;
         var fromIngress = ctx.Items.ContainsKey("ingress");
+        var trusted = fromIngress && s.TrustHomeAssistantIngress;
+        var path = ctx.Request.Path.Value ?? "";
 
-        if (fromIngress && s.TrustHomeAssistantIngress && ctx.User.Identity?.IsAuthenticated != true)
+        // A choice made on the HA "Who's using LifeHub?" screen only counts inside Home Assistant.
+        if (ctx.User.FindFirst(UserScope.ClaimVia)?.Value == "ingress" && !trusted)
+            ctx.User = new ClaimsPrincipal(new ClaimsIdentity());
+        // Someone who has been removed is signed out.
+        if (ctx.User.Identity?.IsAuthenticated == true && UserScope.FromPrincipal(ctx.User) is null && !path.StartsWith("/api/"))
+            ctx.User = new ClaimsPrincipal(new ClaimsIdentity());
+
+        var users = settings.Users;
+        if (trusted && ctx.User.Identity?.IsAuthenticated != true && users.Count == 1)
         {
-            var name = ctx.Request.Headers["X-Remote-User-Display-Name"].FirstOrDefault()
-                       ?? ctx.Request.Headers["X-Remote-User-Name"].FirstOrDefault() ?? "Home Assistant";
-            ctx.User = AuthConstants.Principal(name, "Ingress");
+            // One person: Home Assistant has already signed them in.
+            var only = users[0];
+            var haName = ctx.Request.Headers["X-Remote-User-Display-Name"].FirstOrDefault();
+            if (only.Name == "Me" && !string.IsNullOrWhiteSpace(haName))
+                await settings.UpdateAsync(x => { if (x.Users.Count == 1 && x.Users[0].Name == "Me") x.Users[0].Name = haName.Trim(); });
+            ctx.User = AuthConstants.Principal(settings.Users[0], "Ingress", "ingress");
         }
 
-        var path = ctx.Request.Path.Value ?? "";
-        var exempt = path.StartsWith("/setup") || path.StartsWith("/auth/") || path.StartsWith("/_framework") ||
-                     path.StartsWith("/api/") || path.StartsWith("/health") || Path.HasExtension(path);
-        if (!s.IsConfigured && !(fromIngress && s.TrustHomeAssistantIngress) && !exempt)
+        var exempt = path.StartsWith("/setup") || path.StartsWith("/auth/") || path.StartsWith("/_framework") || path.StartsWith("/_blazor") ||
+                     path.StartsWith("/who") || path.StartsWith("/api/") || path.StartsWith("/health") || Path.HasExtension(path);
+        if (trusted && ctx.User.Identity?.IsAuthenticated != true && users.Count > 1 && !exempt)
+        {
+            // Several people: ask who it is (HA's own sign-in doesn't tell LifeHub reliably who's holding the phone).
+            var back = ctx.Request.PathBase + ctx.Request.Path + ctx.Request.QueryString;
+            ctx.Response.Redirect(ctx.Request.PathBase + "/who?returnUrl=" + Uri.EscapeDataString(back));
+            return;
+        }
+        if (!settings.HasLogin && !trusted && !exempt)
         {
             ctx.Response.Redirect(ctx.Request.PathBase + "/setup");
             return;
         }
         await _next(ctx);
     }
+}
+
+/// <summary>Runs after authorization: everything this request does (pages, API calls) happens as the signed-in person.</summary>
+public sealed class UserScopeMiddleware
+{
+    private readonly RequestDelegate _next;
+    public UserScopeMiddleware(RequestDelegate next) => _next = next;
+
+    public async Task Invoke(HttpContext ctx)
+    {
+        var id = UserScope.FromPrincipal(ctx.User);
+        using (id is { } uid ? UserScope.As(uid) : UserScope.None())
+            await _next(ctx);
+    }
+}
+
+/// <summary>
+/// Blazor circuit: every event, render and JS call runs as the person signed in to that browser tab.
+/// </summary>
+public sealed class UserCircuitHandler : Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler
+{
+    private readonly Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider _auth;
+    public UserCircuitHandler(Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider auth) => _auth = auth;
+
+    public override Func<Microsoft.AspNetCore.Components.Server.Circuits.CircuitInboundActivityContext, Task> CreateInboundActivityHandler(
+        Func<Microsoft.AspNetCore.Components.Server.Circuits.CircuitInboundActivityContext, Task> next) => async context =>
+    {
+        Guid? id = null;
+        try { id = UserScope.FromPrincipal((await _auth.GetAuthenticationStateAsync()).User); } catch (InvalidOperationException) { }
+        using (id is { } uid ? UserScope.As(uid) : UserScope.None())
+            await next(context);
+    };
+}
+
+/// <summary>The person signed in to this browser tab (for pages and components).</summary>
+public sealed class UserContext
+{
+    private readonly SettingsService _settings;
+    private readonly Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider _auth;
+    private Guid? _id;
+
+    public UserContext(SettingsService settings, Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider auth)
+    {
+        _settings = settings; _auth = auth;
+    }
+
+    public Guid Id => _id ??= UserScope.UserId ?? Resolve() ?? Guid.Empty;
+
+    private Guid? Resolve()
+    {
+        try
+        {
+            var t = _auth.GetAuthenticationStateAsync();
+            return t.IsCompletedSuccessfully ? UserScope.FromPrincipal(t.Result.User) : null;
+        }
+        catch (InvalidOperationException) { return null; }
+    }
+
+    public UserProfile? Me => _settings.User(Id);
+    public bool IsAdmin => Me?.IsAdmin == true;
+    public IReadOnlyList<UserProfile> Everyone => _settings.Users;
+    public bool Multi => _settings.Users.Count > 1;
+
+    /// <summary>Runs code as this tab's person — for timers and change notifications arriving from elsewhere.</summary>
+    public IDisposable Scope() => Id == Guid.Empty ? UserScope.None() : UserScope.As(Id);
 }

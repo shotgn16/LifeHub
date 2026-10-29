@@ -44,6 +44,9 @@ builder.Services.AddSingleton<BibleService>();
 builder.Services.AddSingleton<BibleStudyService>();
 builder.Services.AddSingleton<KitchenPhotoService>();
 builder.Services.AddSingleton<MealService>();
+builder.Services.AddSingleton<PeopleService>();
+builder.Services.AddSingleton<NotesService>();
+builder.Services.AddSingleton<DealsService>();
 
 // ---------- Integrations ----------
 builder.Services.AddSingleton<HomeAssistantClient>();
@@ -110,6 +113,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 builder.Services.AddRazorComponents().AddInteractiveServerComponents()
     .AddHubOptions(o => o.MaximumReceiveMessageSize = 1024 * 1024);   // photo uploads stream in chunks
 builder.Services.AddScoped<LifeHub.Components.Shared.UiState>();
+builder.Services.AddScoped<UserContext>();
+builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, UserCircuitHandler>();
 
 var app = builder.Build();
 
@@ -122,6 +127,7 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseMiddleware<SetupAndIngressAuthMiddleware>();
 app.UseAuthorization();
+app.UseMiddleware<UserScopeMiddleware>();     // pages and API calls run as the signed-in person
 app.UseAntiforgery();
 
 app.MapLifeHubEndpoints();

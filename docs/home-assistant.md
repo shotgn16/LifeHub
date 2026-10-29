@@ -89,6 +89,22 @@ These update every 5 minutes. Their attributes contain the item lists.
 | `sensor.lifehub_ai_pending` | count | |
 | `sensor.lifehub_bible_streak` | days | `read_today`, `verse`, `verse_read`, `app_minutes_today`, `to_read` |
 
+With several people (see [people.md](people.md)), the sensors above show the main person. Everyone
+else also gets these:
+
+- `sensor.lifehub_tasks_due_<name>`
+- `sensor.lifehub_bible_streak_<name>`
+
+Each person picks their own phones, calendars and tasks list in Settings → Home Assistant, and
+links their HA person in Settings → People. The shopping list stays the household's.
+
+### Signing in from the Home Assistant app
+
+- **One person.** Opening LifeHub from the sidebar signs you in automatically.
+- **Several people.** LifeHub asks **"Who's using LifeHub?"**. Home Assistant tells add-ons who
+  signed in to Home Assistant, not who is holding the tablet. Each person can add a PIN in
+  Settings → Security & API.
+
 ### Example automations
 
 Remind me about food when I get home:

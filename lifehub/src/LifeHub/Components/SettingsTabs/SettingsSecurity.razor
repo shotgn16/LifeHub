@@ -2,29 +2,47 @@
 @inject DataPaths Paths
 @inject NavigationManager Nav
 @inject UiState Ui
+@inject UserContext User
 
 <div class="grid cols-2">
     <div class="card">
-        <h2 style="margin-bottom:12px">Sign-in</h2>
-        <div class="field"><label>Username</label><input type="text" @bind="username" /></div>
-        @if (Settings.Current.Auth.IsConfigured)
+        <h2 style="margin-bottom:4px">Your sign-in</h2>
+        <p class="small muted" style="margin-top:0">Signed in as <strong>@me?.Name</strong>. A username and password let you use LifeHub outside Home Assistant (the direct port or your own address).</p>
+        <div class="field"><label>Username</label><input type="text" @bind="username" autocomplete="username" /></div>
+        @if (me?.HasPassword == true)
         {
             <div class="field"><label>Current password</label><input type="password" @bind="current" autocomplete="current-password" /></div>
         }
         <div class="field"><label>New password (min 8)</label><input type="password" @bind="password" autocomplete="new-password" /></div>
         <div class="field"><label>Confirm new password</label><input type="password" @bind="confirm" autocomplete="new-password" /></div>
-        <button class="btn primary" @onclick="SaveLogin">@(Settings.Current.Auth.IsConfigured ? "Change" : "Set") login</button>
+        <button class="btn primary" @onclick="SaveLogin">@(me?.HasPassword == true ? "Change" : "Set") login</button>
+
         @if (Paths.IsHomeAssistantAddon)
         {
             <hr />
+            <h3 style="margin:0 0 6px">PIN for Home Assistant</h3>
+            <p class="small muted" style="margin-top:0">With several people, LifeHub asks "Who's using LifeHub?" when it's opened from Home Assistant. Add a PIN so nobody else can pick you there.</p>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <input type="password" inputmode="numeric" maxlength="8" placeholder="4–8 digits" @bind="pin" style="max-width:140px" />
+                <button class="btn" @onclick="SavePin">@(string.IsNullOrEmpty(me?.PinHash) ? "Set PIN" : "Change PIN")</button>
+                @if (!string.IsNullOrEmpty(me?.PinHash))
+                {
+                    <button class="btn ghost" @onclick="ClearPin">Remove PIN</button>
+                }
+            </div>
+        }
+
+        @if (User.IsAdmin && Paths.IsHomeAssistantAddon)
+        {
+            <hr />
             <label class="check"><input type="checkbox" checked="@trustIngress" @onchange="ToggleIngress" /> Trust Home Assistant sign-in when opened from the HA sidebar (ingress)</label>
-            <p class="small muted">Direct access on the add-on's port always needs the LifeHub login@(Settings.Current.Auth.IsConfigured ? "" : " — set one above before exposing that port").</p>
+            <p class="small muted">Direct access on the add-on's port always needs a LifeHub login@(Settings.HasLogin ? "" : " — set one above before exposing that port").</p>
         }
     </div>
 
     <div class="card">
-        <h2 style="margin-bottom:12px">REST API</h2>
-        <p class="small muted">For Home Assistant automations, voice assistants, iOS Shortcuts etc. Send the key as <code>X-Api-Key</code> or <code>Authorization: Bearer …</code>.</p>
+        <h2 style="margin-bottom:12px">Your API key</h2>
+        <p class="small muted">For Home Assistant automations, voice assistants and iPhone Shortcuts. Everything done with this key is done as <strong>you</strong> — your tasks, your Bible reading. Send it as <code>X-Api-Key</code> or <code>Authorization: Bearer …</code>.</p>
         <div class="field">
             <label>API key</label>
             <div style="display:flex;gap:6px">
@@ -37,20 +55,23 @@
             <summary class="small" style="cursor:pointer">Home Assistant examples</summary>
             <pre class="mono tiny" style="white-space:pre-wrap;background:var(--surface-2);padding:12px;border-radius:8px">@Example</pre>
         </details>
-        <p class="tiny muted" style="margin-top:8px">Endpoints: GET /api/v1/summary · GET /api/v1/period · GET|POST /api/v1/tasks · POST /api/v1/tasks/{id}/complete · GET|POST /api/v1/shopping · POST /api/v1/capture</p>
+        <p class="tiny muted" style="margin-top:8px">Endpoints: GET /api/v1/summary · GET /api/v1/period · GET|POST /api/v1/tasks · POST /api/v1/tasks/{id}/complete · GET|POST /api/v1/shopping · POST /api/v1/capture · GET|POST /api/v1/notes · Bible: /api/v1/bible/*</p>
     </div>
 </div>
 
 @code {
-    private string username = "", current = "", password = "", confirm = "", apiKey = "";
+    private string username = "", current = "", password = "", confirm = "", apiKey = "", pin = "";
     private bool trustIngress, showKey;
+    private UserProfile? me;
 
-    protected override void OnInitialized()
+    protected override void OnInitialized() => Load();
+
+    private void Load()
     {
-        var a = Settings.Current.Auth;
-        username = a.Username;
-        apiKey = a.ApiKey;
-        trustIngress = a.TrustHomeAssistantIngress;
+        me = User.Me;
+        username = me?.Username ?? "";
+        apiKey = me?.ApiKey ?? "";
+        trustIngress = Settings.Household.Auth.TrustHomeAssistantIngress;
     }
 
     private string BaseUrl => Nav.BaseUri.TrimEnd('/');
@@ -59,17 +80,41 @@
 
     private async Task SaveLogin()
     {
-        var a = Settings.Current.Auth;
-        if (a.IsConfigured && !PasswordHash.Verify(current, a.PasswordHash)) { Ui.Show("Current password is wrong", true); return; }
+        if (me is null) return;
+        if (me.HasPassword && !PasswordHash.Verify(current, me.PasswordHash)) { Ui.Show("Current password is wrong", true); return; }
         if (string.IsNullOrWhiteSpace(username)) { Ui.Show("Enter a username", true); return; }
-        if (!string.IsNullOrEmpty(password) || !a.IsConfigured)
+        if (Settings.Users.Any(u => u.Id != me.Id && u.Username.Equals(username.Trim(), StringComparison.OrdinalIgnoreCase)))
+        { Ui.Show("Someone else already uses that username", true); return; }
+        if (!string.IsNullOrEmpty(password) || !me.HasPassword)
         {
             if (password.Length < 8 || password != confirm) { Ui.Show("Passwords must match and be at least 8 characters", true); return; }
         }
-        var newHash = string.IsNullOrEmpty(password) ? a.PasswordHash : PasswordHash.Create(password);
-        await Settings.UpdateAsync(s => { s.Auth.Username = username.Trim(); s.Auth.PasswordHash = newHash; });
+        var newHash = string.IsNullOrEmpty(password) ? me.PasswordHash : PasswordHash.Create(password);
+        var name = username.Trim();
+        await Settings.UpdateUserAsync(me.Id, u => { u.Username = name; u.PasswordHash = newHash; });
         current = password = confirm = "";
+        Load();
         Ui.Show("Login updated");
+    }
+
+    private async Task SavePin()
+    {
+        if (me is null) return;
+        var p = pin.Trim();
+        if (p.Length is < 4 or > 8 || !p.All(char.IsDigit)) { Ui.Show("Use 4 to 8 digits", true); return; }
+        var hash = PasswordHash.Create(p);
+        await Settings.UpdateUserAsync(me.Id, u => u.PinHash = hash);
+        pin = "";
+        Load();
+        Ui.Show("PIN saved");
+    }
+
+    private async Task ClearPin()
+    {
+        if (me is null) return;
+        await Settings.UpdateUserAsync(me.Id, u => u.PinHash = "");
+        Load();
+        Ui.Show("PIN removed");
     }
 
     private async Task ToggleIngress(ChangeEventArgs e)
@@ -81,9 +126,10 @@
 
     private async Task Regenerate()
     {
-        apiKey = PasswordHash.NewApiKey();
-        var k = apiKey;
-        await Settings.UpdateAsync(s => s.Auth.ApiKey = k);
+        if (me is null) return;
+        var k = PasswordHash.NewApiKey();
+        await Settings.UpdateUserAsync(me.Id, u => u.ApiKey = k);
+        Load();
         showKey = true;
         Ui.Show("New API key created — update anything using the old one");
     }

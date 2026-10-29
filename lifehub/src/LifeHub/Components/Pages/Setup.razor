@@ -9,19 +9,23 @@
 <div class="auth-wrap">
     <div class="card auth-card">
         <div class="brand"><span class="brand-mark">L</span> LifeHub</div>
-        @if (Settings.Current.Auth.IsConfigured)
+        @if (Settings.HasLogin)
         {
             <p class="center">Already set up. <a href="login">Sign in</a></p>
         }
         else
         {
-            <p class="muted center small">Create the account you'll sign in with.</p>
+            <p class="muted center small">Create your account. You can add the rest of your household afterwards in Settings → People.</p>
             @if (!string.IsNullOrEmpty(Error))
             {
                 <div class="alert danger">Enter a username and a password of at least 8 characters (both password boxes must match).</div>
             }
             <form method="post" action="auth/setup">
                 <AntiforgeryToken />
+                <div class="field">
+                    <label for="n">Your name</label>
+                    <input id="n" type="text" name="name" autocomplete="name" placeholder="e.g. Alex" />
+                </div>
                 <div class="field">
                     <label for="u">Username</label>
                     <input id="u" type="text" name="username" autocomplete="username" required autofocus />

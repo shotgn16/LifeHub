@@ -31,6 +31,12 @@
                     @{ var parsed = BibleBooks.Parse(passagesText); }
                     @if (!string.IsNullOrWhiteSpace(passagesText)) { <div class="help small">@(parsed.Count == 0 ? "Not recognised yet" : "→ " + string.Join("; ", parsed))</div> }
                 </div>
+                <div class="field full"><label>What it's for</label>
+                    <select @bind="study.StudyType">
+                        <option value="">—</option>
+                        @foreach (var k in StudyTypes.All) { <option value="@k.Key">@k.Name — @k.Blurb</option> }
+                    </select>
+                </div>
                 <div class="field"><label>Date</label><input type="date" @bind="study.Date" /></div>
                 <div class="field"><label>Minutes</label><input type="number" min="0" @bind="study.Minutes" /></div>
                 <div class="field full"><label>Tags (comma separated)</label><input type="text" placeholder="e.g. grace, prayer, small group" @bind="tagsText" /></div>
@@ -105,6 +111,13 @@
                     <button class="btn ai" @onclick="Insights" disabled="@(working is not null || isNew || StudyBibleRefs.Count == 0)" title="@(StudyBibleRefs.Count == 0 ? "Add the passages you studied first" : "")"><Icon Name="book" Size="15" /> Ask for insights</button>
                     <button class="btn ai" @onclick="GoDeeper" disabled="@(working is not null || isNew || StudyBibleRefs.Count == 0)" title="@(StudyBibleRefs.Count == 0 ? "Add the passages you studied first" : "")"><Icon Name="down" Size="15" /> Go deeper</button>
                 </div>
+                <div class="starter-row">
+                    <button class="btn ai" @onclick="Starter" disabled="@(working is not null || isNew || StudyBibleRefs.Count == 0)"><Icon Name="sparkle" Size="15" /> @(study.Starter is null ? "Starter notes" : "Rewrite starter notes")</button>
+                    <select @bind="starterLevel" aria-label="How deep">
+                        @for (var lv = 1; lv <= 3; lv++) { <option value="@lv">@StudyTypes.LevelName(lv)</option> }
+                    </select>
+                    <span class="small muted">for @StudyTypes.Of(study.StudyType).Name.ToLowerInvariant()</span>
+                </div>
                 @if (Settings.Current.Bible is { StudyLightEnabled: false, BibliaGraphiaEnabled: false })
                 {
                     <div class="help small">Reference sites are switched off in Settings → Bible, so insights use your notes, your other studies and general knowledge.</div>
@@ -133,6 +146,50 @@
                 }
             }
         </div>
+
+        @if (study.Starter is { } st)
+        {
+            var kind = StudyTypes.Of(st.Type);
+            <div class="ai-block deep starter" style="margin-bottom:14px">
+                <div class="ai-label"><Icon Name="sparkle" Size="12" /> Starter notes · @kind.Name · @StudyTypes.LevelName(st.Level) · @st.Passage</div>
+                @if (!string.IsNullOrWhiteSpace(st.BigIdea)) { <p class="big-idea">@st.BigIdea</p> }
+                @if (!string.IsNullOrWhiteSpace(st.Summary)) { <p>@st.Summary</p> }
+                @if (!string.IsNullOrWhiteSpace(st.PassageText))
+                {
+                    <details><summary><h4 style="display:inline">The passage</h4></summary><p class="passage-text">@st.PassageText</p></details>
+                }
+                @if (!string.IsNullOrWhiteSpace(st.Context)) { <details open><summary><h4 style="display:inline">Background</h4></summary><p>@st.Context</p></details> }
+                @foreach (var sec in st.Sections)
+                {
+                    <details open><summary><h4 style="display:inline">@sec.Heading</h4></summary>
+                        <ul>
+                            @foreach (var pt in sec.Points)
+                            {
+                                <li><strong>@pt.Title</strong>@(string.IsNullOrWhiteSpace(pt.Body) ? "" : (string.IsNullOrWhiteSpace(pt.Title) ? "" : " — ") + pt.Body)
+                                    @if (!string.IsNullOrWhiteSpace(pt.Note)) { <span class="note-aside">@pt.Note</span> }</li>
+                            }
+                        </ul>
+                    </details>
+                }
+                @if (st.Questions.Count > 0)
+                {
+                    <details open><summary><h4 style="display:inline">Questions</h4></summary>
+                        @foreach (var grp in st.Questions.GroupBy(q => string.IsNullOrWhiteSpace(q.Note) ? "" : q.Note))
+                        {
+                            @if (grp.Key.Length > 0 && st.Questions.Select(q => q.Note).Distinct().Count() > 1) { <div class="q-kind">@(char.ToUpperInvariant(grp.Key[0]) + grp.Key[1..])</div> }
+                            <ol>@foreach (var q in grp) { <li>@q.Title</li> }</ol>
+                        }
+                    </details>
+                }
+                @if (!string.IsNullOrWhiteSpace(st.Prayer)) { <details><summary><h4 style="display:inline">Prayer</h4></summary><p style="font-style:italic">@st.Prayer</p></details> }
+                <div class="src">
+                    @if (st.Sources.Count == 0) { <span>General knowledge (no commentary text was available)</span> }
+                    @foreach (var src in st.Sources) { <span><a href="@src.Note" target="_blank" rel="noopener">@src.Title</a>@(string.IsNullOrWhiteSpace(src.Body) ? "" : $" ({src.Body})") · </span> }
+                    @if (!string.IsNullOrWhiteSpace(st.Focus)) { <span>Asked for: “@st.Focus” · </span> }
+                    Generated @Fmt.Ago(st.GeneratedUtc) · @st.Model
+                </div>
+            </div>
+        }
 
         @if (study.Breakdown is { } b)
         {
@@ -320,6 +377,7 @@
         }
         passagesText = string.Join("; ", study.Passages);
         tagsText = string.Join(", ", study.Tags);
+        starterLevel = study.Starter?.Level ?? 2;
         working = Studies.Working(study.Id);
         poll ??= new Timer(_ => InvokeAsync(() =>
         {
@@ -419,6 +477,15 @@
     {
         await SaveInternal();
         Studies.StartInsights(study.Id);
+        working = Studies.Working(study.Id);
+    }
+
+    private int starterLevel = 2;
+
+    private async Task Starter()
+    {
+        await SaveInternal();
+        Studies.StartStarter(study.Id, string.IsNullOrEmpty(study.StudyType) ? "personal" : study.StudyType, starterLevel, study.Starter?.Focus ?? "");
         working = Studies.Working(study.Id);
     }
 

@@ -15,6 +15,7 @@ public sealed class RecipeIngredient
         (string.IsNullOrWhiteSpace(Notes) ? "" : $", {Notes}");
 }
 
+[Owned(OwnScope.Meals)]
 public sealed class Recipe : Entity
 {
     public string Name { get; set; } = "";
@@ -36,6 +37,7 @@ public sealed class Recipe : Entity
     public string VariantNote { get; set; } = "";
 }
 
+[Owned(OwnScope.Meals)]
 public sealed class MealPlanEntry : Entity
 {
     public DateOnly Date { get; set; }
@@ -49,6 +51,7 @@ public sealed class MealPlanEntry : Entity
 }
 
 /// <summary>Your note about how much energy a day leaves (overrides LifeHub's guess from the calendar).</summary>
+[Owned(OwnScope.Meals)]
 public sealed class MealDayNote : Entity
 {
     public DateOnly Date { get; set; }
@@ -58,6 +61,7 @@ public sealed class MealDayNote : Entity
 }
 
 /// <summary>An AI idea for the meal plan. Nothing changes until you press Apply.</summary>
+[Owned(OwnScope.Meals)]
 public sealed class MealSuggestion : Entity
 {
     /// <summary>move · tweak · use-up · diet · tip</summary>

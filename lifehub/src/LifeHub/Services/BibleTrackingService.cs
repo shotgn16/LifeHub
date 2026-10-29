@@ -11,7 +11,7 @@ public sealed class BibleTrackingService : BackgroundService
 {
     private readonly IServiceProvider _sp;
     private readonly ILogger<BibleTrackingService> _log;
-    private DateTime _lastSensorsUtc = DateTime.MinValue;
+    private readonly Dictionary<Guid, DateTime> _lastSensorsUtc = new();
 
     public string LastStatus { get; private set; } = "";
 
@@ -21,15 +21,21 @@ public sealed class BibleTrackingService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        using var system = UserScope.AsSystem();
         await Task.Delay(TimeSpan.FromSeconds(12), ct);
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
         do
         {
-            if (!S<SettingsService>().Current.Bible.Enabled) continue;
-            await Step(() => S<BibleService>().RollDayAsync(ct), "roll");
-            await Step(WatchAppAsync, "app");
-            await Step(ReminderAsync, "reminder");
-            await Step(PublishAsync, "sensors");
+            // Everyone has their own reading list, phones, streak and reminder.
+            foreach (var user in S<SettingsService>().Users)
+            {
+                using var asUser = UserScope.As(user.Id);
+                if (!S<SettingsService>().Current.Bible.Enabled) continue;
+                await Step(() => S<BibleService>().RollDayAsync(ct), "roll");
+                await Step(WatchAppAsync, "app");
+                await Step(ReminderAsync, "reminder");
+                await Step(PublishAsync, "sensors");
+            }
         } while (await timer.WaitForNextTickAsync(ct));
     }
 
@@ -41,7 +47,7 @@ public sealed class BibleTrackingService : BackgroundService
 
     /// <summary>Phones whose screen on/off sensor was found (for the settings page).</summary>
     public Dictionary<string, string?> ScreenSensors { get; } = new();
-    private DateTime _screenLookupUtc = DateTime.MinValue;
+    private readonly Dictionary<string, DateTime> _screenLookupUtc = new();
 
     /// <summary>
     /// Rebuilds today's (and yesterday evening's) sessions from Home Assistant history every minute, using the
@@ -56,11 +62,11 @@ public sealed class BibleTrackingService : BackgroundService
         var bible = S<BibleService>();
         if (ha.IsConfigured && s.AppSensors.Count > 0)
         {
-            if (DateTime.UtcNow - _screenLookupUtc > TimeSpan.FromMinutes(10))
+            foreach (var sensor in s.AppSensors)
             {
-                _screenLookupUtc = DateTime.UtcNow;
-                foreach (var sensor in s.AppSensors)
+                if (DateTime.UtcNow - _screenLookupUtc.GetValueOrDefault(sensor) > TimeSpan.FromMinutes(10))
                 {
+                    _screenLookupUtc[sensor] = DateTime.UtcNow;
                     var screen = BibleSessions.ScreenSensorFor(sensor);
                     ScreenSensors[sensor] = screen is not null && await ha.GetStateAsync(screen) is not null ? screen : null;
                 }
@@ -127,16 +133,21 @@ public sealed class BibleTrackingService : BackgroundService
 
     private async Task PublishAsync()
     {
-        if (DateTime.UtcNow - _lastSensorsUtc < TimeSpan.FromMinutes(5)) return;
+        var who = UserScope.UserId ?? Guid.Empty;
+        if (DateTime.UtcNow - _lastSensorsUtc.GetValueOrDefault(who) < TimeSpan.FromMinutes(5)) return;
         var ha = S<HomeAssistantClient>();
-        if (!ha.IsConfigured || !S<SettingsService>().Current.HomeAssistant.PublishSensors) return;
-        _lastSensorsUtc = DateTime.UtcNow;
+        var settings = S<SettingsService>();
+        if (!ha.IsConfigured || !settings.Current.HomeAssistant.PublishSensors) return;
+        _lastSensorsUtc[who] = DateTime.UtcNow;
+        // The main person keeps sensor.lifehub_bible_streak; others get sensor.lifehub_bible_streak_<name>.
+        var me = settings.Me;
+        var suffix = me is null || me.Id == settings.PrimaryUserId || me.Slug.Length == 0 ? "" : "_" + me.Slug;
         var bible = S<BibleService>();
         var today = S<Clock>().Today;
         var verse = bible.VerseFor(today);
-        await ha.SetStateAsync("sensor.lifehub_bible_streak", bible.Streak().ToString(), new()
+        await ha.SetStateAsync("sensor.lifehub_bible_streak" + suffix, bible.Streak().ToString(), new()
         {
-            ["friendly_name"] = "LifeHub Bible streak", ["icon"] = "mdi:book-open-variant", ["unit_of_measurement"] = "days",
+            ["friendly_name"] = suffix.Length == 0 ? "LifeHub Bible streak" : $"LifeHub Bible streak ({me!.FirstName})", ["icon"] = "mdi:book-open-variant", ["unit_of_measurement"] = "days",
             ["read_today"] = bible.ReadOn(today),
             ["verse"] = verse?.Reference, ["verse_read"] = verse?.Read == true,
             ["app_minutes_today"] = Math.Round(bible.AppMinutes(today), 1),

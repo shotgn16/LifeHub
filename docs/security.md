@@ -38,7 +38,9 @@ LifeHub only connects to outside services you've set up:
 |---|---|---|
 | Open Food Facts | unknown barcode scanned | the barcode number |
 | YouVersion Platform API | once a day, if you added a key | the day of the year, and your app key |
-| StudyLight / Biblia Graphia | only when you press **Ask for insights** or **Go deeper** | a page request for the passage (no notes) |
+| StudyLight / Biblia Graphia | only when you press **Ask for insights**, **Go deeper** or **Starter notes** | a page request for the passage (no notes) |
+| postcodes.io / OpenStreetMap (Nominatim, Overpass) | when Deals is on and you set your area | the town, city or postcode you typed |
+| Supermarket offers pages | when Deals is on, every 24 hours by default | an ordinary page request (no personal data) |
 | Web push services (Google, Apple, Mozilla) | when LifeHub's own notifications are on | the encrypted message, which only your device can read |
 | Microsoft Graph / your mail servers | email sync | your sign-in |
 
@@ -46,12 +48,18 @@ Your notes, photos and emails are only ever sent to **your own** Ollama server.
 
 ## Authentication
 
-- **One account.** The password is hashed with PBKDF2. Sign-in uses a 30-day sliding cookie, and
-  repeated failures lock the account out.
+- **People.** Each person has their own login, with the password hashed with PBKDF2. Sign-in uses
+  a 30-day sliding cookie, and repeated failures lock the account out. Each person's tasks, email,
+  Bible data and notes are only returned to them (see [people.md](people.md)). Admins manage
+  household settings and people.
+- **"Who's using LifeHub?" in Home Assistant.** Optional per-person PINs, also hashed and
+  rate-limited. A choice made on this screen is only accepted for requests coming through HA
+  ingress, never on the direct port.
 - **HA ingress.** Requests from the Supervisor's proxy that carry ingress headers are trusted,
   because Home Assistant has already authenticated the user. You can turn this off in Settings →
   Security & API.
-- **API key.** Needed for `/api/v1/*`. You can regenerate it at any time.
+- **API keys.** Needed for `/api/v1/*`. There is one key per person, it acts as that person, and
+  you can regenerate it at any time. Removing a person revokes their key.
 - **Secrets.** Mailbox passwords, OAuth refresh tokens, the HA token, the API key and the web-push
   signing key are encrypted at rest with ASP.NET Core Data Protection.
 

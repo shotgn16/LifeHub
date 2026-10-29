@@ -561,62 +561,8 @@ public sealed class BibleStudyService
         var refs = MainRefsOf(study).Take(level == 3 ? 3 : 2).ToList();
         if (refs.Count == 0) throw new InvalidOperationException("Add the passage(s) you studied first.");
 
-        // 1) Fetch StudyLight commentary pages, spread through the passage.
-        var perPassage = level switch { 1 => 1, 2 => 2, _ => 3 };
-        var maxChunks = level switch { 1 => 2, 2 => 4, _ => 8 };
-        var pageChars = level switch { 1 => 6000, 2 => 9000, _ => 14000 };
-        const int chunkChars = 3000;
-        var chunks = new List<(string Passage, string Url, string Text)>();
-        if (s.StudyLightEnabled)
-        {
-            var client = _http.CreateClient("web");
-            client.Timeout = TimeSpan.FromSeconds(25);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; LifeHub/1.5; personal Bible study helper)");
-            var pages = refs.SelectMany(r => CommentaryVerses(r, perPassage)).DistinctBy(v => v.Usfm).Take(level == 3 ? 6 : 3).ToList();
-            var n = 0;
-            foreach (var v in pages)
-            {
-                n++;
-                await SetStatus(id, $"Reading StudyLight on {v} ({n}/{pages.Count})…");
-                var url = Url(s.StudyLightUrl, v);
-                try
-                {
-                    var html = await client.GetStringAsync(url, ct);
-                    var text = HtmlText.Extract(html, anchor: $"{v.BookInfo.Name} {v.Chapter}", maxChars: pageChars);
-                    if (text.Length < 400) continue;
-                    var perPage = (int)Math.Ceiling(maxChunks / (double)pages.Count);
-                    for (int i = 0, taken = 0; i < text.Length && taken < perPage; i += chunkChars, taken++)
-                        chunks.Add((v.ToString(), url, text.Substring(i, Math.Min(chunkChars, text.Length - i))));
-                }
-                catch (Exception ex) { _log.LogInformation("StudyLight fetch failed for {Url}: {Message}", url, ex.Message); }
-            }
-            chunks = chunks.Take(maxChunks).ToList();
-        }
-
-        // 2) Summarise each piece on its own (keeps every request small).
-        var notes = new List<(string Passage, string Url, string Notes)>();
-        var k = 0;
-        foreach (var c in chunks)
-        {
-            k++;
-            await SetStatus(id, $"Studying the commentaries ({k}/{chunks.Count})…");
-            var summary = await _ollama.ChatTextAsync(
-                "You extract study notes from Bible commentary text. Use only what the text says; never invent quotes.",
-                $"""
-                PASSAGE: {c.Passage}
-                COMMENTARY TEXT (StudyLight, several commentators — each section starts with the commentary's name):
-                {c.Text}
-
-                Write concise study notes (max {(level == 3 ? 220 : 160)} words) as short bullet points covering:
-                - how each commentator interprets the passage (start the bullet with their name, e.g. "Barnes:")
-                - historical, cultural or literary background they give
-                {(s.DeeperWordStudies ? "- original-language (Greek/Hebrew) words they explain, with meanings\n" : "")}- cross-references they mention
-                If the text isn't about this passage, reply only: NONE
-                """, ct);
-            summary = summary.Trim();
-            if (summary.Length > 20 && !summary.StartsWith("NONE", StringComparison.OrdinalIgnoreCase))
-                notes.Add((c.Passage, c.Url, summary));
-        }
+        // 1–2) Read StudyLight's commentaries in small pieces and summarise each one.
+        var notes = await ReadCommentaryAsync(id, refs, level, s.DeeperWordStudies, ct);
 
         // 3) Write the deeper study.
         await SetStatus(id, $"Writing your {LevelName(level).ToLowerInvariant()}…");
@@ -674,7 +620,7 @@ public sealed class BibleStudyService
               cross_references = other passages that shed light on it, and why
               themes         = 2–5 theological themes
               looks_like     = what living this out could look like in real, everyday situations
-              applications   = how it could be applied: area of life + a concrete practice{(string.IsNullOrWhiteSpace(s.DeeperFocus) ? "" : $" (focus on: {s.DeeperFocus})")}
+              applications   = how it could be applied: area of life + a concrete practice{(string.IsNullOrWhiteSpace(s.DeeperFocus) ? "" : $" (focus on: {s.DeeperFocus})")}{(string.IsNullOrEmpty(study.StudyType) || study.StudyType == "personal" ? "" : $"\n              (This study is for {StudyTypes.Of(study.StudyType).Brief} — shape the applications and questions for that.)")}
               questions      = {(s.DeeperReflection ? "reflection / discussion questions" : "leave empty []")}
               prayer         = {(s.DeeperReflection ? "a short prayer based on the passage" : "leave empty \"\"")}
             {depth}
@@ -706,19 +652,240 @@ public sealed class BibleStudyService
             Applications = Items("applications", "area", "practice"),
             Questions = s.DeeperReflection ? L("questions") : new(),
             Prayer = s.DeeperReflection ? S(json, "prayer") : "",
-            Sources = notes.GroupBy(n => n.Url).Select(g => new DeepItem
-            {
-                Title = $"StudyLight · {g.First().Passage}", Note = g.Key,
-                Body = string.Join(", ", System.Text.RegularExpressions.Regex.Matches(string.Join("\n", g.Select(x => x.Notes)), @"^\s*[-•*]?\s*([A-Z][\w'’.\- ]{2,40}?):", System.Text.RegularExpressions.RegexOptions.Multiline)
-                    .Select(m => m.Groups[1].Value.Trim())
-                    .Where(n => !NotCommentators.Contains(n) && !n.StartsWith("Cross", StringComparison.OrdinalIgnoreCase)).Distinct().Take(6))
-            }).ToList()
+            Sources = SourcesOf(notes)
         };
         if (deep.Overview.Length == 0 && deep.Interpretations.Count == 0) throw new AiFormatException("The AI didn't return a usable study. Please try again.");
         study = _studies.Get(id)!;
         study.Deeper = deep;
         study.AiStatus = "done";
         study.AiError = notes.Count == 0 && s.StudyLightEnabled ? "StudyLight couldn't be read just now, so this uses general knowledge only." : "";
+        await _studies.UpsertAsync(study);
+    }
+
+    /// <summary>
+    /// Reads StudyLight's commentary pages for the passages (more pages at deeper levels), in pieces small enough
+    /// for an 8 GB machine, and summarises each piece into short study notes attributed to their commentators.
+    /// </summary>
+    private async Task<List<(string Passage, string Url, string Notes)>> ReadCommentaryAsync(Guid id, List<BibleRef> refs, int level,
+        bool wordStudies, CancellationToken ct)
+    {
+        var s = _settings.Current.Bible;
+        var perPassage = level switch { 1 => 1, 2 => 2, _ => 3 };
+        var maxChunks = level switch { 1 => 2, 2 => 4, _ => 8 };
+        var pageChars = level switch { 1 => 6000, 2 => 9000, _ => 14000 };
+        const int chunkChars = 3000;
+        var chunks = new List<(string Passage, string Url, string Text)>();
+        if (s.StudyLightEnabled)
+        {
+            var client = _http.CreateClient("web");
+            client.Timeout = TimeSpan.FromSeconds(25);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; LifeHub/2.0; personal Bible study helper)");
+            var pages = refs.SelectMany(r => CommentaryVerses(r, perPassage)).DistinctBy(v => v.Usfm).Take(level == 3 ? 6 : 3).ToList();
+            var n = 0;
+            foreach (var v in pages)
+            {
+                n++;
+                await SetStatus(id, $"Reading StudyLight on {v} ({n}/{pages.Count})…");
+                var url = Url(s.StudyLightUrl, v);
+                try
+                {
+                    var html = await client.GetStringAsync(url, ct);
+                    var text = HtmlText.Extract(html, anchor: $"{v.BookInfo.Name} {v.Chapter}", maxChars: pageChars);
+                    if (text.Length < 400) continue;
+                    var perPage = (int)Math.Ceiling(maxChunks / (double)pages.Count);
+                    for (int i = 0, taken = 0; i < text.Length && taken < perPage; i += chunkChars, taken++)
+                        chunks.Add((v.ToString(), url, text.Substring(i, Math.Min(chunkChars, text.Length - i))));
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested) { _log.LogInformation("StudyLight fetch failed for {Url}: {Message}", url, ex.Message); }
+            }
+            chunks = chunks.Take(maxChunks).ToList();
+        }
+
+        var notes = new List<(string Passage, string Url, string Notes)>();
+        var k = 0;
+        foreach (var c in chunks)
+        {
+            k++;
+            await SetStatus(id, $"Studying the commentaries ({k}/{chunks.Count})…");
+            var summary = await _ollama.ChatTextAsync(
+                "You extract study notes from Bible commentary text. Use only what the text says; never invent quotes.",
+                $"""
+                PASSAGE: {c.Passage}
+                COMMENTARY TEXT (StudyLight, several commentators — each section starts with the commentary's name):
+                {c.Text}
+
+                Write concise study notes (max {(level == 3 ? 220 : 160)} words) as short bullet points covering:
+                - how each commentator interprets the passage (start the bullet with their name, e.g. "Barnes:")
+                - historical, cultural or literary background they give
+                {(wordStudies ? "- original-language (Greek/Hebrew) words they explain, with meanings\n" : "")}- cross-references they mention
+                If the text isn't about this passage, reply only: NONE
+                """, ct);
+            summary = summary.Trim();
+            if (summary.Length > 20 && !summary.StartsWith("NONE", StringComparison.OrdinalIgnoreCase))
+                notes.Add((c.Passage, c.Url, summary));
+        }
+        return notes;
+    }
+
+    private static List<DeepItem> SourcesOf(List<(string Passage, string Url, string Notes)> notes) =>
+        notes.GroupBy(n => n.Url).Select(g => new DeepItem
+        {
+            Title = $"StudyLight · {g.First().Passage}", Note = g.Key,
+            Body = string.Join(", ", Regex.Matches(string.Join("\n", g.Select(x => x.Notes)), @"^\s*[-•*]?\s*([A-Z][\w'’.\- ]{2,40}?):", RegexOptions.Multiline)
+                .Select(m => m.Groups[1].Value.Trim())
+                .Where(n => !NotCommentators.Contains(n) && !n.StartsWith("Cross", StringComparison.OrdinalIgnoreCase)).Distinct().Take(6))
+        }).ToList();
+
+    // ------------------------------------------------------------------ Start a study from a verse
+
+    /// <summary>Creates a new study for a verse and starts writing its starter notes in the background.</summary>
+    public async Task<BibleStudy> CreateStarterAsync(string reference, string type, int level, string focus)
+    {
+        var refs = BibleBooks.Parse(reference);
+        if (refs.Count == 0) throw new InvalidOperationException("That doesn't look like a Bible reference — try e.g. John 15:1-8 or Psalm 23.");
+        if (!_ollama.IsConfigured) throw new InvalidOperationException("Set up the local AI (Ollama) in Settings → AI first.");
+        var kind = StudyTypes.Of(type);
+        var study = new BibleStudy
+        {
+            Date = DateOnly.FromDateTime(DateTime.Now), StudyType = kind.Key,
+            Title = $"{string.Join("; ", refs)} · {kind.Name}",
+            Passages = refs.Select(r => r.ToString()).ToList(),
+            Tags = new() { kind.Name.ToLowerInvariant() }
+        };
+        await _studies.UpsertAsync(study);
+        StartStarter(study.Id, kind.Key, level, focus);
+        return study;
+    }
+
+    public void StartStarter(Guid id, string type, int level, string focus)
+    {
+        if (!_running.TryAdd(id, "Getting your starter notes ready…")) return;
+        _ = Task.Run(async () =>
+        {
+            try { await StarterAsync(id, type, level, focus, CancellationToken.None); }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Starter notes failed");
+                if (_studies.Get(id) is { } s) { s.AiStatus = "failed"; s.AiError = ex.Message; await _studies.UpsertAsync(s); }
+            }
+            finally { _running.TryRemove(id, out _); }
+        });
+    }
+
+    /// <summary>
+    /// Starter notes: from the passage text (YouVersion), StudyLight's commentaries and the local AI, a first set of
+    /// notes shaped by what the study is for — a home group, a sermon, a lesson, a youth session — at the chosen level.
+    /// </summary>
+    public async Task StarterAsync(Guid id, string type, int level, string focus, CancellationToken ct)
+    {
+        var study = _studies.Get(id) ?? throw new InvalidOperationException("Study not found");
+        var kind = StudyTypes.Of(type);
+        level = Math.Clamp(level, 1, 3);
+        var refs = MainRefsOf(study).Take(2).ToList();
+        if (refs.Count == 0) throw new InvalidOperationException("Add the passage first.");
+
+        await SetStatus(id, "Getting the passage…");
+        var passageText = new StringBuilder();
+        foreach (var r in refs)
+        {
+            var t = await _bible.PassageTextAsync(r, ct);
+            if (t.Length > 0) passageText.AppendLine($"{r}: {Trim(t, 2500)}");
+        }
+
+        var notes = await ReadCommentaryAsync(id, refs, level, wordStudies: level >= 2 || kind.Key == "word", ct);
+
+        await SetStatus(id, $"Writing your {kind.Name.ToLowerInvariant()} notes…");
+        var budget = _ollama.InputCharBudget() - 3500;
+        var sb = new StringBuilder();
+        sb.AppendLine($"PASSAGE: {string.Join("; ", refs)}");
+        sb.AppendLine(passageText.Length > 0 ? $"TEXT:\n{passageText}" : "(Passage text not available — work from the reference.)");
+        if (!string.IsNullOrWhiteSpace(focus)) sb.AppendLine($"WHAT I NEED: {focus.Trim()}");
+        if (notes.Count == 0) sb.AppendLine("\n(No commentary text was available — draw on widely held Christian interpretation and say so.)");
+        var per = notes.Count == 0 ? 0 : Math.Max(500, (budget - sb.Length) / notes.Count);
+        foreach (var nn in notes) sb.AppendLine($"\nCOMMENTARY NOTES on {nn.Passage}:\n{Trim(nn.Notes, per)}");
+
+        JsonObject Str() => new() { ["type"] = "string" };
+        JsonObject Arr(JsonObject item) => new() { ["type"] = "array", ["items"] = item };
+        JsonObject Obj(params string[] fields)
+        {
+            var props = new JsonObject();
+            foreach (var f in fields) props[f] = Str();
+            return new JsonObject { ["type"] = "object", ["properties"] = props, ["required"] = new JsonArray(fields.Select(f => (JsonNode)JsonValue.Create(f)!).ToArray()) };
+        }
+        var schema = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["big_idea"] = Str(),
+                ["summary"] = Str(),
+                ["context"] = Str(),
+                ["sections"] = Arr(new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject { ["heading"] = Str(), ["points"] = Arr(Obj("title", "detail", "note")) },
+                    ["required"] = new JsonArray("heading", "points")
+                }),
+                ["questions"] = Arr(Obj("question", "kind")),
+                ["prayer"] = Str()
+            },
+            ["required"] = new JsonArray("big_idea", "summary", "context", "sections", "questions", "prayer")
+        };
+        var depth = level switch
+        {
+            1 => "LEVEL: getting started. Plain everyday language, no jargon, short points (1–2 sentences), 2–3 points per section, 4–5 questions. Assume no theological background.",
+            2 => "LEVEL: going further. Clear language, some background and one or two original-language words where they help, 3–4 points per section, 6–8 questions.",
+            _ => "LEVEL: in depth. Careful exegesis, Greek/Hebrew terms with transliteration, where interpreters differ (and who), more cross-references, 4–5 points per section, 8–10 questions."
+        };
+        var system = $"""
+            You write STARTER NOTES for {kind.Brief}. The person will build on them with their own study,
+            so be accurate, faithful to the text and practical.
+            Return:
+              big_idea  = the main point of the passage in one memorable sentence
+              summary   = what the passage is about (2–3 sentences)
+              context   = where it sits in the book, who wrote it, to whom and why (historical/literary background)
+              sections  = exactly these sections, in this order: {kind.Sections}
+                          Each section has points: title (short), detail (the substance), note (verse reference, timing or idea — or "")
+              questions = good questions; kind is one of: {kind.QuestionKinds}
+              prayer    = a short prayer (or prayer points for a group) based on the passage
+            {depth}
+            Base interpretation on the passage and the commentary notes. Where Christians differ, say so fairly without
+            taking sides. Never invent quotes, statistics or commentators. Plain, warm UK English.
+            """;
+        var json = await _ollama.ChatJsonAsync(system, sb.ToString(), schema, ct);
+
+        string S(JsonElement e, string n) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()!.Trim() : "";
+        var sections = new List<StarterSection>();
+        if (json.TryGetProperty("sections", out var secs) && secs.ValueKind == JsonValueKind.Array)
+            foreach (var sec in secs.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.Object))
+            {
+                var section = new StarterSection { Heading = S(sec, "heading") };
+                if (sec.TryGetProperty("points", out var pts) && pts.ValueKind == JsonValueKind.Array)
+                    section.Points = pts.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.Object)
+                        .Select(x => new DeepItem { Title = S(x, "title"), Body = S(x, "detail"), Note = S(x, "note") })
+                        .Where(x => x.Title.Length > 0 || x.Body.Length > 0).ToList();
+                if (section.Heading.Length > 0 && section.Points.Count > 0) sections.Add(section);
+            }
+        var questions = json.TryGetProperty("questions", out var qs) && qs.ValueKind == JsonValueKind.Array
+            ? qs.EnumerateArray().Select(q => q.ValueKind == JsonValueKind.String
+                    ? new DeepItem { Title = q.GetString()!.Trim() }
+                    : new DeepItem { Title = S(q, "question"), Note = S(q, "kind").ToLowerInvariant() })
+                .Where(q => q.Title.Length > 0).ToList()
+            : new List<DeepItem>();
+
+        var starter = new StudyStarter
+        {
+            Type = kind.Key, Level = level, Focus = focus.Trim(), GeneratedUtc = DateTime.UtcNow, Model = _settings.Current.Ollama.Model,
+            Passage = string.Join("; ", refs), PassageText = passageText.ToString().Trim(),
+            BigIdea = S(json, "big_idea"), Summary = S(json, "summary"), Context = S(json, "context"),
+            Sections = sections, Questions = questions, Prayer = S(json, "prayer"), Sources = SourcesOf(notes)
+        };
+        if (starter.Sections.Count == 0 && starter.Summary.Length == 0) throw new AiFormatException("The AI didn't return usable notes. Please try again.");
+        study = _studies.Get(id)!;
+        study.Starter = starter;
+        study.StudyType = kind.Key;
+        study.AiStatus = "done";
+        study.AiError = notes.Count == 0 && _settings.Current.Bible.StudyLightEnabled ? "StudyLight couldn't be read just now, so these notes use general knowledge only." : "";
         await _studies.UpsertAsync(study);
     }
 

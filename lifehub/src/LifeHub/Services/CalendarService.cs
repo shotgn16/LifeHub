@@ -27,7 +27,7 @@ public sealed class CalendarService
 
     public async Task<List<CalendarEvent>> GetEventsAsync(DateOnly from, DateOnly toInclusive, bool bypassCache = false)
     {
-        var key = $"cal:{from}:{toInclusive}";
+        var key = $"cal:{UserScope.UserId}:{from}:{toInclusive}";   // everyone has their own calendars
         if (!bypassCache && _cache.TryGetValue(key, out List<CalendarEvent>? cached) && cached is not null) return cached;
 
         var start = from.ToDateTime(TimeOnly.MinValue);

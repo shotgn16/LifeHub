@@ -48,51 +48,78 @@ public static class Endpoints
         return returnUrl.StartsWith(baseHref) ? returnUrl : baseHref + returnUrl;
     }
 
+    private static Task SignInAsync(HttpContext ctx, UserProfile user, string via) =>
+        ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
+            AuthConstants.Principal(user, CookieAuthenticationDefaults.AuthenticationScheme, via),
+            new AuthenticationProperties { IsPersistent = true, ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30) });
+
     private static void MapAuth(WebApplication app)
     {
         app.MapPost("/auth/login", async (HttpContext ctx, [FromForm] string username, [FromForm] string password,
             [FromForm] string? returnUrl, SettingsService settings, LoginThrottle throttle) =>
         {
             var key = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            var auth = settings.Current.Auth;
             if (throttle.IsLocked(key)) return Results.Redirect($"{ctx.Request.PathBase}/login?error=locked");
-            if (!auth.IsConfigured || !username.Trim().Equals(auth.Username, StringComparison.OrdinalIgnoreCase) || !PasswordHash.Verify(password, auth.PasswordHash))
+            var user = settings.Users.FirstOrDefault(u => u.HasPassword && u.Username.Equals(username.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (user is null || !PasswordHash.Verify(password, user.PasswordHash))
             {
                 throttle.Fail(key);
                 await Task.Delay(800);
                 return Results.Redirect($"{ctx.Request.PathBase}/login?error=1&returnUrl={Uri.EscapeDataString(returnUrl ?? "")}");
             }
             throttle.Success(key);
-            await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
-                AuthConstants.Principal(auth.Username, CookieAuthenticationDefaults.AuthenticationScheme),
-                new AuthenticationProperties { IsPersistent = true, ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30) });
+            await SignInAsync(ctx, user, "password");
             return Results.Redirect(SafeReturn(ctx, returnUrl));
         }).AllowAnonymous();
 
         app.MapPost("/auth/setup", async (HttpContext ctx, [FromForm] string username, [FromForm] string password,
-            [FromForm] string confirm, SettingsService settings) =>
+            [FromForm] string confirm, [FromForm] string? name, SettingsService settings) =>
         {
-            // First-run only; afterwards the login is changed in Settings → Security (needs the current password).
-            if (settings.Current.Auth.IsConfigured)
+            // First-run only; afterwards logins are managed in Settings → People / Security.
+            if (settings.HasLogin)
                 return Results.Redirect($"{ctx.Request.PathBase}/login");
             if (string.IsNullOrWhiteSpace(username) || password.Length < 8 || password != confirm)
                 return Results.Redirect($"{ctx.Request.PathBase}/setup?error=1");
             await settings.UpdateAsync(s =>
             {
-                s.Auth.Username = username.Trim();
-                s.Auth.PasswordHash = PasswordHash.Create(password);
-                if (string.IsNullOrEmpty(s.Auth.ApiKey)) s.Auth.ApiKey = PasswordHash.NewApiKey();
+                var u = s.Users.FirstOrDefault(x => x.IsAdmin) ?? s.Users[0];
+                u.Username = username.Trim();
+                u.PasswordHash = PasswordHash.Create(password);
+                if (!string.IsNullOrWhiteSpace(name)) u.Name = name.Trim();
+                else if (u.Name is "" or "Me") u.Name = char.ToUpperInvariant(u.Username[0]) + u.Username[1..];
+                if (string.IsNullOrEmpty(u.ApiKey)) u.ApiKey = PasswordHash.NewApiKey();
             });
-            await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
-                AuthConstants.Principal(username.Trim(), CookieAuthenticationDefaults.AuthenticationScheme),
-                new AuthenticationProperties { IsPersistent = true, ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30) });
+            await SignInAsync(ctx, settings.User(settings.PrimaryUserId)!, "password");
             return Results.Redirect(SafeReturn(ctx, "/"));
+        }).AllowAnonymous();
+
+        // Home Assistant "Who's using LifeHub?" — only inside HA (ingress), where HA has already signed someone in.
+        app.MapPost("/auth/pick", async (HttpContext ctx, [FromForm] Guid user, [FromForm] string? pin, [FromForm] string? returnUrl,
+            SettingsService settings, LoginThrottle throttle) =>
+        {
+            if (!ctx.Items.ContainsKey("ingress") || !settings.Household.Auth.TrustHomeAssistantIngress) return Results.Redirect($"{ctx.Request.PathBase}/login");
+            var person = settings.User(user);
+            if (person is null) return Results.Redirect($"{ctx.Request.PathBase}/who");
+            var key = "pin:" + person.Id;
+            if (!string.IsNullOrEmpty(person.PinHash))
+            {
+                if (throttle.IsLocked(key)) return Results.Redirect($"{ctx.Request.PathBase}/who?user={person.Id}&error=locked");
+                if (string.IsNullOrEmpty(pin) || !PasswordHash.Verify(pin.Trim(), person.PinHash))
+                {
+                    throttle.Fail(key);
+                    await Task.Delay(500);
+                    return Results.Redirect($"{ctx.Request.PathBase}/who?user={person.Id}&error=1");
+                }
+                throttle.Success(key);
+            }
+            await SignInAsync(ctx, person, "ingress");
+            return Results.Redirect(SafeReturn(ctx, returnUrl));
         }).AllowAnonymous();
 
         app.MapGet("/auth/logout", async (HttpContext ctx) =>
         {
             await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return Results.Redirect($"{ctx.Request.PathBase}/login");
+            return Results.Redirect($"{ctx.Request.PathBase}/{(ctx.Items.ContainsKey("ingress") ? "who" : "login")}");
         }).AllowAnonymous();
     }
 
@@ -102,6 +129,7 @@ public static class Endpoints
     public sealed record ScanRequest(string Barcode, string? Mode, decimal? Quantity);
     public sealed record BibleAppRequest(string? Event, string? Device);
     public sealed record BibleReadRequest(string? Reference, int? Minutes);
+    public sealed record NoteRequest(string Text, bool? Shared);
 
     /// <summary>
     /// REST API for Home Assistant automations, scripts, voice assistants, iOS Shortcuts, etc.
@@ -213,6 +241,18 @@ public static class Endpoints
                 toRead = bible.TodayList().Where(p => !p.Done).Select(p => new { p.Reference, p.Kind })
             });
         });
+
+        // ---- Notes ----
+        api.MapPost("/notes", async (NoteRequest req, NotesService notes) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.Text)) return Results.BadRequest(new { status = "empty" });
+            var n = await notes.AddAsync(req.Text, req.Shared == true, "api");
+            return Results.Ok(new { n.Id, n.Category, sorting = notes.AiAvailable });
+        });
+
+        api.MapGet("/notes", (NotesService notes, string? category, string? q) =>
+            Results.Ok(notes.Search(q ?? "", string.IsNullOrWhiteSpace(category) ? null : category).Take(200)
+                .Select(n => new { n.Id, n.Text, n.Title, n.Category, n.Tags, n.Pinned, n.Shared, n.CreatedUtc })));
 
         // ---- Meals ----
         api.MapGet("/meals", (MealService meals, Clock clock, int? days) =>

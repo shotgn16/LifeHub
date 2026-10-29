@@ -146,6 +146,60 @@ or **Discard**.
 Ingredients are typed one per line, for example `200 g rice`, `2 onions, chopped` or
 `1½ tbsp olive oil`.
 
+### Deals & offers (optional, off by default)
+
+The **Deals** tab on the Meals page checks the offers at supermarkets near you. It then suggests
+meals and ingredients that use them, on days that suit.
+
+<img src="images/deals.png" alt="Deals" width="80%">
+
+1. Switch it **On** and type your **area**: a town, a city or a postcode. Choose how far you'll go.
+2. Press **Find stores near me**. LifeHub finds the nearest branch of each store on your list:
+   - for UK postcodes it uses [postcodes.io](https://postcodes.io)
+   - for anywhere else it uses OpenStreetMap
+3. Press **Check now**. After that, LifeHub checks again every 24 hours (adjustable). You can
+   switch it off at any time.
+
+**Where offers come from:**
+
+| Source | Notes |
+|---|---|
+| The store's **offers page** | Read directly when it publishes product data, otherwise by your local AI. Some supermarkets build these pages in the browser or block automated visits. The store list shows which worked. |
+| **Supermarket emails** | Offers in newsletters you already get (the AI files them as promotions). Often the most reliable source. |
+| **Paste** | Copy offers from a store's app or website and paste them in. |
+| **Leaflet photo** | Photograph the leaflet or shelf labels (needs a vision model). |
+
+The default stores are Tesco, Sainsbury's, Asda, Morrisons, Aldi, Lidl, Co-op, M&S, Waitrose and
+Iceland. In **Deal settings** you can:
+
+- switch stores on or off
+- change their offers page
+- add your own stores
+- choose how often to check
+
+**Which deals suit you.** Each offer is matched against:
+
+- your shopping list
+- your staples
+- your recipes, especially meals planned in the next two weeks
+
+The badges say why it matters, for example "for Chicken curry (planned)" or "a staple (Milk)".
+Anything that may clash with your dietary needs is flagged ("check: gluten free"). Non-food
+offers are kept out of the way.
+
+**This week's ideas (purple, AI).** From the deals that suit you, the local AI suggests:
+
+- **Meal ideas** for days with nothing planned. Quick meals go on busy days and bigger cooking on
+  free days. **Add to Thursday** plans the meal and puts its deal items on the shopping list.
+- **Pick up**: deals worth getting anyway, such as a cheap staple or something to freeze.
+- **When to shop**: a free slot in your calendar before the offers end, at a store near you.
+
+**Suggest improvements** also takes nearby deals into account when the Deals tab is on. When new
+deals suit you, you get one notification (you can turn this off).
+
+Only the area you type is sent to postcodes.io / OpenStreetMap. Store pages are fetched like a
+browser would fetch them, and nothing about you is sent.
+
 ### Home Assistant
 
 `GET /api/v1/meals?days=1` returns today's meals for dashboards and voice ("what's for dinner?").

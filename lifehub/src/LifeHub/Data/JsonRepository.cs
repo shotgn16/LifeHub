@@ -24,8 +24,12 @@ public static class Json
 /// atomically (temp file + rename) on every change. Reads return copies, so a UI page
 /// editing an object never changes stored data until it calls UpsertAsync.
 /// </summary>
-public sealed class JsonRepository<T> : IRepository<T> where T : Entity
+public sealed class JsonRepository<T> : IRepository<T>, IOwnedRepository where T : Entity
 {
+    /// <summary>Who may see these records (see <see cref="UserScope"/>).</summary>
+    private static readonly OwnScope Scope = OwnedAttribute.Of(typeof(T));
+    private static bool Visible(T x) => UserScope.CanSee(x, Scope);
+
     private readonly string _path;
     private readonly ILogger _log;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -62,17 +66,17 @@ public sealed class JsonRepository<T> : IRepository<T> where T : Entity
 
     public IReadOnlyList<T> All()
     {
-        lock (_sync) return _items.Values.Select(Json.Clone).ToList();
+        lock (_sync) return _items.Values.Where(Visible).Select(Json.Clone).ToList();
     }
 
     public T? Get(Guid id)
     {
-        lock (_sync) return _items.TryGetValue(id, out var v) ? Json.Clone(v) : null;
+        lock (_sync) return _items.TryGetValue(id, out var v) && Visible(v) ? Json.Clone(v) : null;
     }
 
     public IReadOnlyList<T> Where(Func<T, bool> predicate)
     {
-        lock (_sync) return _items.Values.Where(predicate).Select(Json.Clone).ToList();
+        lock (_sync) return _items.Values.Where(x => Visible(x) && predicate(x)).Select(Json.Clone).ToList();
     }
 
     public Task UpsertAsync(T item) => UpsertManyAsync(new[] { item });
@@ -83,6 +87,8 @@ public sealed class JsonRepository<T> : IRepository<T> where T : Entity
         {
             foreach (var item in items)
             {
+                if (_items.TryGetValue(item.Id, out var existing)) item.OwnerId = existing.OwnerId;   // edits never change the owner
+                else UserScope.Stamp(item, Scope);
                 item.UpdatedUtc = DateTime.UtcNow;
                 _items[item.Id] = Json.Clone(item);
             }
@@ -94,8 +100,28 @@ public sealed class JsonRepository<T> : IRepository<T> where T : Entity
 
     public async Task DeleteManyAsync(IEnumerable<Guid> ids)
     {
-        lock (_sync) foreach (var id in ids) _items.Remove(id);
+        lock (_sync)
+            foreach (var id in ids)
+                if (_items.TryGetValue(id, out var v) && Visible(v)) _items.Remove(id);
         await SaveAsync();
+    }
+
+    public async Task<int> ForgetOwnerAsync(Guid owner, bool includeUnowned = false)
+    {
+        if (Scope == OwnScope.Global || owner == Guid.Empty) return 0;
+        int n;
+        lock (_sync)
+        {
+            var mine = _items.Values.Where(x => x.OwnerId == owner || (includeUnowned && Scope == OwnScope.Personal && x.OwnerId == Guid.Empty)).ToList();
+            n = mine.Count;
+            foreach (var x in mine)
+            {
+                if (Scope == OwnScope.Personal) _items.Remove(x.Id);
+                else x.OwnerId = Guid.Empty;
+            }
+        }
+        if (n > 0) await SaveAsync();
+        return n;
     }
 
     private async Task SaveAsync()
@@ -114,7 +140,9 @@ public sealed class JsonRepository<T> : IRepository<T> where T : Entity
         {
             _writeLock.Release();
         }
-        try { Changed?.Invoke(); } catch (Exception ex) { _log.LogWarning(ex, "Change listener failed"); }
+        // Listeners (open pages) refresh as their own person, never as whoever made this change.
+        using (UserScope.None())
+            try { Changed?.Invoke(); } catch (Exception ex) { _log.LogWarning(ex, "Change listener failed"); }
     }
 }
 

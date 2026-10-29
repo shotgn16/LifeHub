@@ -6,6 +6,8 @@ public abstract class Entity
     public Guid Id { get; set; } = Guid.NewGuid();
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
+    /// <summary>The person this belongs to (empty = the household / the main person). See <see cref="UserScope"/>.</summary>
+    public Guid OwnerId { get; set; }
 }
 
 /// <summary>
@@ -25,4 +27,11 @@ public interface IRepository<T> where T : Entity
 
     /// <summary>Raised after any change so open UI pages can refresh.</summary>
     event Action? Changed;
+}
+
+/// <summary>Housekeeping across every repository when a person is removed.</summary>
+public interface IOwnedRepository
+{
+    /// <summary>Deletes the person's personal records (and, for the main person, personal records from before 2.0 with no owner) and hands their shareable ones (food, meals, renewals) to the household.</summary>
+    Task<int> ForgetOwnerAsync(Guid owner, bool includeUnowned = false);
 }

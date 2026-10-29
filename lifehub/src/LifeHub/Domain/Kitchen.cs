@@ -10,6 +10,7 @@ public enum FoodEventKind { Purchased, Used, Wasted, Frozen, Defrosted }
 public enum DateKind { UseBy, BestBefore }
 
 /// <summary>Something physically in the house right now.</summary>
+[Owned(OwnScope.Kitchen)]
 public sealed class PantryItem : Entity
 {
     public string Name { get; set; } = "";
@@ -34,6 +35,7 @@ public sealed class PantryItem : Entity
 }
 
 /// <summary>Something you always want in the house. Drives shopping suggestions (you choose what to add).</summary>
+[Owned(OwnScope.Kitchen)]
 public sealed class StapleItem : Entity
 {
     public string Name { get; set; } = "";
@@ -64,6 +66,7 @@ public sealed class StapleItem : Entity
     }
 }
 
+[Owned(OwnScope.Kitchen)]
 public sealed class ShoppingItem : Entity
 {
     public string Name { get; set; } = "";
@@ -79,6 +82,7 @@ public sealed class ShoppingItem : Entity
 }
 
 /// <summary>History used for buying-frequency predictions and waste stats.</summary>
+[Owned(OwnScope.Kitchen)]
 public sealed class FoodEvent : Entity
 {
     public string Name { get; set; } = "";

@@ -5,7 +5,9 @@ hardware barcode scanners.
 
 ## Authentication
 
-Create or copy the key in **Settings → Security & API**. Send it with every request, either way:
+Create or copy **your** key in **Settings → Security & API**. Each person has their own key, and
+everything done with it is done as that person: their tasks, their notes, their Bible reading.
+Send it with every request, either way:
 
 ```
 X-Api-Key: <key>
@@ -29,6 +31,8 @@ ingress URLs need a Home Assistant session, so they don't suit API calls.
 | POST | `/api/v1/shopping` | `{"name":"Milk","quantity":2,"unit":"pints"}` | Adds the item, merging duplicates |
 | POST | `/api/v1/capture` | `{"text":"dentist Tuesday 2:30 and buy coffee"}` | AI quick capture. The actions follow your auto-apply settings. |
 | POST | `/api/v1/scan` | `{"barcode":"5000112637922","mode":"add\|use\|shopping","quantity":1}` | The scan result. Unknown barcodes return 404; scan them once in the app to name them. |
+| POST | `/api/v1/notes` | `{"text":"Door code 4471","shared":false}` | Saves a note; the AI files it into a category. Returns `category` (a first guess while the AI works). |
+| GET | `/api/v1/notes` | `?category=Gift Ideas&q=scarf` | Your notes (and shared ones), newest first |
 | GET | `/api/v1/meals` | `?days=1` (1–14) | Planned meals: date, slot, title, servings, cooked |
 | POST | `/api/v1/bible/app` | `{"event":"opened\|closed","device":"iPhone"}` | Times the Bible app (for the iPhone Shortcuts automation). Returns `minutesToday`. |
 | POST | `/api/v1/bible/read` | `{"reference":"Ps 23","minutes":10}` | Logs a reading. `reference` can be typed, YouVersion share text or a bible.com link; matching list items and the verse are ticked. Leave it out to mark today's verse as read. |
@@ -102,6 +106,19 @@ rest_command:
       X-Api-Key: !secret lifehub_api_key
     content_type: "application/json"
     payload: '{}'          # marks today's verse of the day as read
+```
+
+### Drop a note from Assist
+
+```yaml
+rest_command:
+  lifehub_note:
+    url: "http://192.168.1.10:8099/api/v1/notes"
+    method: POST
+    headers:
+      X-Api-Key: !secret lifehub_api_key
+    content_type: "application/json"
+    payload: '{"text": {{ text | tojson }}}'
 ```
 
 ### What's for dinner (Assist)

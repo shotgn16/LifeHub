@@ -61,6 +61,19 @@
 | Dates read wrongly | Check the day/month order follows Settings → General → Culture. You can always correct the date before adding. |
 | Meal suggestions are odd | Add your requirements and preferences on Meals → Dietary needs. Bigger models give better plans. |
 
+## People, notes & deals
+
+| Symptom | Fix |
+|---|---|
+| Someone sees "Who's using LifeHub?" every time | The choice is remembered for 30 days per browser. Clearing cookies, or a private window, asks again. |
+| A person can't sign in on the direct port | Give them a username and password in Settings → People (admins). Picking a name in the HA app only works inside Home Assistant. |
+| My partner can't see the shopping list | Check **Settings → People → What's shared → Food stock & shopping list**. |
+| A Shortcut logs time to the wrong person | Each person needs **their own** API key (Settings → Security & API). |
+| Notes stay "Unsorted" | Turn on the local AI in Settings → AI, then press **Tidy up** on the Notes page. |
+| A store says "couldn't read the page" or "blocks automated visits" | That supermarket builds its offers page in the browser or blocks automated visits. Its emails still work, or paste its offers or photograph the leaflet on the Deals tab. You can switch the store off in Deal settings. |
+| "Couldn't find" my area | Try a full postcode (UK) or "Town, Country". |
+| No meal ideas from deals | Ideas need the local AI and at least one deal that suits you. Add recipes and staples so deals can be matched. |
+
 ## Notifications
 
 | Symptom | Fix |

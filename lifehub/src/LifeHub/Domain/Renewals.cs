@@ -11,6 +11,7 @@ public sealed class PricePoint
     public string Note { get; set; } = "";
 }
 
+[Owned(OwnScope.Renewals)]
 public sealed class Renewal : Entity
 {
     public string Name { get; set; } = "";

@@ -1,6 +1,7 @@
 namespace LifeHub.Domain;
 
 /// <summary>A browser/phone that receives LifeHub's own push notifications (Web Push).</summary>
+[Owned(OwnScope.Personal)]
 public sealed class PushDevice : Entity
 {
     public string Endpoint { get; set; } = "";

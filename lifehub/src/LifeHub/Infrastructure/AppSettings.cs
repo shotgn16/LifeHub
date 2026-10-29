@@ -15,6 +15,60 @@ public sealed class AppSettings
     public NotificationSettings Notifications { get; set; } = new();
     public BibleSettings Bible { get; set; } = new();
     public MealSettings Meals { get; set; } = new();
+    public DealSettings Deals { get; set; } = new();
+    /// <summary>The people using LifeHub. The first admin is the "main person" who keeps household data when sharing is off.</summary>
+    public List<UserProfile> Users { get; set; } = new();
+    public HouseholdSettings Household { get; set; } = new();
+}
+
+/// <summary>What the household shares. Tasks, email, Bible and notes are always each person's own.</summary>
+public sealed class HouseholdSettings
+{
+    /// <summary>Food stock, the shopping list and purchase history.</summary>
+    public bool ShareKitchen { get; set; } = true;
+    /// <summary>Recipes and the meal plan.</summary>
+    public bool ShareMeals { get; set; } = true;
+    /// <summary>Renewals and subscriptions.</summary>
+    public bool ShareRenewals { get; set; } = true;
+}
+
+/// <summary>One person using LifeHub, with their own sign-in, phones, calendars, schedule and Bible settings.</summary>
+public sealed class UserProfile
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = "";
+    /// <summary>For signing in on the direct port / your own address. Optional when everyone uses the Home Assistant app.</summary>
+    public string Username { get; set; } = "";
+    public string PasswordHash { get; set; } = "";
+    /// <summary>Optional PIN asked for on the "Who's using LifeHub?" screen in Home Assistant.</summary>
+    public string PinHash { get; set; } = "";
+    /// <summary>Admins change household settings (Home Assistant, AI, people, sharing).</summary>
+    public bool IsAdmin { get; set; }
+    public string Colour { get; set; } = "#0f766e";
+    [Secret] public string ApiKey { get; set; } = "";
+    /// <summary>Their Home Assistant person (person.alex) — for "while you're out" shopping reminders.</summary>
+    public string PersonEntity { get; set; } = "";
+
+    // ---- Personal settings (shown in the matching Settings tabs when this person is signed in) ----
+    public List<string> NotifyServices { get; set; } = new();
+    public List<string> CalendarEntities { get; set; } = new();
+    public string DefaultCalendarEntity { get; set; } = "";
+    public string TasksTodoEntity { get; set; } = "";
+    public NotifyChannel Channel { get; set; } = NotifyChannel.HomeAssistant;
+    public bool TaskReminders { get; set; } = true;
+    public bool RenewalReminders { get; set; } = true;
+    public bool ExpiryReminders { get; set; } = true;
+    public bool DailyDigest { get; set; } = true;
+    public TimeOnly DailyDigestTime { get; set; } = new(8, 0);
+    public ScheduleSettings Schedule { get; set; } = new();
+    public BibleSettings Bible { get; set; } = new();
+
+    public bool HasPassword => !string.IsNullOrEmpty(Username) && !string.IsNullOrEmpty(PasswordHash);
+    public string Initials => string.Concat((string.IsNullOrWhiteSpace(Name) ? Username : Name).Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Take(2).Select(w => char.ToUpperInvariant(w[0])));
+    public string FirstName => (string.IsNullOrWhiteSpace(Name) ? Username : Name).Trim().Split(' ', 2)[0];
+    /// <summary>"Alex Smith" → "alex_smith", for per-person HA sensors.</summary>
+    public string Slug => System.Text.RegularExpressions.Regex.Replace((string.IsNullOrWhiteSpace(Name) ? Username : Name).ToLowerInvariant(), "[^a-z0-9]+", "_").Trim('_');
 }
 
 public sealed class GeneralSettings
@@ -131,6 +185,8 @@ public enum EmailAccountKind { Imap, MicrosoftGraph, ExchangeEws }
 public sealed class EmailAccount
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>The person whose mailbox this is (empty = the main person, for accounts added before 2.0).</summary>
+    public Guid OwnerId { get; set; }
     public string Name { get; set; } = "";
     public EmailAccountKind Kind { get; set; } = EmailAccountKind.Imap;
     public bool Enabled { get; set; } = true;
@@ -281,6 +337,17 @@ public sealed class BibleSettings
     /// <summary>Where you'd like application to focus, e.g. "family life, my small group, work".</summary>
     public string DeeperFocus { get; set; } = "";
     public string BibliaGraphiaUrl { get; set; } = "https://bibliagraphia.com/";
+
+    /// <summary>Copies the household-wide parts (app key and study sites) — everything else is each person's own.</summary>
+    public static void CopyHousehold(BibleSettings from, BibleSettings to)
+    {
+        to.YouVersionAppKey = from.YouVersionAppKey;
+        to.YouVersionApiBase = from.YouVersionApiBase;
+        to.StudyLightEnabled = from.StudyLightEnabled;
+        to.StudyLightUrl = from.StudyLightUrl;
+        to.BibliaGraphiaEnabled = from.BibliaGraphiaEnabled;
+        to.BibliaGraphiaUrl = from.BibliaGraphiaUrl;
+    }
 }
 
 public sealed class MealSettings
@@ -292,4 +359,69 @@ public sealed class MealSettings
     public int DefaultServings { get; set; } = 2;
     /// <summary>Meals planned for these slots.</summary>
     public List<string> Slots { get; set; } = new() { "Dinner" };
+}
+
+/// <summary>A store whose offers LifeHub checks.</summary>
+public sealed class DealStore
+{
+    public string Name { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+    /// <summary>The store's offers page. Some stores build these pages in the browser; their emails and leaflets still work.</summary>
+    public string OffersUrl { get; set; } = "";
+    /// <summary>Names to recognise the store by (nearby branches on OpenStreetMap, email senders).</summary>
+    public List<string> Match { get; set; } = new();
+}
+
+public sealed class NearbyStore
+{
+    public string Store { get; set; } = "";
+    public string Name { get; set; } = "";
+    public double Miles { get; set; }
+}
+
+/// <summary>Deals & offers: periodically checks stores near you and suggests meals and ingredients that fit your week.</summary>
+public sealed class DealSettings
+{
+    public bool Enabled { get; set; }
+    /// <summary>A town, city or postcode, e.g. "Leeds" or "LS1 4AP".</summary>
+    public string Area { get; set; } = "";
+    public int RadiusMiles { get; set; } = 5;
+    /// <summary>Only check stores with a branch within the radius.</summary>
+    public bool NearbyOnly { get; set; } = true;
+    /// <summary>Also use supermarket offers from your newsletters (the AI already files these as promotions).</summary>
+    public bool UseEmails { get; set; } = true;
+    public int CheckEveryHours { get; set; } = 24;
+    /// <summary>Let the AI suggest meals and ingredients from the deals, on days that suit them.</summary>
+    public bool SuggestMeals { get; set; } = true;
+    public bool Notify { get; set; } = true;
+    public List<DealStore> Stores { get; set; } = DefaultStores();
+
+    // Lookups (OpenStreetMap / postcodes.io — only the area you type is sent)
+    public string PostcodeApi { get; set; } = "https://api.postcodes.io";
+    public string GeocodeApi { get; set; } = "https://nominatim.openstreetmap.org";
+    public string OverpassApi { get; set; } = "https://overpass-api.de/api/interpreter";
+
+    // Results of the last check
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public string AreaLabel { get; set; } = "";
+    public string LocatedArea { get; set; } = "";
+    public List<NearbyStore> Nearby { get; set; } = new();
+    public DateTime? LastCheckUtc { get; set; }
+    public string LastResult { get; set; } = "";
+    public Dictionary<string, string> StoreStatus { get; set; } = new();
+
+    public static List<DealStore> DefaultStores() => new()
+    {
+        new() { Name = "Tesco", OffersUrl = "https://www.tesco.com/groceries/en-GB/promotions", Match = new() { "tesco" } },
+        new() { Name = "Sainsbury's", OffersUrl = "https://www.sainsburys.co.uk/gol-ui/features/offers", Match = new() { "sainsbury" } },
+        new() { Name = "Asda", OffersUrl = "https://www.asda.com/groceries/rollback", Match = new() { "asda" } },
+        new() { Name = "Morrisons", OffersUrl = "https://groceries.morrisons.com/offers", Match = new() { "morrisons" } },
+        new() { Name = "Aldi", OffersUrl = "https://www.aldi.co.uk/c/groceries/super-6", Match = new() { "aldi" } },
+        new() { Name = "Lidl", OffersUrl = "https://www.lidl.co.uk/c/our-offers/s10024131", Match = new() { "lidl" } },
+        new() { Name = "Co-op", OffersUrl = "https://www.coop.co.uk/offers", Match = new() { "co-op", "co-operative", "coop" } },
+        new() { Name = "M&S", OffersUrl = "https://www.marksandspencer.com/c/food", Match = new() { "m&s", "marks & spencer", "marks and spencer" } },
+        new() { Name = "Waitrose", OffersUrl = "https://www.waitrose.com/ecom/shop/browse/offers", Match = new() { "waitrose" } },
+        new() { Name = "Iceland", OffersUrl = "https://www.iceland.co.uk/offers", Match = new() { "iceland" } },
+    };
 }

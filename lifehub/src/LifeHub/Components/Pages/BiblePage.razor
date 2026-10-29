@@ -162,8 +162,55 @@
 }
 else if (tab == "studies")
 {
-    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <div class="card starter-card" style="margin-bottom:14px">
+        <div class="card-head"><h2><Icon Name="sparkle" Size="16" /> Start a study from a verse</h2></div>
+        <p class="small muted" style="margin-top:0">Type a passage, choose what it's for and how deep to go. LifeHub reads the passage and StudyLight's commentaries and writes starter notes (in purple) for you to build on.</p>
+        <div class="starter-form">
+            <div class="field">
+                <label>Passage</label>
+                <input type="text" placeholder="e.g. John 15:1-8" @bind="starterRef" @bind:event="oninput" />
+                @{ var sp = BibleBooks.Parse(starterRef); }
+                @if (!string.IsNullOrWhiteSpace(starterRef)) { <div class="help small">@(sp.Count == 0 ? "Not recognised yet" : "→ " + string.Join("; ", sp))</div> }
+            </div>
+            <div class="field">
+                <label>How deep</label>
+                <div class="chips">
+                    @for (var lv = 1; lv <= 3; lv++)
+                    {
+                        var l = lv;
+                        <button class="chip @(starterLevel == l ? "on" : "")" title="@StudyTypes.LevelBlurb(l)" @onclick="() => starterLevel = l">@StudyTypes.LevelName(l)</button>
+                    }
+                </div>
+                <div class="help small">@StudyTypes.LevelBlurb(starterLevel)</div>
+            </div>
+        </div>
+        <div class="field">
+            <label>What it's for</label>
+            <div class="study-types">
+                @foreach (var k in StudyTypes.All)
+                {
+                    <button class="study-type @(starterType == k.Key ? "on" : "")" @onclick="() => starterType = k.Key">
+                        <strong>@k.Name</strong><span>@k.Blurb</span>
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="field">
+            <label>Anything to keep in mind (optional)</label>
+            <input type="text" @bind="starterFocus" placeholder="@StarterHint" />
+        </div>
+        <button class="btn ai" @onclick="StartStudy" disabled="@(starting || BibleBooks.Parse(starterRef).Count == 0)"><Icon Name="sparkle" Size="15" /> @(starting ? "Starting…" : "Create starter notes")</button>
+        @if (!Studies.AiAvailable) { <span class="small muted" style="margin-left:8px">Needs the local AI — Settings → AI.</span> }
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
         <input type="search" placeholder="Search studies, passages, themes…" @bind="search" @bind:event="oninput" style="max-width:340px" />
+        <div class="chips">
+            <button class="chip @(typeFilter is null ? "on" : "")" @onclick="() => typeFilter = null">All</button>
+            @foreach (var k in StudyTypes.All.Where(k => studies.Any(s => s.StudyType == k.Key)))
+            {
+                <button class="chip @(typeFilter == k.Key ? "on" : "")" @onclick="() => typeFilter = k.Key">@k.Name</button>
+            }
+        </div>
     </div>
     <div class="card flush">
         <ul class="list">
@@ -176,6 +223,7 @@ else if (tab == "studies")
                         <div class="meta">
                             <span>@s.Date.ToString("d MMM yyyy")</span>
                             @if (s.Passages.Count > 0) { <span>· @string.Join(", ", s.Passages.Take(3))</span> }
+                            @if (!string.IsNullOrEmpty(s.StudyType)) { <span class="badge">@StudyTypes.Of(s.StudyType).Name</span> }
                             @if (s.Attachments.Count > 0) { <span>· @s.Attachments.Count file@(s.Attachments.Count == 1 ? "" : "s")</span> }
                             @foreach (var t in (s.Breakdown?.Themes ?? new()).Take(3)) { <span class="badge ai">@t</span> }
                         </div>
@@ -288,12 +336,40 @@ else
         minutesToday = Bible.AppMinutes(today);
     }
 
-    private List<BibleStudy> VisibleStudies => studies.Where(s => string.IsNullOrWhiteSpace(search) ||
+    private string starterRef = "", starterType = "personal", starterFocus = "";
+    private int starterLevel = 2;
+    private bool starting;
+    private string? typeFilter;
+
+    private string StarterHint => starterType switch
+    {
+        "homegroup" => "e.g. 8 people, 45 minutes, some new to the Bible",
+        "preaching" => "e.g. 25-minute sermon, part of a series on John, all-age service",
+        "teaching" => "e.g. one-hour class, adults",
+        "youth" => "e.g. ages 11–14, 30 minutes",
+        "word" => "e.g. focus on the word 'abide'",
+        "discipleship" => "e.g. meeting a new Christian for coffee",
+        _ => "e.g. I'm going through a hard time at work"
+    };
+
+    private async Task StartStudy()
+    {
+        starting = true;
+        try
+        {
+            var study = await Studies.CreateStarterAsync(starterRef, starterType, starterLevel, starterFocus);
+            Nav.NavigateTo($"bible/study/{study.Id}");
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { starting = false; }
+    }
+
+    private List<BibleStudy> VisibleStudies => studies.Where(s => (typeFilter is null || s.StudyType == typeFilter) && (string.IsNullOrWhiteSpace(search) ||
         s.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
         s.Passages.Any(p => p.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
         s.Tags.Any(t => t.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
         (s.Breakdown?.Themes.Any(t => t.Contains(search, StringComparison.OrdinalIgnoreCase)) ?? false) ||
-        s.Notes.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+        s.Notes.Contains(search, StringComparison.OrdinalIgnoreCase))).ToList();
 
     private string Describe(BibleDay d)
     {

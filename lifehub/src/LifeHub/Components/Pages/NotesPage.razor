@@ -1,0 +1,265 @@
+@page "/notes"
+@inherits LiveComponent
+@inject NotesService Notes
+@inject UserContext User
+@inject UiState Ui
+
+<PageTitle>Notes · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Notes</h1>
+        <div class="sub">@all.Count note@(all.Count == 1 ? "" : "s") in @cats.Count(c => c.Name != NotesService.Unsorted) categor@(cats.Count(c => c.Name != NotesService.Unsorted) == 1 ? "y" : "ies")@(Notes.AiAvailable ? " · sorted by your local AI" : "")</div>
+    </div>
+    <div class="actions">
+        @if (Notes.AiAvailable && all.Count > 1)
+        {
+            <button class="btn" @onclick="Tidy" disabled="@tidying" title="Sort all notes again so similar ones sit together and duplicate categories are merged">
+                <Icon Name="sparkles" Size="15" /> @(tidying ? progress : "Tidy up")
+            </button>
+        }
+        <button class="btn ghost" @onclick="() => { showArchived = !showArchived; Reload(); }">@(showArchived ? "Back to notes" : "Archive")</button>
+    </div>
+</div>
+
+@if (!showArchived)
+{
+    <div class="card note-drop">
+        <textarea @bind="draft" @bind:event="oninput" @onkeydown="DraftKey" rows="3"
+                  placeholder="Drop a note — an idea, a link, a gift idea, a verse, a door code… (Ctrl+Enter to save)"></textarea>
+        <div class="note-drop-foot">
+            @if (User.Multi)
+            {
+                <label class="check small" style="margin:0"><input type="checkbox" @bind="shareDraft" /> Share with the household</label>
+            }
+            <span class="tiny muted grow">@(Notes.AiAvailable ? "LifeHub files it into a category for you." : "Use #tags to group notes. Turn on the AI in Settings → AI to have them filed automatically.")</span>
+            <button class="btn primary" @onclick="Add" disabled="@string.IsNullOrWhiteSpace(draft)"><Icon Name="plus" Size="15" /> Save note</button>
+        </div>
+    </div>
+}
+
+<div class="notes-bar">
+    <div class="chips">
+        <button class="chip @(filter is null ? "on" : "")" @onclick="() => Pick(null)">All <span class="muted">@all.Count</span></button>
+        @foreach (var (name, count) in cats)
+        {
+            <button class="chip @(filter == name ? "on" : "")" @onclick="() => Pick(name)">@name <span class="muted">@count</span></button>
+        }
+        @if (User.Multi && all.Any(n => n.Shared))
+        {
+            <button class="chip @(filter == "#shared" ? "on" : "")" @onclick="@(() => Pick("#shared"))"><Icon Name="users" Size="13" /> Shared</button>
+        }
+    </div>
+    <input type="search" class="notes-search" placeholder="Search notes" @bind="query" @bind:event="oninput" />
+</div>
+
+@if (filter is not null && filter != "#shared" && filter != NotesService.Unsorted)
+{
+    <div class="small muted" style="margin:-4px 0 12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        @if (renaming)
+        {
+            <input type="text" @bind="renameTo" style="max-width:220px" placeholder="New name (or an existing one to merge)" />
+            <button class="btn sm primary" @onclick="Rename">Rename</button>
+            <button class="btn sm ghost" @onclick="() => renaming = false">Cancel</button>
+        }
+        else
+        {
+            <button class="btn sm ghost" @onclick="() => { renaming = true; renameTo = filter; }">Rename “@filter”</button>
+        }
+    </div>
+}
+
+@{ var shown = Notes.Search(query, filter, showArchived); }
+@if (shown.Count == 0)
+{
+    <div class="card empty">@(all.Count == 0 && !showArchived ? "No notes yet. Drop one in above." : "Nothing here.")</div>
+}
+<div class="notes-grid">
+    @foreach (var n in shown)
+    {
+        var mine = Notes.IsMine(n);
+        <div class="note-card @(n.Pinned ? "pinned" : "")" @key="n.Id">
+            <div class="note-head">
+                @if (editingCategory == n.Id)
+                {
+                    <input type="text" list="note-cats" @bind="categoryDraft" class="note-cat-input" placeholder="Category" @onkeydown="e => CategoryKey(e, n)" />
+                    <button class="btn sm" @onclick="() => SaveCategory(n)">OK</button>
+                }
+                else
+                {
+                    <button class="badge @(n.CategoryLocked ? "" : "ai-badge")" disabled="@(!mine)" title="@CatTitle(n)"
+                            @onclick="() => StartCategory(n)">
+                        <Icon Name="tag" Size="11" /> @(string.IsNullOrEmpty(n.Category) ? NotesService.Unsorted : n.Category)
+                    </button>
+                }
+                @if (Notes.IsSorting(n.Id) || n.AiStatus == "sorting")
+                {
+                    <span class="tiny muted">sorting…</span>
+                }
+                <span class="grow"></span>
+                @if (n.Shared) { <span title="Shared with the household"><Icon Name="users" Size="14" /></span> }
+                @if (mine)
+                {
+                    <button class="icon-btn sm @(n.Pinned ? "on" : "")" title="@(n.Pinned ? Unpin : PinTop)" @onclick="() => Notes.SetAsync(n.Id, x => x.Pinned = !x.Pinned)"><Icon Name="pin" Size="15" /></button>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(n.Title) && n.Text.Length > 140)
+            {
+                <div class="note-title">@n.Title</div>
+            }
+            @if (editingText == n.Id)
+            {
+                <textarea class="note-edit" @bind="textDraft" rows="5"></textarea>
+                <div style="display:flex;gap:6px;margin-top:6px">
+                    <button class="btn sm primary" @onclick="() => SaveText(n)">Save</button>
+                    <button class="btn sm ghost" @onclick="() => editingText = null">Cancel</button>
+                </div>
+            }
+            else
+            {
+                <div class="note-text">@Linkify(n.Text)</div>
+            }
+            @if (n.Tags.Count > 0)
+            {
+                <div class="note-tags">@foreach (var t in n.Tags) { <button class="tag" @onclick="() => query = t">#@t</button> }</div>
+            }
+            <div class="note-foot">
+                <span class="tiny muted">@(mine ? "" : (n.AuthorName.Length > 0 ? n.AuthorName + " · " : ""))@Fmt.Ago(n.CreatedUtc)</span>
+                <span class="grow"></span>
+                @if (mine)
+                {
+                    <button class="btn ghost xs" @onclick="() => { editingText = n.Id; textDraft = n.Text; }">Edit</button>
+                    @if (User.Multi)
+                    {
+                        <button class="btn ghost xs" @onclick="() => Notes.SetAsync(n.Id, x => x.Shared = !x.Shared)">@(n.Shared ? "Unshare" : "Share")</button>
+                    }
+                    <button class="btn ghost xs" @onclick="() => Notes.SetAsync(n.Id, x => x.Archived = !x.Archived)">@(n.Archived ? "Restore" : "Archive")</button>
+                    @if (n.Archived)
+                    {
+                        <button class="btn ghost xs danger-text" @onclick="() => Notes.Repo.DeleteAsync(n.Id)">Delete</button>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<datalist id="note-cats">
+    @foreach (var (name, _) in cats.Where(c => c.Name != NotesService.Unsorted)) { <option value="@name"></option> }
+</datalist>
+
+@code {
+    private List<Note> all = new();
+    private List<(string Name, int Count)> cats = new();
+    private string draft = "", query = "", categoryDraft = "", textDraft = "", renameTo = "", progress = "";
+    private string? filter;
+    private bool shareDraft, showArchived, tidying, renaming;
+    private Guid? editingCategory, editingText;
+
+    protected override void OnInitialized()
+    {
+        Watch(Notes.Repo);
+        Reload();
+    }
+
+    protected override void OnDataChanged() => Reload();
+
+    private void Reload()
+    {
+        all = Notes.All(showArchived).ToList();
+        cats = Notes.Categories().ToList();
+        if (filter is not null && filter != "#shared" && cats.All(c => c.Name != filter)) filter = null;
+    }
+
+    private void Pick(string? f) { filter = f; renaming = false; }
+
+    private async Task Add()
+    {
+        await Ui.Try(async () =>
+        {
+            var n = await Notes.AddAsync(draft, shareDraft);
+            draft = "";
+            shareDraft = false;     // notes are private unless you tick it each time
+            Reload();
+            if (filter is not null && filter != n.Category) filter = null;
+        });
+    }
+
+    private async Task DraftKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && (e.CtrlKey || e.MetaKey) && !string.IsNullOrWhiteSpace(draft)) await Add();
+    }
+
+    private async Task SaveCategory(Note n)
+    {
+        await Notes.MoveAsync(n.Id, categoryDraft);
+        editingCategory = null;
+        Reload();
+    }
+
+    private async Task CategoryKey(KeyboardEventArgs e, Note n)
+    {
+        if (e.Key == "Enter") await SaveCategory(n);
+        else if (e.Key == "Escape") editingCategory = null;
+    }
+
+    private async Task SaveText(Note n)
+    {
+        await Notes.EditAsync(n.Id, textDraft);
+        editingText = null;
+    }
+
+    private async Task Rename()
+    {
+        if (filter is null) return;
+        var count = await Notes.RenameCategoryAsync(filter, renameTo);
+        renaming = false;
+        filter = string.IsNullOrWhiteSpace(renameTo) ? filter : renameTo.Trim();
+        Reload();
+        Ui.Show($"{count} note{(count == 1 ? "" : "s")} moved");
+    }
+
+    private async Task Tidy()
+    {
+        tidying = true; progress = "Sorting…";
+        try
+        {
+            var p = new Progress<string>(m => { progress = m; InvokeAsync(StateHasChanged); });
+            var (moved, count) = await Notes.TidyAsync(p);
+            Reload();
+            Ui.Show(moved == 0 ? "Everything was already in the right place" : $"Tidied: {moved} note{(moved == 1 ? "" : "s")} moved · {count} categories");
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { tidying = false; }
+    }
+
+    private void StartCategory(Note n)
+    {
+        editingCategory = n.Id;
+        categoryDraft = n.Category == NotesService.Unsorted ? string.Empty : n.Category;
+    }
+
+    private const string Unpin = "Unpin", PinTop = "Pin to the top";
+    private static string CatTitle(Note n) => n.CategoryLocked ? "You chose this category — tap to change" : "Filed automatically — tap to change";
+
+    private static readonly System.Text.RegularExpressions.Regex UrlRx = new(@"https?://[^\s<>""]+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>Shows the note as typed, with web addresses as links.</summary>
+    private static RenderFragment Linkify(string text) => builder =>
+    {
+        var seq = 0; var last = 0;
+        foreach (System.Text.RegularExpressions.Match m in UrlRx.Matches(text))
+        {
+            builder.AddContent(seq++, text[last..m.Index]);
+            var url = m.Value.TrimEnd('.', ',', ')', ';');
+            builder.OpenElement(seq++, "a");
+            builder.AddAttribute(seq++, "href", url);
+            builder.AddAttribute(seq++, "target", "_blank");
+            builder.AddAttribute(seq++, "rel", "noopener noreferrer");
+            builder.AddContent(seq++, url.Length > 48 ? url[..45] + "…" : url);
+            builder.CloseElement();
+            last = m.Index + url.Length;
+        }
+        builder.AddContent(seq++, text[last..]);
+    };
+}

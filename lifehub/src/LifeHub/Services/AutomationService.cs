@@ -16,7 +16,7 @@ public sealed class AutomationService : BackgroundService
     private DateTime _lastSensorsUtc = DateTime.MinValue;
     private DateTime _lastHourlyUtc = DateTime.MinValue;
 
-    private DateOnly? _eveningPlannedFor, _morningPlannedFor;
+    private readonly Dictionary<Guid, DateOnly> _eveningPlannedFor = new(), _morningPlannedFor = new();
 
     public DateTime? LastSensorPublishUtc { get; private set; }
     public string LastAutoPlan { get; private set; } = "";
@@ -31,16 +31,25 @@ public sealed class AutomationService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        using var system = UserScope.AsSystem();
         await Task.Delay(TimeSpan.FromSeconds(10), ct);
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
         do
         {
             await Step("hourly", HourlyAsync);
-            await Step("reminders", RemindersAsync);
+            await EachPerson("reminders", RemindersAsync);
             await Step("presence", PresenceAsync);
-            await Step("autoplan", AutoPlanAsync);
+            await EachPerson("autoplan", AutoPlanAsync);
             await Step("sensors", () => PublishSensorsAsync(force: false));
         } while (await timer.WaitForNextTickAsync(ct));
+    }
+
+    /// <summary>Runs a step once for each person, as that person (their tasks, their phones, their schedule).</summary>
+    private async Task EachPerson(string name, Func<Task> f)
+    {
+        foreach (var user in S<SettingsService>().Users)
+            using (UserScope.As(user.Id))
+                await Step($"{name} ({user.FirstName})", f);
     }
 
     private async Task Step(string name, Func<Task> f)
@@ -58,10 +67,13 @@ public sealed class AutomationService : BackgroundService
         var haSettings = S<SettingsService>().Current.HomeAssistant;
         if (S<HomeAssistantClient>().IsConfigured && !haSettings.AutoSetupDone)
         {
-            try { await S<HomeAssistantSetup>().AutoConfigureAsync(redo: false); }
+            // Phones and calendars found go to the main person; others pick theirs in Settings → Home Assistant.
+            try { using (UserScope.As(S<SettingsService>().PrimaryUserId)) await S<HomeAssistantSetup>().AutoConfigureAsync(redo: false); }
             catch (Exception ex) { _log.LogInformation("HA auto-setup postponed: {Message}", ex.Message); }
         }
         await CleanUpAutoShoppingOnceAsync();
+        try { await S<DealsService>().RunIfDueAsync(); }
+        catch (Exception ex) { _log.LogInformation("Deals check failed: {Message}", ex.Message); }
         await S<NotificationService>().PruneAsync();
         await S<AiService>().PruneAsync();
         await S<TaskService>().PurgeCompletedAsync(180);
@@ -195,16 +207,17 @@ public sealed class AutomationService : BackgroundService
         var now = S<Clock>().Now;
         var today = DateOnly.FromDateTime(now);
         var time = TimeOnly.FromDateTime(now);
+        var who = UserScope.UserId ?? Guid.Empty;
 
-        if (s.AutoPlanEvening && time >= s.AutoPlanEveningTime && _eveningPlannedFor != today.AddDays(1))
+        if (s.AutoPlanEvening && time >= s.AutoPlanEveningTime && _eveningPlannedFor.GetValueOrDefault(who) != today.AddDays(1))
         {
-            _eveningPlannedFor = today.AddDays(1);
+            _eveningPlannedFor[who] = today.AddDays(1);
             await RunPlanAsync(today.AddDays(1), "Tomorrow", s);
         }
-        if (s.AutoPlanMorning && time >= s.AutoPlanMorningTime && _morningPlannedFor != today &&
+        if (s.AutoPlanMorning && time >= s.AutoPlanMorningTime && _morningPlannedFor.GetValueOrDefault(who) != today &&
             (!s.AutoPlanEvening || time < s.AutoPlanEveningTime))
         {
-            _morningPlannedFor = today;
+            _morningPlannedFor[who] = today;
             await RunPlanAsync(today, "Today", s);
         }
     }
@@ -245,8 +258,12 @@ public sealed class AutomationService : BackgroundService
         var ha = S<HomeAssistantClient>();
         var s = S<SettingsService>().Current.HomeAssistant;
         if (!ha.IsConfigured || s.PresenceEntities.Count == 0) return;
-        foreach (var id in s.PresenceEntities)
+        var people = S<SettingsService>().Users;
+        foreach (var id in s.PresenceEntities.Union(people.Select(u => u.PersonEntity).Where(p => p.Length > 0)))
         {
+            // The shopping reminder goes to the LifeHub person linked to this HA person (else the main person).
+            var person = people.FirstOrDefault(u => u.PersonEntity == id) ?? people.FirstOrDefault(u => u.Id == S<SettingsService>().PrimaryUserId);
+            using var scope = person is null ? UserScope.AsSystem() : UserScope.As(person.Id);
             var st = await ha.GetStateAsync(id);
             if (st is null) continue;
             if (_lastPresence.TryGetValue(id, out var prev) && prev == "home" && st.State != "home" && s.NotifyShoppingWhenLeaving)
@@ -273,13 +290,28 @@ public sealed class AutomationService : BackgroundService
     public async Task PublishSensorsAsync(bool force)
     {
         var ha = S<HomeAssistantClient>();
-        var settings = S<SettingsService>().Current;
+        var settingsService = S<SettingsService>();
+        var settings = settingsService.Household;
         if (!ha.IsConfigured || !settings.HomeAssistant.PublishSensors) return;
         if (!force && DateTime.UtcNow - _lastSensorsUtc < TimeSpan.FromMinutes(5)) return;
         _lastSensorsUtc = DateTime.UtcNow;
 
+        // The household sensors show the main person's tasks and schedule; everyone else gets their own tasks sensor.
+        using var asMain = UserScope.As(settingsService.PrimaryUserId);
         try
         {
+            foreach (var other in settingsService.Users.Where(u => u.Id != settingsService.PrimaryUserId && u.Slug.Length > 0))
+            {
+                using (UserScope.As(other.Id))
+                {
+                    var theirs = S<TaskService>().DueToday();
+                    await ha.SetStateAsync($"sensor.lifehub_tasks_due_{other.Slug}", theirs.Count.ToString(), new()
+                    {
+                        ["friendly_name"] = $"LifeHub tasks due ({other.FirstName})", ["icon"] = "mdi:checkbox-marked-circle-outline", ["unit_of_measurement"] = "tasks",
+                        ["overdue"] = S<TaskService>().OverdueCount(), ["tasks"] = theirs.Take(10).Select(t => t.Title).ToArray()
+                    });
+                }
+            }
             var clock = S<Clock>();
             var today = clock.Today;
             var period = await S<ScheduleService>().CurrentAsync();

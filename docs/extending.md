@@ -55,6 +55,18 @@ fields can go in `AiSuggestion.Extra`.
 
 ## Add a page or module
 
+New entities need an ownership scope, so they work with several people:
+
+```csharp
+[Owned(OwnScope.Personal)]       // or Kitchen / Meals / Renewals (shared per household setting) / Global
+public sealed class Habit : Entity { … }
+```
+
+That's all the repository needs. Reads only return what the current person may see, and new
+records are stamped with their owner. Background jobs run as *system*. For per-person work, wrap
+it in `using (UserScope.As(user.Id)) { … }`, looping over `SettingsService.Users`.
+
+
 1. Add a class deriving from `Entity` in `Domain/`. `IRepository<YourType>` is available
    straight away, stored as `data/db/YourType.json`.
 2. Add a service in `Services/` and register it in `Program.cs`.

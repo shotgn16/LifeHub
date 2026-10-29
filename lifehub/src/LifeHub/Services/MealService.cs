@@ -43,13 +43,15 @@ public sealed class MealService
     private readonly SettingsService _settings;
     private readonly Clock _clock;
     private readonly ILogger<MealService> _log;
+    private readonly IRepository<DealOffer> _deals;
 
     public const int MaxDays = 14;
 
     public MealService(IRepository<Recipe> recipes, IRepository<MealPlanEntry> entries, IRepository<MealDayNote> notes,
         IRepository<MealSuggestion> suggestions, KitchenService kitchen, ScheduleService schedule, CalendarService calendar,
-        OllamaClient ollama, SettingsService settings, Clock clock, ILogger<MealService> log)
+        OllamaClient ollama, SettingsService settings, Clock clock, ILogger<MealService> log, IRepository<DealOffer> deals)
     {
+        _deals = deals;
         _recipes = recipes; _entries = entries; _notes = notes; _suggestions = suggestions; _kitchen = kitchen;
         _schedule = schedule; _calendar = calendar; _ollama = ollama; _settings = settings; _clock = clock; _log = log;
     }
@@ -78,6 +80,24 @@ public sealed class MealService
         List<CalendarEvent> events;
         try { events = await _calendar.GetEventsAsync(from, to); }
         catch (Exception ex) { _log.LogInformation("Calendar unavailable for meal plan: {Message}", ex.Message); events = new(); }
+        // Shared meal planning: other people's plans matter too (someone out for dinner, a late meeting).
+        var others = new List<CalendarEvent>();
+        if (UserScope.Household.Meals && UserScope.UserId is { } me)
+            foreach (var user in _settings.Users.Where(u => u.Id != me))
+                using (UserScope.As(user.Id))
+                {
+                    try
+                    {
+                        foreach (var e in await _calendar.GetEventsAsync(from, to))
+                        {
+                            if (events.Any(x => x.Start == e.Start && x.Title == e.Title)) continue;   // a family calendar you both see
+                            var copy = Json.Clone(e);
+                            copy.Title = $"{user.FirstName}: {e.Title}";
+                            others.Add(copy);
+                        }
+                    }
+                    catch (Exception ex) { _log.LogDebug(ex, "Calendar of {Name} unavailable", user.FirstName); }
+                }
         var list = new List<DayContext>();
         for (var d = from; d <= to; d = d.AddDays(1))
         {
@@ -112,8 +132,9 @@ public sealed class MealService
             else if (workEnd != default) parts.Add($"Work till {workEnd:HH:mm}");
             if (timed.Count > 0) parts.Add($"{timed.Count} event{(timed.Count == 1 ? "" : "s")}");
             parts.Add(free >= 60 ? $"{free / 60}h{(free % 60 > 0 ? $" {free % 60}m" : "")} free evening" : free > 0 ? $"{free}m free evening" : "busy evening");
+            var theirs = others.Where(e => DateOnly.FromDateTime(e.Start) <= d && DateOnly.FromDateTime(e.End.AddSeconds(-1)) >= d);
             list.Add(new DayContext(d, string.Join(" · ", parts), free, energy, auto, dayOff,
-                dayEvents.Select(e => e.AllDay ? e.Title : $"{e.Start:HH:mm} {e.Title}").ToList(), !string.IsNullOrEmpty(note?.Energy)));
+                dayEvents.Concat(theirs).Select(e => e.AllDay ? e.Title : $"{e.Start:HH:mm} {e.Title}").ToList(), !string.IsNullOrEmpty(note?.Energy)));
         }
         return list;
     }
@@ -268,6 +289,21 @@ public sealed class MealService
         ["low carb"] = new[] { "pasta", "rice", "bread", "potato", "noodle", "sugar", "flour", "tortilla" },
     };
 
+    /// <summary>The first of your requirements a food item may clash with ("gluten free" for "Garlic bread"), or "".</summary>
+    public string DietClash(string item)
+    {
+        foreach (var req in _settings.Current.Meals.Requirements)
+        {
+            var key = DietWords.Keys.FirstOrDefault(k => req.Contains(k, StringComparison.OrdinalIgnoreCase) ||
+                                                         k.Replace(" ", "").Equals(req.Replace(" ", "").Replace("-", ""), StringComparison.OrdinalIgnoreCase));
+            if (key is null) continue;
+            var lower = item.ToLowerInvariant();
+            if (lower.Contains(key) || lower.Replace("-", " ").Contains(key)) continue;   // "gluten-free bread" is fine
+            if (DietWords[key].Any(w => Regex.IsMatch(lower, $@"\b{Regex.Escape(w)}"))) return req;
+        }
+        return "";
+    }
+
     /// <summary>Ingredients that may clash with your requirements (a quick hint, not a guarantee).</summary>
     public List<string> DietConflicts(Recipe r)
     {
@@ -364,6 +400,8 @@ public sealed class MealService
         $"Ingredients: {string.Join("; ", r.Ingredients.Select(i => i.ToString()))}\n" +
         (string.IsNullOrWhiteSpace(r.Steps) ? "" : $"Method: {r.Steps.Replace("\n", " / ")}\n");
 
+    public string StockSummary(int max = 40) => StockList(max);
+
     private string StockList(int max = 40)
     {
         var kitchen = _kitchen.Pantry.All().OrderBy(p => _kitchen.Fresh(p).CheckBy ?? DateOnly.MaxValue).Take(max);
@@ -457,6 +495,14 @@ public sealed class MealService
         var unused = UnusedExpiring(from, to);
         sb.AppendLine($"\nFOOD TO USE UP that no planned meal uses: {(unused.Count == 0 ? "none" : string.Join("; ", unused.Select(p => $"{p.Name} ({_kitchen.Fresh(p).Label})")))}");
         sb.AppendLine($"\nEVERYTHING IN THE KITCHEN: {StockList(60)}");
+        if (_settings.Current.Deals.Enabled)
+        {
+            var today = _clock.Today;
+            var offers = _deals.Where(o => !o.Dismissed && o.Food && o.Score >= 3 && o.DietWarning.Length == 0 && (o.ValidUntil is null || o.ValidUntil >= today))
+                .OrderByDescending(o => o.Score).Take(12).ToList();
+            if (offers.Count > 0)
+                sb.AppendLine($"\nON OFFER NEARBY (worth using in a tweak if it fits): {string.Join("; ", offers.Select(o => $"{o.Item} {DealsService.PriceText(o)} at {o.Store}"))}");
+        }
 
         var schema = new JsonObject
         {

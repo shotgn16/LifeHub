@@ -25,6 +25,7 @@ public sealed class EmailSyncService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        using var system = UserScope.AsSystem();
         await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -50,6 +51,8 @@ public sealed class EmailSyncService : BackgroundService
             var errors = new List<string>();
             foreach (var account in accounts)
             {
+                // Each mailbox's emails, tasks and suggestions belong to the person whose mailbox it is.
+                using var owner = UserScope.As(account.OwnerId == Guid.Empty ? _settings.PrimaryUserId : account.OwnerId);
                 var provider = _providers.FirstOrDefault(p => p.Kind == account.Kind);
                 if (provider is null) continue;
                 var working = Json.Clone(account);

@@ -45,6 +45,7 @@ public sealed class ChecklistItem
     public bool Done { get; set; }
 }
 
+[Owned(OwnScope.Personal)]
 public sealed class TaskItem : Entity
 {
     public string Title { get; set; } = "";

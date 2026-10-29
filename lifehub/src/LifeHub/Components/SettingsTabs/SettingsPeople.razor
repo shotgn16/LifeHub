@@ -1,0 +1,187 @@
+@inject SettingsService Settings
+@inject PeopleService People
+@inject HomeAssistantClient Ha
+@inject HomeAssistantCatalog Catalog
+@inject UserContext User
+@inject UiState Ui
+@inject DataPaths Paths
+
+<div class="grid cols-2">
+    <div class="card">
+        <div class="card-head">
+            <h2>People</h2>
+            <button class="btn sm primary right" @onclick="StartAdd"><Icon Name="plus" Size="15" /> Add person</button>
+        </div>
+        <p class="small muted" style="margin-top:0">Everyone has their own tasks, email accounts, AI inbox, schedule, notes, Bible reading and studies, and their own phones for notifications.</p>
+        <ul class="list">
+            @foreach (var u in users)
+            {
+                <li class="row">
+                    <span class="avatar" style="background:@u.Colour">@u.Initials</span>
+                    <div class="grow">
+                        <div class="title">@u.Name @if (u.IsAdmin) { <span class="badge info">admin</span> } @if (u.Id == User.Id) { <span class="badge">you</span> } @if (u.Id == Settings.PrimaryUserId && users.Count > 1) { <span class="badge ok" title="Keeps the household lists when sharing is off">main</span> }</div>
+                        <div class="meta">
+                            @(u.HasPassword ? $"Signs in as {u.Username}" : Paths.IsHomeAssistantAddon ? "Home Assistant only" : "No login yet")
+                            @if (!string.IsNullOrEmpty(u.PinHash)) { <span> · PIN</span> }
+                            @if (u.PersonEntity.Length > 0) { <span> · @Catalog.NameOf(u.PersonEntity)</span> }
+                            @if (Settings.Household.Email.Accounts.Count(a => a.OwnerId == u.Id || (a.OwnerId == Guid.Empty && u.Id == Settings.PrimaryUserId)) is var n and > 0) { <span> · @n mailbox@(n == 1 ? "" : "es")</span> }
+                        </div>
+                    </div>
+                    <button class="btn sm" @onclick="() => StartEdit(u)">Edit</button>
+                </li>
+            }
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:4px">What's shared</h2>
+        <p class="small muted" style="margin-top:0">Tasks, email, Bible tracking, studies and notes are always each person's own (a note can be shared one at a time). Choose what the household shares:</p>
+        <label class="check"><input type="checkbox" checked="@h.ShareKitchen" @onchange="e => SetShare(0, (bool)e.Value!)" /> <span><strong>Food stock & shopping list</strong><br /><span class="small muted">Kitchen, scanning, shopping list and the HA shopping list</span></span></label>
+        <label class="check"><input type="checkbox" checked="@h.ShareMeals" @onchange="e => SetShare(1, (bool)e.Value!)" /> <span><strong>Meal planning</strong><br /><span class="small muted">Recipes, the meal plan, dietary needs and deals</span></span></label>
+        <label class="check"><input type="checkbox" checked="@h.ShareRenewals" @onchange="e => SetShare(2, (bool)e.Value!)" /> <span><strong>Renewals & subscriptions</strong><br /><span class="small muted">Bills, domains, insurance, streaming…</span></span></label>
+        <p class="tiny muted" style="margin-top:10px">Turning sharing off keeps the existing list with the main person (@users.FirstOrDefault(u => u.Id == Settings.PrimaryUserId)?.Name); everyone else starts their own. Turning it back on brings everyone's lists together.</p>
+    </div>
+</div>
+
+<Modal @bind-Open="editOpen" Title="@(adding ? "Add person" : "Edit " + form.Name)">
+    <ChildContent>
+        <div class="form-grid">
+            <div class="field"><label>Name</label><input type="text" @bind="form.Name" placeholder="e.g. Sam" /></div>
+            <div class="field">
+                <label>Colour</label>
+                <div class="colour-pick">
+                    @foreach (var c in PeopleService.Colours)
+                    {
+                        <button type="button" class="swatch @(form.Colour == c ? "on" : "")" style="background:@c" @onclick="() => form.Colour = c" aria-label="@c"></button>
+                    }
+                </div>
+            </div>
+            @if (persons.Count > 0)
+            {
+                <div class="field full">
+                    <label>Their Home Assistant person</label>
+                    <select @bind="form.PersonEntity">
+                        <option value="">— none —</option>
+                        @foreach (var p in persons) { <option value="@p.Id">@p.Name</option> }
+                    </select>
+                    <div class="help">Used for "while you're out" shopping reminders.</div>
+                </div>
+            }
+            <div class="field"><label>Username (optional)</label><input type="text" @bind="form.Username" autocomplete="off" /></div>
+            <div class="field"><label>@(adding || !form.HasPassword ? "Password" : "New password (leave empty to keep)")</label><input type="password" @bind="newPassword" autocomplete="new-password" /></div>
+            <div class="field full help" style="margin-top:-6px">A username and password let them sign in outside Home Assistant. @(Paths.IsHomeAssistantAddon ? "In the Home Assistant app they just pick their name." : "")</div>
+            <div class="field full">
+                <label class="check"><input type="checkbox" @bind="form.IsAdmin" disabled="@(LastAdmin)" /> Admin — can change household settings (Home Assistant, AI, people, sharing)</label>
+                @if (!adding && !string.IsNullOrEmpty(form.PinHash))
+                {
+                    <label class="check"><input type="checkbox" @bind="clearPin" /> Remove their PIN</label>
+                }
+            </div>
+        </div>
+        @if (!adding && form.Id != User.Id)
+        {
+            <details class="danger-zone">
+                <summary class="small">Remove @form.Name</summary>
+                <p class="small">Their tasks, emails and mailboxes, AI inbox, notes, Bible reading and studies are deleted. Anything they added to the kitchen, meals or renewals stays with the household.</p>
+                <button class="btn danger sm" @onclick="Remove" disabled="@LastAdmin">Remove @form.Name</button>
+            </details>
+        }
+    </ChildContent>
+    <Footer>
+        <button class="btn" @onclick="() => editOpen = false">Cancel</button>
+        <button class="btn primary" @onclick="Save">@(adding ? "Add" : "Save")</button>
+    </Footer>
+</Modal>
+
+@code {
+    private List<UserProfile> users = new();
+    private HouseholdSettings h = new();
+    private bool editOpen, adding, clearPin;
+    private UserProfile form = new();
+    private string newPassword = "";
+    private List<HaEntity> persons = new();
+
+    private bool LastAdmin => !adding && form.IsAdmin && users.Count(u => u.IsAdmin) == 1 && users.FirstOrDefault(u => u.Id == form.Id)?.IsAdmin == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Load();
+        if (Ha.IsConfigured)
+            try { persons = (await Catalog.GetAsync()).Where(e => e.Domain == "person").OrderBy(e => e.Name).ToList(); } catch { }
+    }
+
+    private void Load()
+    {
+        users = Settings.Users.ToList();
+        h = Settings.Household.Household;
+    }
+
+    private async Task SetShare(int which, bool on)
+    {
+        await Settings.UpdateAsync(s =>
+        {
+            if (which == 0) s.Household.ShareKitchen = on;
+            else if (which == 1) s.Household.ShareMeals = on;
+            else s.Household.ShareRenewals = on;
+        });
+        Load();
+        Ui.Show(on ? "Now shared with everyone" : "Now kept separately for each person");
+    }
+
+    private void StartAdd()
+    {
+        adding = true; clearPin = false; newPassword = "";
+        form = new UserProfile { Colour = PeopleService.Colours[users.Count % PeopleService.Colours.Length] };
+        editOpen = true;
+    }
+
+    private void StartEdit(UserProfile u)
+    {
+        adding = false; clearPin = false; newPassword = "";
+        form = Json.Clone(u);
+        editOpen = true;
+    }
+
+    private async Task Save()
+    {
+        await Ui.Try(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(form.Name)) throw new InvalidOperationException("Enter a name");
+            if (form.Username.Trim().Length > 0 && users.Any(u => u.Id != form.Id && u.Username.Equals(form.Username.Trim(), StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Someone already uses that username");
+            if (newPassword.Length is > 0 and < 8) throw new InvalidOperationException("Passwords need at least 8 characters");
+            if (newPassword.Length > 0 && form.Username.Trim().Length == 0) throw new InvalidOperationException("Add a username to go with the password");
+            if (adding)
+            {
+                var added = await People.AddAsync(form.Name, form.IsAdmin, form.PersonEntity, form.Username, newPassword);
+                await Settings.UpdateUserAsync(added.Id, u => u.Colour = form.Colour);
+            }
+            else
+            {
+                var f = form; var pw = newPassword; var cp = clearPin;
+                await Settings.UpdateUserAsync(f.Id, u =>
+                {
+                    u.Name = f.Name.Trim(); u.Colour = f.Colour; u.PersonEntity = f.PersonEntity; u.IsAdmin = f.IsAdmin || LastAdmin;
+                    u.Username = f.Username.Trim();
+                    if (pw.Length > 0) u.PasswordHash = PasswordHash.Create(pw);
+                    if (u.Username.Length == 0) u.PasswordHash = "";
+                    if (cp) u.PinHash = "";
+                });
+            }
+            editOpen = false;
+            Load();
+        }, adding ? $"{form.Name} added — they can now pick their name or sign in" : "Saved");
+    }
+
+    private async Task Remove()
+    {
+        await Ui.Try(async () =>
+        {
+            var name = form.Name;
+            await People.RemoveAsync(form.Id);
+            editOpen = false;
+            Load();
+            Ui.Show($"{name} removed");
+        });
+    }
+}

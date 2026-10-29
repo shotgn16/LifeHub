@@ -1,0 +1,64 @@
+@page "/who"
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@inject SettingsService Settings
+
+<PageTitle>Who's using LifeHub?</PageTitle>
+
+<div class="auth-wrap">
+    <div class="card auth-card who-card">
+        <div class="brand"><span class="brand-mark">L</span> @Settings.Current.General.HouseholdName</div>
+        <p class="muted center">Who's using LifeHub?</p>
+        @if (Error == "locked")
+        {
+            <div class="alert danger">Too many wrong PINs. Try again in a few minutes.</div>
+        }
+        else if (!string.IsNullOrEmpty(Error))
+        {
+            <div class="alert danger">That PIN isn't right.</div>
+        }
+        <div class="who-list">
+            @foreach (var u in Settings.Users)
+            {
+                var needsPin = !string.IsNullOrEmpty(u.PinHash);
+                <form method="post" action="auth/pick" class="who-item @(Picked == u.Id ? "on" : "")">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="user" value="@u.Id" />
+                    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                    @if (needsPin && Picked == u.Id)
+                    {
+                        <span class="avatar lg" style="background:@u.Colour">@u.Initials</span>
+                        <strong>@u.Name</strong>
+                        <input type="password" name="pin" inputmode="numeric" maxlength="8" placeholder="PIN" autofocus required class="who-pin" />
+                        <button class="btn primary" type="submit">Continue</button>
+                    }
+                    else if (needsPin)
+                    {
+                        <a class="who-btn" href="@PinLink(u)">
+                            <span class="avatar lg" style="background:@u.Colour">@u.Initials</span>
+                            <strong>@u.Name</strong>
+                            <span class="tiny muted">PIN</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <button class="who-btn" type="submit">
+                            <span class="avatar lg" style="background:@u.Colour">@u.Initials</span>
+                            <strong>@u.Name</strong>
+                        </button>
+                    }
+                </form>
+            }
+        </div>
+        <p class="tiny muted center" style="margin-top:14px">Each person has their own tasks, email, Bible reading and notes.</p>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+    [SupplyParameterFromQuery(Name = "user")] public Guid? Picked { get; set; }
+
+    private string PinLink(UserProfile u) =>
+        $"who?user={u.Id}" + (string.IsNullOrEmpty(ReturnUrl) ? "" : "&returnUrl=" + Uri.EscapeDataString(ReturnUrl));
+}

@@ -1,5 +1,6 @@
 @page "/settings"
 @inject DataPaths Paths
+@inject UserContext User
 
 <PageTitle>Settings · LifeHub</PageTitle>
 
@@ -11,7 +12,7 @@
 </div>
 
 <div class="tabs">
-    @foreach (var (key, label) in Tabs)
+    @foreach (var (key, label) in Tabs.Where(t => User.IsAdmin || PersonalTabs.Contains(t.Item1)))
     {
         <a class="tab @(Current == key ? "on" : "")" href="settings?tab=@key" style="text-decoration:none">@label</a>
     }
@@ -19,23 +20,29 @@
 
 @switch (Current)
 {
+    case "people" when User.IsAdmin: <SettingsPeople /> break;
     case "ha": <SettingsHomeAssistant /> break;
-    case "ai": <SettingsAi /> break;
+    case "ai" when User.IsAdmin: <SettingsAi /> break;
     case "email": <SettingsEmail /> break;
     case "notifications": <SettingsNotifications /> break;
     case "bible": <SettingsBible /> break;
     case "security": <SettingsSecurity /> break;
-    case "backup": <SettingsBackup /> break;
-    default: <SettingsGeneral /> break;
+    case "backup" when User.IsAdmin: <SettingsBackup /> break;
+    case "general" when User.IsAdmin: <SettingsGeneral /> break;
+    default:
+        if (User.IsAdmin) { <SettingsGeneral /> } else { <SettingsEmail /> }
+        break;
 }
 
 @code {
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
-    private string Current => Tab ?? "general";
+    private string Current => Tab ?? (User.IsAdmin ? "general" : "email");
+    /// <summary>Tabs everyone sees (their own mailboxes, phones, Bible and sign-in); the rest are for admins.</summary>
+    private static readonly HashSet<string> PersonalTabs = new() { "ha", "email", "notifications", "bible", "security" };
 
     private static readonly (string, string)[] Tabs =
     {
-        ("general", "General"), ("ha", "Home Assistant"), ("ai", "AI"), ("email", "Email"),
+        ("general", "General"), ("people", "People"), ("ha", "Home Assistant"), ("ai", "AI"), ("email", "Email"),
         ("notifications", "Notifications"), ("bible", "Bible"), ("security", "Security & API"), ("backup", "Backup")
     };
 }

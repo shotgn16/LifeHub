@@ -3,6 +3,7 @@ namespace LifeHub.Domain;
 public enum SuggestionStatus { Pending, Applied, Rejected, Failed, Undone }
 
 /// <summary>An action the AI proposed (from an email or from quick capture), waiting for review.</summary>
+[Owned(OwnScope.Personal)]
 public sealed class AiSuggestion : Entity
 {
     /// <summary>Handler type, e.g. task, event, renewal, shopping. See Ai/Handlers.</summary>
@@ -31,6 +32,7 @@ public sealed class AiSuggestion : Entity
 }
 
 /// <summary>A processed email (body is not kept, only what's needed to show context).</summary>
+[Owned(OwnScope.Personal)]
 public sealed class EmailRecord : Entity
 {
     public Guid AccountId { get; set; }
@@ -83,6 +85,7 @@ public static class EmailCategories
 }
 
 /// <summary>A deal / advert the AI found in a marketing email — kept separate from your shopping list.</summary>
+[Owned(OwnScope.Personal)]
 public sealed class Promotion : Entity
 {
     public string Title { get; set; } = "";
@@ -101,6 +104,7 @@ public sealed class Promotion : Entity
 public enum NoticeLevel { Info, Warning, Alert }
 
 /// <summary>In-app notification (also pushed to HA if a notify service is set).</summary>
+[Owned(OwnScope.Personal)]
 public sealed class Notice : Entity
 {
     public string Title { get; set; } = "";

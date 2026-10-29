@@ -5,6 +5,7 @@
 @inject NavigationManager Nav
 @inject Clock Clock
 @inject UiState Ui
+@inject UserContext User
 
 <div class="grid cols-2" style="align-items:start">
     <div>
@@ -16,9 +17,16 @@
         <div class="card" style="margin-bottom:16px">
             <h2 style="margin-bottom:6px">Verse of the day</h2>
             <p class="small muted" style="margin-top:0">With a free YouVersion app key LifeHub shows the same verse of the day as the YouVersion app. Without one, you can type the day's verse on the Bible page.</p>
-            <div class="field"><label>YouVersion app key</label><input type="text" @bind="b.YouVersionAppKey" placeholder="from platform.youversion.com" />
+            @if (User.IsAdmin)
+            {
+            <div class="field"><label>YouVersion app key@(User.Multi ? " (for everyone)" : "")</label><input type="text" @bind="b.YouVersionAppKey" placeholder="from platform.youversion.com" />
                 <div class="help">Sign in at <a href="https://platform.youversion.com" target="_blank" rel="noopener">platform.youversion.com</a>, create an app and copy its key.</div>
             </div>
+            }
+            else if (string.IsNullOrWhiteSpace(b.YouVersionAppKey))
+            {
+                <p class="small muted">Ask an admin to add a YouVersion app key in Settings → Bible.</p>
+            }
             <div class="field"><label>Bible version</label>
                 <div style="display:flex;gap:6px;flex-wrap:wrap">
                     <input type="number" min="1" @bind="b.VersionId" style="max-width:110px" />
@@ -123,8 +131,10 @@
             <div class="field"><label>Focus the application on (optional)</label><input type="text" @bind="b.DeeperFocus" placeholder="e.g. family life, leading a small group, work" /></div>
         </div>
 
+        @if (User.IsAdmin)
+        {
         <div class="card">
-            <h2 style="margin-bottom:6px">Study helpers</h2>
+            <h2 style="margin-bottom:6px">Study helpers@(User.Multi ? " (for everyone)" : "")</h2>
             <p class="small muted" style="margin-top:0">Only used when you press <strong>Ask for insights</strong> on a study. LifeHub fetches the page for your passage, and your local AI compares it with your notes. AI notes are shown in purple and never change your own notes.</p>
             <label class="check"><input type="checkbox" @bind="b.StudyLightEnabled" /> <span><strong>StudyLight.org</strong> — commentaries for the passage</span></label>
             <div class="field"><input type="text" @bind="b.StudyLightUrl" class="mono small" /></div>
@@ -133,6 +143,7 @@
                 <div class="help">Placeholders: <code>{book}</code> (e.g. 1-corinthians), <code>{name}</code>, <code>{chapter}</code>, <code>{verse}</code>, <code>{usfm}</code> (e.g. 1CO.13.4). If a site builds its pages with JavaScript, LifeHub can't read them and just links to them instead.</div>
             </div>
         </div>
+        }
     </div>
 </div>
 

@@ -57,6 +57,7 @@ public sealed class HaListSyncService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        using var system = UserScope.AsSystem();
         await Task.Delay(TimeSpan.FromSeconds(15), ct);
         while (!ct.IsCancellationRequested)
         {
@@ -68,15 +69,22 @@ public sealed class HaListSyncService : BackgroundService
 
     public async Task<string> SyncNowAsync(CancellationToken ct = default)
     {
-        var h = _settings.Current.HomeAssistant;
-        if (!_ha.IsConfigured || (string.IsNullOrEmpty(h.ShoppingTodoEntity) && string.IsNullOrEmpty(h.TasksTodoEntity))) return LastResult = "Not set up";
+        // The shopping list is the household's (the main person's when food isn't shared); each person can link
+        // their own HA to-do list for their tasks.
+        var shoppingEntity = _settings.Household.HomeAssistant.ShoppingTodoEntity;
+        var people = _settings.Users.Where(u => !string.IsNullOrEmpty(u.TasksTodoEntity)).ToList();
+        if (!_ha.IsConfigured || (string.IsNullOrEmpty(shoppingEntity) && people.Count == 0)) return LastResult = "Not set up";
         if (!await _running.WaitAsync(0, ct)) return LastResult;
         _syncing = true;
         try
         {
             var parts = new List<string>();
-            if (!string.IsNullOrEmpty(h.ShoppingTodoEntity)) parts.Add("shopping: " + await SyncShoppingAsync(h.ShoppingTodoEntity, ct));
-            if (!string.IsNullOrEmpty(h.TasksTodoEntity)) parts.Add("tasks: " + await SyncTasksAsync(h.TasksTodoEntity, ct));
+            if (!string.IsNullOrEmpty(shoppingEntity))
+                using (UserScope.As(_settings.PrimaryUserId))
+                    parts.Add("shopping: " + await SyncShoppingAsync(shoppingEntity, ct));
+            foreach (var person in people)
+                using (UserScope.As(person.Id))
+                    parts.Add($"tasks{(people.Count > 1 ? " (" + person.FirstName + ")" : "")}: " + await SyncTasksAsync(person.TasksTodoEntity, ct));
             LastRunUtc = DateTime.UtcNow;
             return LastResult = string.Join("; ", parts);
         }

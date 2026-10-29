@@ -6,6 +6,7 @@
 @inject Clock Clock
 @inject UiState Ui
 @inject NavigationManager Nav
+@inject NotesService Notes
 
 <PageTitle>What did you read? · LifeHub</PageTitle>
 
@@ -31,8 +32,16 @@
         }
         else
         {
-            <div><span class="badge warn">Not recognised</span> Couldn't find a Bible passage in what was shared.</div>
+            <div><span class="badge warn">Not a Bible passage</span> Couldn't find a Bible passage in what was shared.</div>
             <div class="help small mono" style="word-break:break-all">@shared</div>
+            @if (savedNote is null)
+            {
+                <button class="btn sm primary" style="margin-top:8px" @onclick="SaveAsNote"><Icon Name="note" Size="14" /> Save it as a note</button>
+            }
+            else
+            {
+                <div class="small" style="margin-top:8px">Saved to <a href="notes">Notes</a>.</div>
+            }
         }
     </div>
 }
@@ -95,6 +104,13 @@
     private string typed = "";
     private string? shared;
     private List<BibleReading> sharedLogged = new();
+    private Note? savedNote;
+
+    private async Task SaveAsNote()
+    {
+        if (string.IsNullOrWhiteSpace(shared)) return;
+        await Ui.Try(async () => savedNote = await Notes.AddAsync(shared, source: "share"));
+    }
 
     protected override async Task OnInitializedAsync()
     {

@@ -28,3 +28,16 @@ LifeHub includes or depends on the following third-party components.
   is included.
 
 Icons in the UI are inline SVG paths drawn for LifeHub.
+
+## OpenStreetMap, Nominatim and Overpass
+
+The optional Deals feature looks up nearby stores using OpenStreetMap data (© OpenStreetMap
+contributors, available under the [Open Database Licence](https://www.openstreetmap.org/copyright)),
+through the Nominatim and Overpass APIs. Please follow their usage policies; LifeHub only looks
+up stores when you change your area (or when none were found last time).
+
+## postcodes.io
+
+UK postcodes are located with [postcodes.io](https://postcodes.io) (free, open data: contains OS
+data © Crown copyright and database right, Royal Mail data © Royal Mail copyright and database
+right, National Statistics data © Crown copyright and database right).

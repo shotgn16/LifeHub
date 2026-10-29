@@ -1,6 +1,7 @@
 namespace LifeHub.Domain;
 
 /// <summary>A passage you read (logged by you, the reading plan, the verse of the day or a study).</summary>
+[Owned(OwnScope.Personal)]
 public sealed class BibleReading : Entity
 {
     public DateOnly Date { get; set; }
@@ -13,6 +14,7 @@ public sealed class BibleReading : Entity
 }
 
 /// <summary>Time spent in the Bible app (from Home Assistant, an iPhone Shortcut or the API).</summary>
+[Owned(OwnScope.Personal)]
 public sealed class BibleAppSession : Entity
 {
     public DateTime StartUtc { get; set; }
@@ -30,6 +32,7 @@ public sealed class BibleAppSession : Entity
 }
 
 /// <summary>The verse of the day for one date, and whether you read it.</summary>
+[Owned(OwnScope.Personal)]
 public sealed class DailyVerse : Entity
 {
     public DateOnly Date { get; set; }
@@ -49,6 +52,7 @@ public sealed class DailyVerse : Entity
 }
 
 /// <summary>One thing on a day's reading list: plan chapters and catch-ups from missed days.</summary>
+[Owned(OwnScope.Personal)]
 public sealed class ReadingPlanItem : Entity
 {
     public DateOnly Date { get; set; }
@@ -64,6 +68,7 @@ public sealed class ReadingPlanItem : Entity
 }
 
 /// <summary>A Bible study session with your notes, uploaded proof and AI help kept separate.</summary>
+[Owned(OwnScope.Personal)]
 public sealed class BibleStudy : Entity
 {
     public DateOnly Date { get; set; }
@@ -85,6 +90,10 @@ public sealed class BibleStudy : Entity
     /// <summary>none · working · done · failed (+ message in AiError)</summary>
     /// <summary>AI: "Go deeper" study built from StudyLight commentaries. Never merged into Notes.</summary>
     public DeepStudy? Deeper { get; set; }
+    /// <summary>What the study is for (see <see cref="StudyTypes"/>): personal, homegroup, preaching, teaching, youth, word, discipleship.</summary>
+    public string StudyType { get; set; } = "";
+    /// <summary>AI: starter notes made from a verse, a level and a study type. Never merged into Notes.</summary>
+    public StudyStarter? Starter { get; set; }
     public string AiStatus { get; set; } = "none";
     public string AiError { get; set; } = "";
     public float[]? Embedding { get; set; }
@@ -169,4 +178,82 @@ public sealed class DeepItem
     public string Title { get; set; } = "";
     public string Body { get; set; } = "";
     public string Note { get; set; } = "";
+}
+
+/// <summary>Starter notes for a study: the main idea, context and sections shaped by what the study is for.</summary>
+public sealed class StudyStarter
+{
+    public string Type { get; set; } = "personal";
+    public int Level { get; set; } = 2;
+    public string Focus { get; set; } = "";
+    public DateTime GeneratedUtc { get; set; }
+    public string Model { get; set; } = "";
+    public string Passage { get; set; } = "";
+    /// <summary>The passage text that was used (from YouVersion), so the notes can be checked against it.</summary>
+    public string PassageText { get; set; } = "";
+    /// <summary>The main idea in one sentence ("big idea" for preaching).</summary>
+    public string BigIdea { get; set; } = "";
+    public string Summary { get; set; } = "";
+    public string Context { get; set; } = "";
+    public List<StarterSection> Sections { get; set; } = new();
+    /// <summary>Title = the question, Note = kind (observation, interpretation, application, discussion, reflection).</summary>
+    public List<DeepItem> Questions { get; set; } = new();
+    public string Prayer { get; set; } = "";
+    /// <summary>Title = site, Body = commentators drawn on, Note = URL.</summary>
+    public List<DeepItem> Sources { get; set; } = new();
+}
+
+public sealed class StarterSection
+{
+    public string Heading { get; set; } = "";
+    /// <summary>Title = point, Body = detail, Note = extra (verse, timing, illustration idea).</summary>
+    public List<DeepItem> Points { get; set; } = new();
+}
+
+/// <summary>The kinds of study LifeHub can start for you, and what each one's notes contain.</summary>
+public static class StudyTypes
+{
+    public sealed record Kind(string Key, string Name, string Blurb, string Brief, string Sections, string QuestionKinds);
+
+    public static readonly IReadOnlyList<Kind> All = new Kind[]
+    {
+        new("personal", "Personal study", "Quiet time and devotion",
+            "a personal devotional study for one person's quiet time",
+            "\"Read and notice\" (what the passage actually says: observations), \"What it shows about God\", \"Reflect and respond\" (personal application)",
+            "reflection"),
+        new("homegroup", "Home group", "Leading a small group discussion",
+            "a home group / small group Bible study that someone will LEAD for a group of adults, about 45–60 minutes of discussion",
+            "\"Icebreaker\" (1–2 light openers linked to the theme), \"Read\" (how to read it together, what to listen for), \"Look closer\" (key observations for the leader), \"What it means\" (interpretation notes, tricky bits explained simply), \"Live it out\" (application ideas for the group), \"Leader's notes\" (timings, where discussion may go, sensitive topics, how to close)",
+            "observation, interpretation, application"),
+        new("preaching", "Preaching", "Sermon preparation",
+            "sermon preparation for a preacher: an exegetical start and a sermon outline",
+            "\"Exegetical notes\" (verse by verse: what the text says and means; Note = the verse), \"Outline\" (3–4 main points that flow from the text; Body = explanation, Note = illustration idea), \"Introduction ideas\", \"Application\" (for different people in the congregation), \"Conclusion and response\", \"Watch out for\" (common misreadings, hard questions)",
+            "discussion"),
+        new("teaching", "Teaching", "A Bible class or course",
+            "a lesson plan for teaching a Bible class to adults",
+            "\"Learning aims\", \"Background\", \"Lesson plan\" (steps; Note = minutes), \"Key truths\", \"Activities\"",
+            "observation, interpretation, application"),
+        new("youth", "Youth & children", "A talk or session for young people",
+            "a session for young people (youth group or older children): simple language, engaging and age-appropriate",
+            "\"Opening activity\" (a game or hook linked to the theme), \"The story / explanation\" (in simple words), \"Big truth\" (one memorable sentence), \"Response\" (an activity or challenge)",
+            "discussion"),
+        new("word", "Word & theme study", "Key words and themes across Scripture",
+            "a word and theme study: the passage's key words in the original languages and how its themes run through the Bible",
+            "\"Key words\" (Title = English word, Note = Greek/Hebrew with transliteration, Body = meaning and use), \"The theme across Scripture\" (Title = reference, Body = connection), \"What it teaches\" (doctrine in plain words)",
+            "reflection"),
+        new("discipleship", "One-to-one", "Reading the Bible with someone",
+            "a one-to-one discipleship / mentoring conversation reading the passage together",
+            "\"Read together\" (how to approach it), \"Conversation starters\", \"What it means for us\", \"Challenge for the week\" (one concrete step), \"Check in next time\"",
+            "discussion, application")
+    };
+
+    public static Kind Of(string? key) => All.FirstOrDefault(k => k.Key == key) ?? All[0];
+
+    public static string LevelName(int level) => level switch { <= 1 => "Getting started", 2 => "Going further", _ => "In depth" };
+    public static string LevelBlurb(int level) => level switch
+    {
+        <= 1 => "Simple language, the main points, no background needed",
+        2 => "More background, some original-language words, fuller notes",
+        _ => "Detailed exegesis, Greek/Hebrew, differing views and more cross-references"
+    };
 }

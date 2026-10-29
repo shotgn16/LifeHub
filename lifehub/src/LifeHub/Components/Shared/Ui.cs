@@ -104,14 +104,17 @@ public abstract class LiveComponent : ComponentBase, IDisposable
 
     protected void Watch<T>(IRepository<T> repo) where T : Entity
     {
-        void Handler() => InvokeAsync(() => { OnDataChanged(); StateHasChanged(); });
+        // Changes can come from anyone's work; this page always reloads as its own person.
+        var me = UserScope.Current;
+        void Handler() => InvokeAsync(() => { using (UserScope.Use(me)) { OnDataChanged(); StateHasChanged(); } });
         repo.Changed += Handler;
         _unsubscribe.Add(() => repo.Changed -= Handler);
     }
 
     protected void Watch(SettingsService settings)
     {
-        void Handler() => InvokeAsync(() => { OnDataChanged(); StateHasChanged(); });
+        var me = UserScope.Current;
+        void Handler() => InvokeAsync(() => { using (UserScope.Use(me)) { OnDataChanged(); StateHasChanged(); } });
         settings.Changed += Handler;
         _unsubscribe.Add(() => settings.Changed -= Handler);
     }
