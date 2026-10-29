@@ -1,0 +1,79 @@
+name: Add-on image
+
+# Builds the ready-made Home Assistant add-on images, so Home Assistant only downloads LifeHub
+# instead of compiling it on the HA machine:
+#   ghcr.io/shotgn16/lifehub-amd64:<version>   ghcr.io/shotgn16/lifehub-aarch64:<version>
+# Runs on every push to main (skips versions that already exist) and on demand. Build a new version
+# on demand *before* bumping lifehub/config.yaml, so the image is there when HA offers the update.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (default: lifehub/config.yaml)"
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: aarch64
+            platform: linux/arm64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: |
+          v="${{ github.event.inputs.version }}"
+          [ -z "$v" ] && v=$(grep -E '^version:' lifehub/config.yaml | sed -E 's/version: *"?([^"]+)"?/\1/')
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$owner/lifehub-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Already built?
+        id: exists
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && docker manifest inspect "${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
+            echo "yes=true" >> "$GITHUB_OUTPUT"; echo "Image already exists — skipping"
+          fi
+      - uses: docker/setup-qemu-action@v3
+        if: steps.exists.outputs.yes != 'true'
+      - uses: docker/setup-buildx-action@v3
+        if: steps.exists.outputs.yes != 'true'
+      - name: Build and push
+        if: steps.exists.outputs.yes != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/docker/Dockerfile.addon
+          platforms: ${{ matrix.platform }}
+          provenance: false
+          push: true
+          build-args: |
+            VERSION=${{ steps.v.outputs.version }}
+            BUILD_ARCH=${{ matrix.arch }}
+          tags: |
+            ${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}
+            ${{ steps.v.outputs.image }}:latest
+      - name: Check anyone can download it (Home Assistant pulls without signing in)
+        run: |
+          docker logout ghcr.io
+          if docker manifest inspect "${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}" >/dev/null; then
+            echo "Public: OK"
+          else
+            echo "::warning::${{ steps.v.outputs.image }} is not public yet. GitHub → your profile → Packages → lifehub-${{ matrix.arch }} → Package settings → Change visibility → Public."
+          fi

@@ -1,0 +1,27 @@
+# Ready-made Home Assistant add-on image (amd64 + aarch64), built by .github/workflows/addon-image.yml.
+# The app is compiled once on the build machine's own platform (no slow emulation); the output is
+# architecture-neutral .NET, copied onto the ASP.NET runtime image for each target architecture.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG VERSION=0.0.0
+WORKDIR /src
+COPY lifehub/src/LifeHub/LifeHub.csproj src/LifeHub/
+RUN dotnet restore src/LifeHub/LifeHub.csproj
+COPY lifehub/src/ src/
+RUN dotnet publish src/LifeHub/LifeHub.csproj -c Release -o /app --no-restore /p:UseAppHost=false /p:Version=$VERSION
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+ARG VERSION=0.0.0
+ARG BUILD_ARCH
+LABEL io.hass.version="$VERSION" io.hass.type="addon" io.hass.arch="$BUILD_ARCH" \
+      org.opencontainers.image.source="https://github.com/Shotgn16/LifeHub" \
+      org.opencontainers.image.description="LifeHub Home Assistant add-on" \
+      org.opencontainers.image.licenses="MIT"
+WORKDIR /app
+COPY --from=build /app .
+ENV LIFEHUB_DATA=/data \
+    ASPNETCORE_URLS=http://0.0.0.0:8099 \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    TZ=Europe/London
+VOLUME /data
+EXPOSE 8099
+ENTRYPOINT ["dotnet", "LifeHub.dll"]
