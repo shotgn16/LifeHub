@@ -91,8 +91,13 @@ Add to `AutomationService.PublishSensorsAsync`. Each `SetStateAsync` call create
 
 ## Releasing a new version
 
-1. Bump `<Version>` in `lifehub/src/LifeHub/LifeHub.csproj` and `version:` in
+1. **Build the image first.** Go to Actions → **Add-on image** → Run workflow, and enter the new
+   version. This publishes `ghcr.io/shotgn16/lifehub-{amd64,aarch64}:X.Y.Z`. Home Assistant
+   downloads this image, so it must exist before HA offers the update.
+   - On a first publish, check both packages are **Public**: your GitHub profile → Packages →
+     Package settings.
+2. Bump `<Version>` in `lifehub/src/LifeHub/LifeHub.csproj` and `version:` in
    `lifehub/config.yaml`.
-2. Add an entry to both `CHANGELOG.md` (root) and `lifehub/CHANGELOG.md`.
-3. Commit, tag `vX.Y.Z` and push the tag. The release workflow creates the GitHub release, and
+3. Add an entry to both `CHANGELOG.md` (root) and `lifehub/CHANGELOG.md`.
+4. Commit, tag `vX.Y.Z` and push the tag. The release workflow creates the GitHub release, and
    Home Assistant offers the update to everyone who added the repository.

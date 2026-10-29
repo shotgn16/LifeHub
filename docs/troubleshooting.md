@@ -6,7 +6,8 @@
 |---|---|
 | The add-on doesn't appear after adding the repository | Go to **Add-on store → ⋮ → Check for updates**, then refresh the browser. |
 | The local add-on doesn't appear | The path must be `/addons/lifehub/config.yaml`, not `/addons/lifehub/lifehub/…`. Run `ha store reload`. |
-| The build fails or takes a long time | The first build compiles .NET and needs about 2 GB of free RAM and internet access to `mcr.microsoft.com` and `nuget.org`. Check the Supervisor log. |
+| Install or update takes a long time / never finishes | Update to 2.0.1 or later. Since then, Home Assistant downloads a ready-made image (`ghcr.io/shotgn16/lifehub-amd64` or `-aarch64`) instead of compiling LifeHub. If an older update is stuck, restart Home Assistant (Settings → System → ⋮ → Restart → Reboot system), then **Check for updates** in the add-on store. The Supervisor log is under Settings → System → Logs → Supervisor. |
+| A **local** copy of the add-on (in `/addons`) builds slowly | Local copies still compile on the HA machine and need about 2 GB of free RAM. Use the repository instead, or give the VM more memory. |
 | **404: Not Found** from the HA sidebar | Update to 1.1.1 or later. |
 
 ## Access

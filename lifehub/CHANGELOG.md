@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+- Updates now download a ready-made image instead of compiling LifeHub on your Home Assistant
+  machine. This fixes updates that took a very long time or never finished.
+
 ## 2.0.0
 **Several people in one LifeHub.**
 - Each person has their own tasks, email, AI inbox, Bible tracking, studies, notes, phones and API

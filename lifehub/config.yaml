@@ -1,8 +1,10 @@
 name: LifeHub
-version: "2.0.0"
+version: "2.0.1"
 slug: lifehub
 description: Renewals, tasks, kitchen & meals, Bible reading, schedule and a local-AI email assistant
 url: https://github.com/Shotgn16/LifeHub
+# Ready-made image built by .github/workflows/addon-image.yml — HA downloads it instead of compiling.
+image: "ghcr.io/shotgn16/lifehub-{arch}"
 arch:
   - amd64
   - aarch64

@@ -9,6 +9,15 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [2.0.1] – 2026-10-29
+
+### Fixed
+- **Updating from Home Assistant took ages or never finished.** Home Assistant used to compile
+  LifeHub on the HA machine for every update, which needs a lot of memory and time (about 2 GB of
+  free RAM). GitHub now builds ready-made images for amd64 and aarch64
+  (`ghcr.io/shotgn16/lifehub-{arch}`), and the add-on simply downloads one. Updates take a minute
+  or two, and the HA machine no longer needs build tools or spare memory.
+
 ## [2.0.0] – 2026-10-29
 
 **Several people can now use one LifeHub.** Upgrading changes nothing until you add someone. Your

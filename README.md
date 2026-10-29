@@ -70,7 +70,7 @@ add-on**, on **Plesk Obsidian**, or anywhere Docker or .NET 8 runs.
 [![Add repository to my Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FShotgn16%2FLifeHub)
 
 1. **Settings → Add-ons → Add-on store → ⋮ → Repositories**, then add `https://github.com/Shotgn16/LifeHub`.
-2. Find **LifeHub**, then **Install** (the first build takes a few minutes) and **Start**. Turn on **Show in sidebar**.
+2. Find **LifeHub**, then **Install** (it downloads a ready-made image) and **Start**. Turn on **Show in sidebar**.
 3. Open LifeHub from the sidebar. Home Assistant is detected and configured automatically.
 
 ### Docker
