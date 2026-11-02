@@ -10,7 +10,7 @@ struct AddNoteIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         try await API.current.post("/api/v1/notes", ["text": text])
-        return .result(dialog: "Saved to your notes.")
+        return .result(dialog: IntentDialog(stringLiteral: "Saved to your notes."))
     }
 }
 
@@ -20,7 +20,7 @@ struct AddTaskIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         try await API.current.post("/api/v1/tasks", ["title": title])
-        return .result(dialog: "Added \(title) to your tasks.")
+        return .result(dialog: IntentDialog(stringLiteral: "Added \(title) to your tasks."))
     }
 }
 
@@ -30,7 +30,7 @@ struct AddShoppingIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         try await API.current.post("/api/v1/shopping", ["name": item])
-        return .result(dialog: "Added \(item) to the shopping list.")
+        return .result(dialog: IntentDialog(stringLiteral: "Added \(item) to the shopping list."))
     }
 }
 
@@ -43,7 +43,7 @@ struct LogReadingIntent: AppIntent {
         var body: [String: Any] = [:]
         if let reference, !reference.isEmpty { body["reference"] = reference }
         try await API.current.post("/api/v1/bible/read", body)
-        return .result(dialog: reference?.isEmpty == false ? "Logged \(reference!)." : "Today's verse is ticked off.")
+        return .result(dialog: IntentDialog(stringLiteral: reference?.isEmpty == false ? "Logged \(reference!)." : "Today's verse is ticked off."))
     }
 }
 
