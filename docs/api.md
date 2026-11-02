@@ -33,10 +33,16 @@ ingress URLs need a Home Assistant session, so they don't suit API calls.
 | POST | `/api/v1/scan` | `{"barcode":"5000112637922","mode":"add\|use\|shopping","quantity":1}` | The scan result. Unknown barcodes return 404; scan them once in the app to name them. |
 | POST | `/api/v1/notes` | `{"text":"Door code 4471","shared":false}` | Saves a note; the AI files it into a category. Returns `category` (a first guess while the AI works). |
 | GET | `/api/v1/notes` | `?category=Gift Ideas&q=scarf` | Your notes (and shared ones), newest first |
+| GET | `/api/v1/me` | | Who the key belongs to: `id`, `name`, `isAdmin`, `version`, `household`, and whether Bible and deals are on |
+| GET | `/api/v1/notices` | `?since=2026-11-02T08:00:00Z` | Your notifications (newest 30), oldest first: `id`, `title`, `message`, `link`, `level`, `createdUtc`, `read`. Used by the phone apps. |
+| POST | `/api/v1/bible/sessions` | `{"device":"Pixel","fromUtc":"…","sessions":[{"startUtc":"…","endUtc":"…"}]}` | Replaces that phone's Bible-app sessions from `fromUtc` (Android app, Usage access). Returns `minutesToday`. |
 | GET | `/api/v1/meals` | `?days=1` (1–14) | Planned meals: date, slot, title, servings, cooked |
 | POST | `/api/v1/bible/app` | `{"event":"opened\|closed","device":"iPhone"}` | Times the Bible app (for the iPhone Shortcuts automation). Returns `minutesToday`. |
 | POST | `/api/v1/bible/read` | `{"reference":"Ps 23","minutes":10}` | Logs a reading. `reference` can be typed, YouVersion share text or a bible.com link; matching list items and the verse are ticked. Leave it out to mark today's verse as read. |
 | GET | `/api/v1/bible/today` | | Verse of the day (and text), whether you've read today, the streak, minutes in the app, and what's still to read |
+
+Outside `/api/v1`, `POST /auth/app` (form fields `key` and `returnUrl`) signs a browser or web view in as
+the key's owner. The phone apps use it so you never type a password on the phone.
 
 ## Examples
 

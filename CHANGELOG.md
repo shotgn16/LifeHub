@@ -9,6 +9,31 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [2.1.0] – 2026-11-02
+
+### Added
+- **LifeHub phone apps** for Android and iPhone (`mobile/`). They are built by GitHub Actions as
+  an installable APK and Play bundle, and an unsigned iPhone app plus Xcode project.
+  - Both apps:
+    - sign in with your own API key, with no password
+    - support the camera scanner and uploads
+    - show LifeHub notifications
+    - add a **Phone app settings** link in LifeHub's menu
+  - **Android** also has:
+    - the share menu (Bible passages are logged; anything else can become a note)
+    - home-screen shortcuts
+    - **time in the Bible app measured on the phone** (Usage access, no Home Assistant needed)
+  - **iPhone** also has **Siri & Shortcuts** actions: add a note, task or shopping item, log a
+    Bible reading, open a page, and **Bible app opened / closed** for timing reading with a
+    Shortcuts automation.
+- New guides:
+  - [Phone apps](docs/mobile-apps.md), including installing without the stores on a Pixel and an
+    iPhone
+  - [Publishing to Google Play and the App Store](docs/publishing-apps.md)
+  - [Running AI models on your phones](docs/local-ai-on-phones.md)
+- API: `GET /api/v1/me`, `GET /api/v1/notices`, `POST /api/v1/bible/sessions`, and `POST
+  /auth/app` (app sign-in with an API key).
+
 ## [2.0.1] – 2026-10-29
 
 ### Fixed

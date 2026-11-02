@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0
+- **Phone apps for Android and iPhone**: LifeHub signed in as you, with notifications, the share
+  menu, Siri & Shortcuts (iPhone) and Bible-app timing straight from your Android phone. See the
+  Phone apps guide in the docs.
+
 ## 2.0.1
 - Updates now download a ready-made image instead of compiling LifeHub on your Home Assistant
   machine. This fixes updates that took a very long time or never finished.

@@ -61,6 +61,7 @@ add-on**, on **Plesk Obsidian**, or anywhere Docker or .NET 8 runs.
 | **Promotions** | Adverts and newsletters go into their own list instead of becoming tasks or shopping items, and clear themselves when they expire. |
 | **Email ↔ task link** | Delete a task and its email moves to the Bin. Delete the email and its task goes. |
 | **Notifications** | In-app bell plus phone push through **Home Assistant or LifeHub's own web push** (or both): a morning digest, renewal and task reminders, food expiry, Bible reminder, and a "you've left home" shopping list. |
+| **Phone apps** | Android and iPhone apps (`mobile/`): LifeHub signed in as you, notifications, share menu, home-screen shortcuts, Siri & Shortcuts, and Bible-app timing measured on Android. Built by GitHub Actions; install them yourself or publish them to the stores. |
 | **REST API** | API-key endpoints for HA automations, Assist, iOS Shortcuts and USB barcode scanners. |
 
 ## Quick start
@@ -95,6 +96,9 @@ For Plesk, IIS, Cloudflare Tunnel and development setups, see the **[installatio
 | [Notes](docs/notes.md) | Quick notes, automatic categories, tidy up, sharing |
 | [Kitchen, shopping & meals](docs/kitchen-and-meals.md) | Use-by vs best-before, add from photo, shopping rules, meal planner, deals |
 | [Bible](docs/bible.md) | Verse of the day, YouVersion app tracking, carry-over, studies, starter notes and AI insights |
+| [Phone apps](docs/mobile-apps.md) | Android & iPhone apps, installing them without the stores |
+| [Publishing the apps](docs/publishing-apps.md) | Google Play and App Store step by step |
+| [AI on your phones](docs/local-ai-on-phones.md) | Local models on Pixel and iPhone, and a phone as LifeHub's AI server |
 | [REST API](docs/api.md) | Endpoints and Home Assistant `rest_command` examples |
 | [Architecture](docs/architecture.md) | How the code is organised |
 | [Extending LifeHub](docs/extending.md) | New AI actions, mail providers, pages, storage |
@@ -112,6 +116,7 @@ For Plesk, IIS, Cloudflare Tunnel and development setups, see the **[installatio
 │   ├── Dockerfile
 │   ├── DOCS.md, CHANGELOG.md, icon.png, logo.png
 │   └── src/LifeHub/         # the ASP.NET Core / Blazor app
+├── mobile/                  # Android (Kotlin) and iPhone (SwiftUI) apps
 ├── docs/                    # documentation
 ├── tools/                   # publish scripts for Plesk/IIS/Linux
 ├── docker-compose.yml

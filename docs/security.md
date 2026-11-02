@@ -58,6 +58,10 @@ Your notes, photos and emails are only ever sent to **your own** Ollama server.
 - **HA ingress.** Requests from the Supervisor's proxy that carry ingress headers are trusted,
   because Home Assistant has already authenticated the user. You can turn this off in Settings →
   Security & API.
+- **Phone apps.** They store your LifeHub address and your API key on the phone: the iPhone app
+  in the Keychain, the Android app in app-private storage. They sign in with `POST /auth/app`,
+  which is rate-limited like the login form. Removing a person or regenerating their key signs
+  their phones out.
 - **API keys.** Needed for `/api/v1/*`. There is one key per person, it acts as that person, and
   you can regenerate it at any time. Removing a person revokes their key.
 - **Secrets.** Mailbox passwords, OAuth refresh tokens, the HA token, the API key and the web-push

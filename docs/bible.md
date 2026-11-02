@@ -68,6 +68,13 @@ Once it's set up, time in YouVersion is **logged automatically**, with nothing t
 - it counts towards your streak and heatmap
 - a few minutes in the app (2 by default) ticks off the verse of the day
 
+### Android with the LifeHub app (simplest)
+
+Install the [LifeHub Android app](mobile-apps.md) and turn on **Phone app settings → Time in the
+Bible app**. Then allow **Usage access** for LifeHub. The phone measures time in YouVersion itself
+(it stops when you leave the app or lock the screen) and sends it every 15 minutes. You don't need
+Home Assistant for this.
+
 ### Android (through Home Assistant)
 
 1. In the **Home Assistant Companion app**, go to Settings → Companion app → Manage sensors.
@@ -90,6 +97,10 @@ reading** for any that shouldn't count. If that leaves less than the minimum, th
 tick is removed.
 
 ### iPhone (Shortcuts)
+
+With the [LifeHub iPhone app](mobile-apps.md) installed, the automations below can use its
+**Bible app opened** / **Bible app closed** actions instead of *Get Contents of URL*. Then there's
+no URL or key to type.
 
 iOS doesn't share app usage with Home Assistant, so use two small Shortcuts automations:
 
