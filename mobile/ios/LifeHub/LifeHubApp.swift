@@ -15,9 +15,10 @@ struct LifeHubApp: App {
         }
         .onChange(of: phase) { _, newPhase in
             if newPhase == .background { Notices.scheduleRefresh() }
-            if newPhase == .active { Task { await Notices.check() } }
+            if newPhase == .active { Task { await OfflineStore.shared.sync(force: false); await Notices.check() } }
         }
         .backgroundTask(.appRefresh(Notices.taskId)) {
+            await OfflineStore.shared.sync()          // send changes made offline, refresh the saved copy
             await Notices.check()
             Notices.scheduleRefresh()
         }

@@ -1,0 +1,364 @@
+<!doctype html>
+<!--
+  LifeHub offline screen — shared by the Android and iPhone apps (bundled inside each app).
+  Shown when your LifeHub server can't be reached. It shows the copy of your data saved on the phone and
+  lets you keep working; changes wait on the phone and are sent automatically when LifeHub is back.
+  Talks to the app through a small bridge: Android `window.LifeHubNative`, iPhone `webkit.messageHandlers.lifehub`.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LifeHub · offline</title>
+<style>
+  :root { --bg:#f4f5f2; --surface:#fff; --surface-2:#f8f9f6; --border:#e3e5df; --text:#1d2420; --muted:#69716d;
+          --accent:#0f766e; --accent-soft:#e2f2ef; --warn:#b54708; --warn-soft:#fef0e1; --done:#9aa19d; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151917; --surface:#1c211f; --surface-2:#202523; --border:#2d3330; --text:#e6ebe8; --muted:#97a19c;
+            --accent:#2bb3a3; --accent-soft:#173431; --warn:#f2a65a; --warn-soft:#3a2a17; --done:#5f6864; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font:16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { padding: env(safe-area-inset-top) 0 calc(70px + env(safe-area-inset-bottom)); -webkit-tap-highlight-color: transparent; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 16px 8px; border-bottom: 1px solid var(--border); }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px; }
+  .mark { width:28px; height:28px; border-radius:8px; background:var(--accent); color:#fff; display:grid; place-items:center; font-size:15px; }
+  .status { display:flex; align-items:center; gap:8px; margin-top:8px; padding:8px 10px; border-radius:10px; background:var(--warn-soft); color:var(--warn); font-size:14px; }
+  .status.ok { background: var(--accent-soft); color: var(--accent); }
+  .status .grow { flex:1; }
+  button { font: inherit; }
+  .btn { border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:9px; padding:7px 12px; cursor:pointer; }
+  .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.small { padding:4px 10px; font-size:14px; }
+  main { padding: 12px 16px; max-width: 760px; margin: 0 auto; }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:18px 0 8px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .row { display:flex; align-items:center; gap:10px; padding:11px 12px; border-top:1px solid var(--border); }
+  .row:first-child { border-top:none; }
+  .row .grow { flex:1; min-width:0; }
+  .row .title { overflow-wrap:anywhere; }
+  .row .meta { font-size:13px; color:var(--muted); }
+  .tick { width:26px; height:26px; border-radius:50%; border:2px solid var(--border); background:transparent; flex:none; cursor:pointer; display:grid; place-items:center; color:#fff; }
+  .tick.on { background:var(--accent); border-color:var(--accent); }
+  .done .title { color: var(--done); text-decoration: line-through; }
+  .badge { font-size:12px; padding:1px 8px; border-radius:999px; background:var(--warn-soft); color:var(--warn); white-space:nowrap; }
+  .badge.cat { background:var(--surface-2); color:var(--muted); }
+  .empty { padding:16px; color:var(--muted); text-align:center; font-size:14px; }
+  form.add { display:flex; gap:8px; margin:0 0 10px; }
+  form.add input, form.add textarea, form.add select { flex:1; min-width:0; font:inherit; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:9px 10px; }
+  form.add textarea { min-height:70px; resize:vertical; }
+  form.add.col { flex-direction:column; }
+  .verse { padding:12px; }
+  .verse .ref { font-weight:600; }
+  .verse .text { font-family: Georgia, serif; margin-top:4px; }
+  .note { padding:12px; border-top:1px solid var(--border); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .note:first-child { border-top:none; }
+  nav { position:fixed; left:0; right:0; bottom:0; display:flex; background:var(--surface); border-top:1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); z-index:5; }
+  nav button { flex:1; border:none; background:none; color:var(--muted); padding:10px 0 8px; font-size:12px; cursor:pointer; }
+  nav button b { display:block; font-size:19px; font-weight:400; }
+  nav button.on { color:var(--accent); font-weight:600; }
+  .hidden { display:none !important; }
+  .small { font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="mark">L</span><span id="household">LifeHub</span><span class="small" id="person"></span></div>
+  <div class="status" id="status">
+    <span class="grow" id="statusText">Not connected to LifeHub</span>
+    <button class="btn small primary" id="retry">Try again</button>
+  </div>
+</header>
+
+<main>
+  <section data-tab="today">
+    <div id="bibleBox" class="hidden">
+      <h2>Bible today</h2>
+      <div class="card" id="bible"></div>
+    </div>
+    <h2>Due today &amp; overdue</h2>
+    <div class="card" id="todayTasks"></div>
+    <h2>Meals today</h2>
+    <div class="card" id="todayMeals"></div>
+  </section>
+
+  <section data-tab="tasks" class="hidden">
+    <h2>Tasks</h2>
+    <form class="add" id="addTask">
+      <input id="taskTitle" placeholder="Add a task" autocomplete="off">
+      <input id="taskDue" type="date" style="flex:0 0 140px">
+      <button class="btn primary">Add</button>
+    </form>
+    <div class="card" id="tasks"></div>
+  </section>
+
+  <section data-tab="shopping" class="hidden">
+    <h2>Shopping list</h2>
+    <form class="add" id="addShop">
+      <input id="shopName" placeholder="Add an item" autocomplete="off">
+      <button class="btn primary">Add</button>
+    </form>
+    <div class="card" id="shopping"></div>
+  </section>
+
+  <section data-tab="notes" class="hidden">
+    <h2>Notes</h2>
+    <form class="add col" id="addNote">
+      <textarea id="noteText" placeholder="Drop a note — it's filed into a category when LifeHub is back"></textarea>
+      <button class="btn primary">Save note</button>
+    </form>
+    <div class="card" id="notes"></div>
+  </section>
+
+  <section data-tab="meals" class="hidden">
+    <h2>Meals this week</h2>
+    <div class="card" id="meals"></div>
+  </section>
+
+  <p class="small" id="saved" style="margin-top:18px"></p>
+  <p class="small"><a href="#" id="appSettings" style="color:var(--accent)">Phone app settings</a></p>
+</main>
+
+<nav>
+  <button data-go="today" class="on"><b>☀︎</b>Today</button>
+  <button data-go="tasks"><b>✓</b>Tasks</button>
+  <button data-go="shopping"><b>🛒</b>Shopping</button>
+  <button data-go="notes"><b>✎</b>Notes</button>
+  <button data-go="meals"><b>🍽</b>Meals</button>
+</nav>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- bridge to the app ----------------------------------------------------------------------------
+  function call(name, arg) {
+    var a = arg === undefined ? "" : (typeof arg === "string" ? arg : JSON.stringify(arg));
+    if (window.LifeHubNative && window.LifeHubNative[name]) {
+      try { return Promise.resolve(window.LifeHubNative[name](a)); } catch (e) { return Promise.reject(e); }
+    }
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.lifehub) {
+      return window.webkit.messageHandlers.lifehub.postMessage({ name: name, arg: a });
+    }
+    return Promise.reject(new Error("Not running inside the LifeHub app"));
+  }
+  function parse(s) { try { return typeof s === "string" ? JSON.parse(s) : s; } catch (e) { return null; } }
+
+  var state = { snapshot: null, pending: [], lastSyncUtc: "", online: false, lastError: "" };
+  var tab = "today";
+
+  // ---- helpers --------------------------------------------------------------------------------------
+  function el(tag, attrs, children) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) {
+      if (k === "text") e.textContent = attrs[k];
+      else if (k === "onclick") e.addEventListener("click", attrs[k]);
+      else e.setAttribute(k, attrs[k]);
+    }
+    (children || []).forEach(function (c) { if (c) e.appendChild(c); });
+    return e;
+  }
+  function $(id) { return document.getElementById(id); }
+  function todayIso() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  function dayLabel(iso) {
+    if (!iso) return "";
+    var t = todayIso();
+    if (iso === t) return "Today";
+    var d = new Date(iso + "T12:00:00"), n = new Date(t + "T12:00:00");
+    var diff = Math.round((d - n) / 86400000);
+    if (diff === 1) return "Tomorrow";
+    if (diff === -1) return "Yesterday";
+    if (diff < -1) return Math.abs(diff) + " days ago";
+    return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  }
+  function ago(iso) {
+    if (!iso) return "never";
+    var m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return m + " min ago";
+    if (m < 1440) return Math.round(m / 60) + " h ago";
+    return Math.round(m / 1440) + " days ago";
+  }
+  function empty(text) { return el("div", { "class": "empty", text: text }); }
+  function waiting() { return el("span", { "class": "badge", text: "waiting to send" }); }
+
+  // The saved copy, with the changes still waiting applied on top, so the screen shows what you did.
+  function view() {
+    var s = JSON.parse(JSON.stringify(state.snapshot || {}));
+    s.tasks = s.tasks || []; s.shopping = s.shopping || []; s.notes = s.notes || []; s.meals = s.meals || [];
+    (state.pending || []).forEach(function (c) {
+      var d = c.data || {};
+      if (c.type === "task.add") s.tasks.unshift({ id: c.id, title: d.title, due: d.due || null, category: d.category || "", pending: true, localOnly: true });
+      if (c.type === "task.complete") s.tasks.forEach(function (t) { if (t.id === d.id) { t.doneLocal = true; t.pending = true; } });
+      if (c.type === "shopping.add") s.shopping.unshift({ id: c.id, name: d.name, quantity: 1, unit: "", category: "", checked: false, pending: true, localOnly: true });
+      if (c.type === "shopping.check") s.shopping.forEach(function (x) { if (x.id === d.id) { x.checked = d.checked; x.pending = true; } });
+      if (c.type === "note.add") s.notes.unshift({ id: c.id, text: d.text, category: "", pending: true });
+      if (c.type === "bible.tick" && s.bible) (s.bible.toRead || []).forEach(function (p) { if (p.id === d.id) { p.done = true; p.pending = true; } });
+      if (c.type === "bible.read" && s.bible && !d.reference) { s.bible.verseRead = true; s.bible.versePending = true; }
+      if (c.type === "bible.read" && s.bible && d.reference) { (s.bible.logged = s.bible.logged || []).push(d.reference); }
+    });
+    return s;
+  }
+
+  // ---- rendering ------------------------------------------------------------------------------------
+  function taskRow(t) {
+    var row = el("div", { "class": "row" + (t.doneLocal ? " done" : "") }, [
+      el("button", { "class": "tick" + (t.doneLocal ? " on" : ""), "aria-label": "Done", text: t.doneLocal ? "✓" : "",
+        onclick: function () { if (!t.doneLocal && !t.localOnly) queue("task.complete", { id: t.id }); } }),
+      el("div", { "class": "grow" }, [
+        el("div", { "class": "title", text: t.title }),
+        el("div", { "class": "meta", text: [t.due ? dayLabel(t.due) + (t.time ? " " + t.time : "") : "", t.category].filter(Boolean).join(" · ") })
+      ]),
+      t.pending ? waiting() : null
+    ]);
+    return row;
+  }
+
+  function render() {
+    var s = view();
+    var hasData = !!state.snapshot;
+    $("household").textContent = s.household || "LifeHub";
+    $("person").textContent = s.person ? "· " + s.person : "";
+    var n = (state.pending || []).length;
+    $("status").className = "status" + (state.online ? " ok" : "");
+    $("statusText").textContent = state.online
+      ? (n ? "Back online — sending " + n + " change" + (n === 1 ? "" : "s") + "…" : "LifeHub is reachable again")
+      : "Offline — " + (n ? n + " change" + (n === 1 ? "" : "s") + " saved on this phone, sent when LifeHub is back" : "showing the copy saved on this phone");
+    $("retry").textContent = state.online ? "Open LifeHub" : "Try again";
+    $("saved").textContent = hasData
+      ? "Saved copy from " + ago(state.snapshot.generatedUtc) + (state.lastError ? " · " + state.lastError : "")
+      : "Nothing saved on this phone yet — open LifeHub once while connected and it will be kept for next time.";
+
+    // Today
+    var t = todayIso();
+    var due = s.tasks.filter(function (x) { return x.due && x.due <= t; });
+    var tt = $("todayTasks"); tt.innerHTML = "";
+    if (!due.length) tt.appendChild(empty("Nothing due."));
+    due.forEach(function (x) { tt.appendChild(taskRow(x)); });
+    var tm = $("todayMeals"); tm.innerHTML = "";
+    var todays = s.meals.filter(function (m) { return m.date === t; });
+    if (!todays.length) tm.appendChild(empty("No meals planned."));
+    todays.forEach(function (m) { tm.appendChild(el("div", { "class": "row" + (m.cooked ? " done" : "") }, [el("div", { "class": "grow" }, [el("div", { "class": "title", text: m.title }), el("div", { "class": "meta", text: m.slot })])])); });
+
+    var b = s.bible;
+    $("bibleBox").classList.toggle("hidden", !b);
+    if (b) {
+      var bc = $("bible"); bc.innerHTML = "";
+      if (b.verse) {
+        bc.appendChild(el("div", { "class": "row" + (b.verseRead ? " done" : "") }, [
+          el("button", { "class": "tick" + (b.verseRead ? " on" : ""), text: b.verseRead ? "✓" : "", onclick: function () { if (!b.verseRead) queue("bible.read", {}); } }),
+          el("div", { "class": "grow" }, [el("div", { "class": "title", text: "Verse of the day · " + b.verse }), b.verseText ? el("div", { "class": "meta", text: b.verseText }) : null]),
+          b.versePending ? waiting() : null
+        ]));
+      }
+      (b.toRead || []).forEach(function (p) {
+        bc.appendChild(el("div", { "class": "row" + (p.done ? " done" : "") }, [
+          el("button", { "class": "tick" + (p.done ? " on" : ""), text: p.done ? "✓" : "", onclick: function () { if (!p.done) queue("bible.tick", { id: p.id }); } }),
+          el("div", { "class": "grow" }, [el("div", { "class": "title", text: p.reference }), el("div", { "class": "meta", text: p.kind === "catch-up" ? "Catch up" : "Reading plan" })]),
+          p.pending ? waiting() : null
+        ]));
+      });
+      (b.logged || []).forEach(function (r) {
+        bc.appendChild(el("div", { "class": "row done" }, [el("span", { "class": "tick on", text: "✓" }),
+          el("div", { "class": "grow" }, [el("div", { "class": "title", text: r }), el("div", { "class": "meta", text: "Logged on this phone" })]), waiting()]));
+      });
+      bc.appendChild(el("form", { "class": "add row", style: "margin:0" }, [
+        el("input", { id: "readRef", placeholder: "Log what you read, e.g. Psalm 23", autocomplete: "off" }),
+        el("button", { "class": "btn", text: "Log" })
+      ]));
+      bc.lastChild.addEventListener("submit", function (e) {
+        e.preventDefault(); var v = $("readRef").value.trim(); if (v) { queue("bible.read", { reference: v }); }
+      });
+      if (b.streak) bc.appendChild(el("div", { "class": "row small", text: b.streak + "-day streak" }));
+    }
+
+    // Tasks
+    var tl = $("tasks"); tl.innerHTML = "";
+    if (!s.tasks.length) tl.appendChild(empty(hasData ? "No open tasks." : "No saved tasks yet."));
+    s.tasks.forEach(function (x) { tl.appendChild(taskRow(x)); });
+
+    // Shopping
+    var sl = $("shopping"); sl.innerHTML = "";
+    if (!s.shopping.length) sl.appendChild(empty("The list is empty."));
+    s.shopping.forEach(function (x) {
+      sl.appendChild(el("div", { "class": "row" + (x.checked ? " done" : "") }, [
+        el("button", { "class": "tick" + (x.checked ? " on" : ""), text: x.checked ? "✓" : "",
+          onclick: function () { if (!x.localOnly) queue("shopping.check", { id: x.id, checked: !x.checked }); } }),
+        el("div", { "class": "grow" }, [el("div", { "class": "title", text: x.name + (x.quantity && x.quantity !== 1 ? " ×" + x.quantity + (x.unit ? " " + x.unit : "") : "") }),
+          x.category ? el("div", { "class": "meta", text: x.category }) : null]),
+        x.pending ? waiting() : null
+      ]));
+    });
+
+    // Notes
+    var nl = $("notes"); nl.innerHTML = "";
+    if (!s.notes.length) nl.appendChild(empty("No notes yet."));
+    s.notes.forEach(function (x) {
+      nl.appendChild(el("div", { "class": "note" }, [
+        el("div", {}, [x.category ? el("span", { "class": "badge cat", text: x.category }) : null, x.pending ? waiting() : null]),
+        el("div", { text: x.text })
+      ]));
+    });
+
+    // Meals
+    var ml = $("meals"); ml.innerHTML = "";
+    if (!s.meals.length) ml.appendChild(empty("No meals planned this week."));
+    s.meals.forEach(function (m) {
+      ml.appendChild(el("div", { "class": "row" + (m.cooked ? " done" : "") }, [el("div", { "class": "grow" }, [
+        el("div", { "class": "title", text: m.title }), el("div", { "class": "meta", text: dayLabel(m.date) + " · " + m.slot })])]));
+    });
+  }
+
+  // ---- actions --------------------------------------------------------------------------------------
+  function apply(result) {
+    var s = parse(result);
+    if (s) state = s;
+    render();
+  }
+  function queue(type, data) {
+    return call("queue", { type: type, data: data }).then(apply).catch(function (e) { alert("Couldn't save on the phone: " + e); });
+  }
+  function refresh() { return call("state").then(apply).catch(function () { render(); }); }
+
+  $("retry").addEventListener("click", function () {
+    if (state.online) { call("goOnline"); return; }
+    $("statusText").textContent = "Trying to reach LifeHub…";
+    call("sync").then(function (r) { apply(r); if (state.online && !(state.pending || []).length) call("goOnline"); }).catch(render);
+  });
+  $("addTask").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var title = $("taskTitle").value.trim(); if (!title) return;
+    queue("task.add", { title: title, due: $("taskDue").value || null });
+    $("taskTitle").value = ""; $("taskDue").value = "";
+  });
+  $("addShop").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = $("shopName").value.trim(); if (!name) return;
+    queue("shopping.add", { name: name }); $("shopName").value = "";
+  });
+  $("addNote").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var text = $("noteText").value.trim(); if (!text) return;
+    queue("note.add", { text: text }); $("noteText").value = "";
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("nav button"), function (b) {
+    b.addEventListener("click", function () {
+      tab = b.getAttribute("data-go");
+      Array.prototype.forEach.call(document.querySelectorAll("nav button"), function (x) { x.classList.toggle("on", x === b); });
+      Array.prototype.forEach.call(document.querySelectorAll("section[data-tab]"), function (sec) { sec.classList.toggle("hidden", sec.getAttribute("data-tab") !== tab); });
+      window.scrollTo(0, 0);
+    });
+  });
+
+  $("appSettings").addEventListener("click", function (e) { e.preventDefault(); call("settings"); });
+
+  // The app calls this after a background sync.
+  window.lifehubRefresh = refresh;
+  refresh();
+  setInterval(refresh, 10000);
+  // When the phone comes back online, try straight away.
+  window.addEventListener("online", function () { call("sync").then(apply).catch(function () {}); });
+})();
+</script>
+</body>
+</html>

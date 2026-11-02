@@ -47,6 +47,7 @@ builder.Services.AddSingleton<MealService>();
 builder.Services.AddSingleton<PeopleService>();
 builder.Services.AddSingleton<NotesService>();
 builder.Services.AddSingleton<DealsService>();
+builder.Services.AddSingleton<SyncService>();
 
 // ---------- Integrations ----------
 builder.Services.AddSingleton<HomeAssistantClient>();

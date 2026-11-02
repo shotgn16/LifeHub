@@ -40,6 +40,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
         if (!prefs.configured) return Result.success()
         val api = Api(prefs.server, prefs.apiKey)
         return try {
+            // Send changes made offline and refresh the copy kept on the phone.
+            OfflineStore(applicationContext).sync()
             if (prefs.notifications) notices(api, prefs)
             if (prefs.bibleTracking && SetupActivity.usageAccess(applicationContext)) bibleTime(api, prefs)
             Result.success()

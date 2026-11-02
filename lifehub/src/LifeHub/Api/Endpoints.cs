@@ -150,6 +150,7 @@ public static class Endpoints
     public sealed record BibleAppRequest(string? Event, string? Device);
     public sealed record BibleReadRequest(string? Reference, int? Minutes);
     public sealed record NoteRequest(string Text, bool? Shared);
+    public sealed record SyncRequest(List<SyncService.Change>? Changes);
     public sealed record SessionDto(DateTime StartUtc, DateTime? EndUtc);
     public sealed record BibleSessionsRequest(string? Device, DateTime FromUtc, List<SessionDto> Sessions);
 
@@ -274,6 +275,14 @@ public static class Endpoints
                 me.Id, me.Name, me.IsAdmin, version = typeof(Endpoints).Assembly.GetName().Version?.ToString(3),
                 household = s.General.HouseholdName, bible = s.Bible.Enabled, bibleAppMatch = s.Bible.AppMatch, deals = s.Deals.Enabled
             });
+        });
+
+        // Offline support for the phone apps: what to keep on the phone, and replaying changes made offline.
+        api.MapGet("/offline", (SyncService sync) => Results.Ok(sync.Snapshot()));
+        api.MapPost("/sync", async (SyncRequest req, SyncService sync) =>
+        {
+            var results = await sync.ApplyAsync(req.Changes ?? new());
+            return Results.Ok(new { results, snapshot = sync.Snapshot() });
         });
 
         // New notifications for the phone apps to show (polled in the background).

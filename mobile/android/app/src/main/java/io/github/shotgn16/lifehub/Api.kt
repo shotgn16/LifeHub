@@ -7,14 +7,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /** Small REST client for LifeHub's /api/v1 (authenticated with this person's API key). */
-class Api(private val server: String, private val key: String) {
+class Api(private val server: String, private val key: String, private val connectTimeout: Int = 15000) {
 
     class HttpError(val code: Int, message: String) : IOException(message)
 
     private fun open(path: String, method: String): HttpURLConnection {
         val c = URL(server.trimEnd('/') + path).openConnection() as HttpURLConnection
         c.requestMethod = method
-        c.connectTimeout = 15000
+        c.connectTimeout = connectTimeout
         c.readTimeout = 30000
         c.setRequestProperty("X-Api-Key", key)
         c.setRequestProperty("Accept", "application/json")

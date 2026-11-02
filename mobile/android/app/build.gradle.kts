@@ -38,6 +38,11 @@ android {
         }
     }
 
+    // The offline screen is shared with the iPhone app (mobile/shared/offline.html).
+    sourceSets {
+        getByName("main") { assets.srcDirs("src/main/assets", "../../shared") }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

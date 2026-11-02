@@ -14,7 +14,11 @@ targets:
   LifeHub:
     type: application
     platform: iOS
-    sources: [LifeHub]
+    sources:
+      - LifeHub
+      # The offline screen, shared with the Android app.
+      - path: ../shared/offline.html
+        buildPhase: resources
     scheme: {}
     settings:
       base:
