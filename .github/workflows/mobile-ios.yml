@@ -1,0 +1,39 @@
+name: iPhone app
+
+# Builds the LifeHub iPhone app. The result is UNSIGNED: install it with Sideloadly/AltStore (they sign
+# it with your Apple ID), or open the generated Xcode project on a Mac to run it on your iPhone or
+# upload it to TestFlight / the App Store. See docs/mobile-apps.md.
+
+on:
+  push:
+    branches: [main]
+    paths: ["mobile/ios/**", ".github/workflows/mobile-ios.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          cd mobile/ios && xcodegen generate
+      - name: Build (unsigned)
+        run: |
+          xcodebuild -project mobile/ios/LifeHub.xcodeproj -scheme LifeHub -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+      - name: Package
+        run: |
+          mkdir -p out/Payload
+          cp -R build/Build/Products/Release-iphoneos/LifeHub.app out/Payload/
+          (cd out && zip -qr LifeHub-unsigned.ipa Payload)
+          zip -qr out/LifeHub-ios-project.zip mobile/ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LifeHub-ios-${{ github.run_number }}
+          path: |
+            out/LifeHub-unsigned.ipa
+            out/LifeHub-ios-project.zip

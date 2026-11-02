@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="scan" android:enabled="true" android:icon="@drawable/ic_shortcut"
+        android:shortcutShortLabel="@string/sc_scan">
+        <intent android:action="android.intent.action.VIEW" android:data="lifehub://open?path=scan"
+            android:targetPackage="io.github.shotgn16.lifehub" android:targetClass="io.github.shotgn16.lifehub.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="shopping" android:enabled="true" android:icon="@drawable/ic_shortcut"
+        android:shortcutShortLabel="@string/sc_shopping">
+        <intent android:action="android.intent.action.VIEW" android:data="lifehub://open?path=shopping"
+            android:targetPackage="io.github.shotgn16.lifehub" android:targetClass="io.github.shotgn16.lifehub.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="notes" android:enabled="true" android:icon="@drawable/ic_shortcut"
+        android:shortcutShortLabel="@string/sc_notes">
+        <intent android:action="android.intent.action.VIEW" android:data="lifehub://open?path=notes"
+            android:targetPackage="io.github.shotgn16.lifehub" android:targetClass="io.github.shotgn16.lifehub.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="bible" android:enabled="true" android:icon="@drawable/ic_shortcut"
+        android:shortcutShortLabel="@string/sc_bible">
+        <intent android:action="android.intent.action.VIEW" android:data="lifehub://open?path=bible%2Flog"
+            android:targetPackage="io.github.shotgn16.lifehub" android:targetClass="io.github.shotgn16.lifehub.MainActivity" />
+    </shortcut>
+</shortcuts>

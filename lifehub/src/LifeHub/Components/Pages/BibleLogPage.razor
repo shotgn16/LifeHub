@@ -79,7 +79,7 @@
                 <div class="grow">
                     <div class="title small @(s.Ignored ? "strike" : "")">@Clock.ToLocal(s.StartUtc).ToString("HH:mm") – @(s.EndUtc is { } e ? Clock.ToLocal(e).ToString("HH:mm") : "now")
                         <span class="muted">· @Math.Max(1, Math.Round(s.Minutes(DateTime.UtcNow))) min</span></div>
-                    <div class="meta"><span>@(s.Source == "ha" ? "Home Assistant" : s.Source == "shortcut" ? "iPhone Shortcut" : s.Source)</span></div>
+                    <div class="meta"><span>@(s.Source switch { "ha" => "Home Assistant", "shortcut" => "iPhone Shortcut", "android" => "LifeHub app", "ios" => "LifeHub app", _ => s.Source })</span></div>
                 </div>
                 <button class="btn sm" @onclick="() => Bible.SetIgnoredAsync(s.Id, !s.Ignored)">@(s.Ignored ? "Count it" : "Wasn't reading")</button>
             </li>

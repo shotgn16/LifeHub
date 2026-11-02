@@ -654,3 +654,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 @media (max-width: 640px) { .study-types { grid-template-columns: 1fr 1fr; } .study-type { padding: 8px 10px; } }
 .deal-ideas .ai-block > div:first-child { flex-wrap: wrap; row-gap: 4px; }
 .deal-ideas .ai-block .icon-btn.right { margin-left: auto; }
+
+/* Links only shown inside the LifeHub phone apps (they add .in-app to <html>). */
+.app-only { display: none !important; }
+.in-app .app-only { display: block !important; }

@@ -116,6 +116,26 @@ public static class Endpoints
             return Results.Redirect(SafeReturn(ctx, returnUrl));
         }).AllowAnonymous();
 
+        // The LifeHub phone apps sign in with the person's API key (kept on the phone), so nobody types a password.
+        app.MapPost("/auth/app", async (HttpContext ctx, [FromForm] string key, [FromForm] string? returnUrl,
+            SettingsService settings, LoginThrottle throttle) =>
+        {
+            var ip = "app:" + (ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+            if (throttle.IsLocked(ip)) return Results.Redirect($"{ctx.Request.PathBase}/login?error=locked");
+            var bytes = System.Text.Encoding.UTF8.GetBytes(key ?? "");
+            var user = settings.Users.FirstOrDefault(u => !string.IsNullOrEmpty(u.ApiKey) &&
+                System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(bytes, System.Text.Encoding.UTF8.GetBytes(u.ApiKey)));
+            if (user is null)
+            {
+                throttle.Fail(ip);
+                await Task.Delay(800);
+                return Results.Redirect($"{ctx.Request.PathBase}/login?error=1");
+            }
+            throttle.Success(ip);
+            await SignInAsync(ctx, user, "app");
+            return Results.Redirect(SafeReturn(ctx, returnUrl));
+        }).AllowAnonymous().DisableAntiforgery();
+
         app.MapGet("/auth/logout", async (HttpContext ctx) =>
         {
             await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -130,6 +150,8 @@ public static class Endpoints
     public sealed record BibleAppRequest(string? Event, string? Device);
     public sealed record BibleReadRequest(string? Reference, int? Minutes);
     public sealed record NoteRequest(string Text, bool? Shared);
+    public sealed record SessionDto(DateTime StartUtc, DateTime? EndUtc);
+    public sealed record BibleSessionsRequest(string? Device, DateTime FromUtc, List<SessionDto> Sessions);
 
     /// <summary>
     /// REST API for Home Assistant automations, scripts, voice assistants, iOS Shortcuts, etc.
@@ -240,6 +262,37 @@ public static class Endpoints
                 streak = bible.Streak(), appMinutes = Math.Round(bible.AppMinutes(clock.Today), 1),
                 toRead = bible.TodayList().Where(p => !p.Done).Select(p => new { p.Reference, p.Kind })
             });
+        });
+
+        // ---- Phone apps ----
+        api.MapGet("/me", (SettingsService settings) =>
+        {
+            var me = settings.Me;
+            var s = settings.Current;
+            return me is null ? Results.Unauthorized() : Results.Ok(new
+            {
+                me.Id, me.Name, me.IsAdmin, version = typeof(Endpoints).Assembly.GetName().Version?.ToString(3),
+                household = s.General.HouseholdName, bible = s.Bible.Enabled, bibleAppMatch = s.Bible.AppMatch, deals = s.Deals.Enabled
+            });
+        });
+
+        // New notifications for the phone apps to show (polled in the background).
+        api.MapGet("/notices", (NotificationService notices, DateTime? since) =>
+            Results.Ok(notices.Recent(30).Where(n => since is null || n.CreatedUtc > since.Value.ToUniversalTime())
+                .OrderBy(n => n.CreatedUtc)
+                .Select(n => new { n.Id, n.Title, n.Message, n.Link, level = n.Level.ToString(), n.CreatedUtc, n.Read })));
+
+        // Android app: time in the Bible app measured on the phone (UsageStats). Replaces that phone's sessions from fromUtc.
+        api.MapPost("/bible/sessions", async (BibleSessionsRequest req, BibleService bible, Clock clock) =>
+        {
+            var device = string.IsNullOrWhiteSpace(req.Device) ? "Android" : req.Device.Trim();
+            var from = req.FromUtc.ToUniversalTime();
+            if (DateTime.UtcNow - from > TimeSpan.FromDays(3)) from = DateTime.UtcNow.AddDays(-3);
+            var fresh = req.Sessions.Where(x => x.EndUtc is null || x.EndUtc > x.StartUtc)
+                .Select(x => new AppInterval(x.StartUtc.ToUniversalTime(), x.EndUtc?.ToUniversalTime())).ToList();
+            await bible.ReplaceSessionsAsync("app:" + device, from, fresh, "android");
+            await bible.CheckAppReadingAsync();
+            return Results.Ok(new { status = "ok", minutesToday = Math.Round(bible.AppMinutes(clock.Today), 1) });
         });
 
         // ---- Notes ----

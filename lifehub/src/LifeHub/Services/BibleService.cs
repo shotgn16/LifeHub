@@ -227,9 +227,9 @@ public sealed class BibleService
     /// Replaces a phone's sessions in a time window with ones rebuilt from Home Assistant history.
     /// Keeps "not reading" marks and "asked" flags. Returns true if anything changed.
     /// </summary>
-    public async Task<bool> ReplaceSessionsAsync(string device, DateTime fromUtc, IReadOnlyList<AppInterval> fresh)
+    public async Task<bool> ReplaceSessionsAsync(string device, DateTime fromUtc, IReadOnlyList<AppInterval> fresh, string source = "ha")
     {
-        var existing = _sessions.Where(s => s.Device == device && s.Source == "ha" && s.StartUtc >= fromUtc).ToList();
+        var existing = _sessions.Where(s => s.Device == device && s.Source == source && s.StartUtc >= fromUtc).ToList();
         static bool Same(DateTime a, DateTime b) => Math.Abs((a - b).TotalSeconds) < 90;
         var desired = fresh.Where(f => f.StartUtc >= fromUtc).Select(f =>
         {
@@ -237,7 +237,7 @@ public sealed class BibleService
             return new BibleAppSession
             {
                 Id = match?.Id ?? Guid.NewGuid(), CreatedUtc = match?.CreatedUtc ?? DateTime.UtcNow,
-                StartUtc = f.StartUtc, EndUtc = f.EndUtc, Source = "ha", Device = device,
+                StartUtc = f.StartUtc, EndUtc = f.EndUtc, Source = source, Device = device,
                 Ignored = match?.Ignored ?? false, Asked = match?.Asked ?? false
             };
         }).ToList();
