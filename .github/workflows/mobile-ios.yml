@@ -28,7 +28,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
           if [ "$status" != "0" ]; then
-            grep -E "error:|warning: .*(never|unused)" build.log | sort -u | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            { grep -iE "error|failed" build.log | sort -u | head -30; tail -25 build.log; } | while IFS= read -r l; do echo "::error::${l:0:900}"; done
             exit "$status"
           fi
       - name: Package
