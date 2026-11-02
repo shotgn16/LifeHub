@@ -41,6 +41,7 @@ jobs:
           LIFEHUB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
+          set +e +o pipefail
           gradle assembleRelease bundleRelease -PversionCode=${{ github.run_number }} --no-daemon 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
           if [ "$status" != "0" ]; then

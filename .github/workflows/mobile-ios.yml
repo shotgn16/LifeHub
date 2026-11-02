@@ -22,6 +22,7 @@ jobs:
       - name: Build (unsigned)
         shell: bash
         run: |
+          set +e +o pipefail
           xcodebuild -project mobile/ios/LifeHub.xcodeproj -scheme LifeHub -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
