@@ -20,11 +20,17 @@ jobs:
           brew install xcodegen
           cd mobile/ios && xcodegen generate
       - name: Build (unsigned)
+        shell: bash
         run: |
           xcodebuild -project mobile/ios/LifeHub.xcodeproj -scheme LifeHub -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" != "0" ]; then
+            grep -E "error:|warning: .*(never|unused)" build.log | sort -u | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit "$status"
+          fi
       - name: Package
         run: |
           mkdir -p out/Payload

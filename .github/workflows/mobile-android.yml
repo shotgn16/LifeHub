@@ -39,7 +39,14 @@ jobs:
           LIFEHUB_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           LIFEHUB_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           LIFEHUB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: gradle assembleRelease bundleRelease -PversionCode=${{ github.run_number }} --no-daemon --stacktrace
+        shell: bash
+        run: |
+          gradle assembleRelease bundleRelease -PversionCode=${{ github.run_number }} --no-daemon 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" != "0" ]; then
+            grep -E "^e: |error:|What went wrong|> " build.log | sort -u | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit "$status"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: LifeHub-android-${{ github.run_number }}
