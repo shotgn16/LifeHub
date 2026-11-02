@@ -98,6 +98,11 @@ Add to `AutomationService.PublishSensorsAsync`. Each `SetStateAsync` call create
      Package settings.
 2. Bump `<Version>` in `lifehub/src/LifeHub/LifeHub.csproj` and `version:` in
    `lifehub/config.yaml`.
-3. Add an entry to both `CHANGELOG.md` (root) and `lifehub/CHANGELOG.md`.
-4. Commit, tag `vX.Y.Z` and push the tag. The release workflow creates the GitHub release, and
+3. For the phone apps (only when `mobile/` changed): bump `versionName` in
+   `mobile/android/app/build.gradle.kts` and `MARKETING_VERSION` in `mobile/ios/project.yml`.
+   New offline change types need adding in three places: `SyncService.ApplyOneAsync`, the
+   `view()`/`queue()` code in `mobile/shared/offline.html`, and the docs. Older apps skip types they
+   don't know.
+4. Add an entry to both `CHANGELOG.md` (root) and `lifehub/CHANGELOG.md`.
+5. Commit, tag `vX.Y.Z` and push the tag. The release workflow creates the GitHub release, and
    Home Assistant offers the update to everyone who added the repository.

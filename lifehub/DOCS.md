@@ -20,14 +20,23 @@ Full documentation: <https://github.com/Shotgn16/LifeHub/tree/main/docs>
 5. **Settings → Notifications**: Home Assistant app, LifeHub's own notifications, or both.
 6. **Settings → People** (optional): add the rest of the household and choose what's shared
    (food & shopping, meals, renewals). Tasks, email, Bible and notes are always each person's own.
-7. **Settings → Security & API** (optional). Set a LifeHub username and password if you also want
-   to use the direct port (8099) or your own hostname, and copy the API key for `rest_command`s.
+7. **Settings → Security & API** (optional). Set your own username and password if you also want
+   to use the direct port (8099) or your own hostname. Copy **your** API key for `rest_command`s,
+   Shortcuts and the phone apps.
 
 ## Access from other devices
 
 Under **Configuration → Network**, map `8099/tcp` to a host port. Then use
 `http://<ha-ip>:8099`, or point a Cloudflare Tunnel or reverse proxy at it for HTTPS. Set
 **Settings → General → LifeHub web address** so that tapping a phone notification opens LifeHub.
+
+## Phone apps
+
+There are Android and iPhone apps that open LifeHub signed in as you. They add notifications, the
+share menu, Siri & Shortcuts and Bible-app timing, and **keep working offline**: your tasks,
+shopping, notes, meals and Bible reading are saved on the phone, and anything you change is sent
+when LifeHub is reachable again. They need the direct port or an https address. See the
+[phone apps guide](https://github.com/Shotgn16/LifeHub/blob/main/docs/mobile-apps.md).
 
 ## Barcode scanner
 

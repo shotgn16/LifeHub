@@ -9,6 +9,39 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [2.2.0] – 2026-11-02
+
+### Added
+- **The phone apps work offline** (Android & iPhone app 1.1.0).
+  - The apps keep a copy of your open tasks, shopping list, recent notes, this week's meals and
+    today's Bible reading on the phone, refreshed whenever they're online.
+  - When LifeHub can't be reached, the apps switch to an **offline screen**. They also switch if
+    the live connection stays down for 12 seconds. On it you can:
+    - add tasks, shopping items and notes
+    - tick tasks and shopping
+    - tick or log your Bible reading
+  - Changes are kept on the phone and sent automatically, in order, when LifeHub is back (on
+    open, on **Try again**, or in the background). Each change is applied only once, even if it's
+    sent again, and changes that no longer make sense are skipped instead of failing.
+- API: `GET /api/v1/offline` (the snapshot) and `POST /api/v1/sync` (replay offline changes).
+
+### Changed
+- Documentation brought up to date for the ready-made add-on image, people, phone apps and offline
+  mode:
+  - installation
+  - remote access
+  - Home Assistant
+  - email
+  - kitchen
+  - scanner
+  - Bible
+  - notes
+  - architecture (including the build workflows)
+  - extending
+  - security
+  - troubleshooting (new phone-app section)
+  - contributing
+
 ## [2.1.0] – 2026-11-02
 
 ### Added

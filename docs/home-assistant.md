@@ -43,7 +43,7 @@ to your HA profile → **Security** → **Long-lived access tokens**.
 
 ## Notifications
 
-Under **Settings → Notifications**, choose how notifications reach your phone:
+Under **Settings → Notifications**, each person chooses how notifications reach **their** phones:
 
 - **Home Assistant app**: through the Companion app on the phones you tick in Settings → Home
   Assistant. This is the default.
@@ -55,6 +55,10 @@ Under **Settings → Notifications**, choose how notifications reach your phone:
   - You can tag each device with its owner, so "while you're out" messages only go to that
     person's devices.
 - **Both.**
+
+The [LifeHub phone apps](mobile-apps.md) also show your LifeHub notifications by themselves.
+Android checks every 15 minutes; iPhone checks when you open the app and when iOS allows a
+background refresh. For instant reminders on an iPhone, keep the Home Assistant option on too.
 
 If Home Assistant has no phones set up, LifeHub uses its own notifications automatically.
 Messages are end-to-end encrypted with this server's own key (VAPID); there's no third-party

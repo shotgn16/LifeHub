@@ -2,8 +2,18 @@
 
 LifeHub is a single ASP.NET Core 8 process. The UI is **Blazor Server** (interactive server
 rendering), so the pages are Razor components in C#. The browser holds a SignalR connection and
-there's no JavaScript framework. The only JavaScript is the barcode scanner and the vendored ZXing
-library.
+there's no JavaScript framework. The only JavaScript is the barcode scanner, the vendored ZXing
+library and web push.
+
+The **phone apps** (`mobile/`) are thin native shells around the same UI:
+
+- Android is written in Kotlin.
+- iPhone is written in SwiftUI.
+
+They add notifications, the share menu, Siri & Shortcuts, Bible-app timing and an **offline
+mode**. The offline screen, `mobile/shared/offline.html`, is shared by both apps. It shows a
+snapshot from `GET /api/v1/offline` and queues changes. The apps replay those changes through
+`POST /api/v1/sync`, which `SyncService` makes idempotent with `SyncReceipt`s.
 
 ```
                 ┌───────────────────────── LifeHub (one container) ─────────────────────────┐
@@ -33,6 +43,7 @@ library.
 | `Integrations/Ollama/` | `/api/chat` client with JSON-schema structured output |
 | `Ai/` | `AiService` (prompt, schema, checks, apply, undo) and `Handlers/`, with one class per action type |
 | `Api/` | Login/setup endpoints and the REST API |
+| `mobile/android`, `mobile/ios`, `mobile/shared` | The phone apps. Built by GitHub Actions; see [mobile-apps.md](mobile-apps.md) |
 | `Infrastructure/` | Settings (with encrypted `[Secret]` fields), auth, HA ingress middleware, clock and time zone, data paths |
 | `Components/` | Pages, layout, settings tabs and shared components |
 | `wwwroot/` | `app.css`, the scanner script, ZXing, `sw.js` (service worker for push), `js/push.js`, the manifest and icons |
@@ -97,3 +108,15 @@ library.
 - [Open Food Facts](https://world.openfoodfacts.org) for product lookup
 - [Ollama](https://ollama.com) for local LLMs
 - Docker images: `mcr.microsoft.com/dotnet/sdk:8.0` → `mcr.microsoft.com/dotnet/aspnet:8.0`
+- Phone apps: Kotlin with Android WebView and WorkManager (Android); SwiftUI with WKWebView,
+  App Intents and BackgroundTasks (iPhone), using XcodeGen for the project
+
+## Builds (GitHub Actions)
+
+| Workflow | What it does |
+|---|---|
+| **Build** | Builds the .NET solution, builds and smoke-tests the Docker image, and checks the add-on and app versions match |
+| **Add-on image** | Publishes the ready-made Home Assistant images `ghcr.io/shotgn16/lifehub-{amd64,aarch64}` that the add-on downloads |
+| **Android app** | Builds the APK (to install) and AAB (Google Play) |
+| **iPhone app** | Builds an unsigned `.ipa` and the generated Xcode project |
+| **Release** | On a `v*` tag, attaches a portable server zip to the GitHub release |

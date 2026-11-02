@@ -25,14 +25,15 @@ or Hyper-V.
 1. In Home Assistant go to **Settings → Add-ons → Add-on store**.
 2. Open the **⋮** menu (top right), then **Repositories**. Add
    `https://github.com/Shotgn16/LifeHub` and close the dialog.
-3. Scroll to **LifeHub add-ons**, open **LifeHub** and press **Install**. HA builds the image on
-   your machine, which takes about 3–10 minutes the first time.
+3. Scroll to **LifeHub add-ons**, open **LifeHub** and press **Install**. HA downloads a ready-made
+   image for your machine (`ghcr.io/shotgn16/lifehub-amd64` or `-aarch64`), which takes a minute
+   or two. Nothing is compiled on your HA machine.
 4. Press **Start**, and turn on **Show in sidebar**.
 5. Open **LifeHub** from the sidebar. Home Assistant has already signed you in, and LifeHub sets up
    the HA connection automatically.
 
-**Updates.** When a new version is published here, HA shows an update for the add-on. Your data is
-kept across updates.
+**Updates.** When a new version is published here, HA shows an update for the add-on and downloads
+the new image. Your data is kept across updates.
 
 ### As a local add-on (no GitHub)
 
@@ -45,7 +46,10 @@ Use this if you want to change the code and run your own copy.
      won't work.
 2. Go to **Settings → Add-ons → Add-on store → ⋮ → Check for updates** (or run `ha store reload`
    over SSH).
-3. LifeHub now appears under **Local add-ons**. Install and start it as in the steps above.
+3. **Delete the `image:` line from `config.yaml`.** Otherwise HA downloads the published image
+   instead of building your copy.
+4. LifeHub now appears under **Local add-ons**. Install and start it as in the steps above. A
+   local copy is compiled on the HA machine, which needs about 2 GB of free RAM and 5–15 minutes.
 
 After changing the code, bump `version:` in `config.yaml` and HA offers it as an update. You can
 also use **Rebuild** on the add-on page.
@@ -53,8 +57,10 @@ also use **Rebuild** on the add-on page.
 ### After installing
 
 - **Direct access (optional).** On the add-on's **Configuration → Network** section, set a host
-  port for `8099/tcp`. This lets phones and PCs reach LifeHub without going through HA. Set a
-  LifeHub login first under **Settings → Security**. See [Remote access](remote-access.md).
+  port for `8099/tcp`. This lets phones and PCs, and the [phone apps](mobile-apps.md), reach
+  LifeHub without going through HA. Give yourself a username and password first under
+  **Settings → Security & API**; each person has their own (see [People](people.md)). See
+  [Remote access](remote-access.md).
 - **Ollama.** HA OS isn't a good place to run an LLM. Run Ollama on another VM or PC, then enter
   its address in **Settings → AI**. See [Email & AI](email-and-ai.md). For the photo features
   (study notes, groceries), also `ollama pull qwen3-vl:4b-instruct` and set it as the vision model.
@@ -92,7 +98,8 @@ also use **Rebuild** on the add-on page.
        proxy_read_timeout 3600s;
    }
    ```
-6. Browse to the domain and create your login on the first-run screen.
+6. Browse to the domain and create your account (the first person, an admin) on the first-run
+   screen. Add the rest of the household in **Settings → People**.
 
 `docker compose up -d --build` with the included [`docker-compose.yml`](../docker-compose.yml) also
 works.
@@ -121,7 +128,7 @@ works.
    </environmentVariables>
    ```
    Then give the application-pool user *Modify* permission on that folder.
-4. Browse to the site and create your login.
+4. Browse to the site and create your account (the first person, an admin).
 
 ---
 

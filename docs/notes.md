@@ -15,6 +15,8 @@ You can add a note in any of these ways:
   press **Save it as a note**.
 - **API**: `POST /api/v1/notes {"text": "…"}`. This works from an iPhone Shortcut, Assist or an NFC
   tag (see [api.md](api.md)).
+- **Offline**: in the phone apps' offline screen. The note is filed into a category once it
+  reaches LifeHub.
 
 Add `#tags` anywhere in the text to group notes yourself.
 

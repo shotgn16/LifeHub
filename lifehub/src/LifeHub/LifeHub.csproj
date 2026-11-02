@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>LifeHub</RootNamespace>
     <AssemblyName>LifeHub</AssemblyName>
-    <Version>2.1.0</Version>
+    <Version>2.2.0</Version>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 

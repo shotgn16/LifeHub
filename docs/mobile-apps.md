@@ -13,6 +13,7 @@ signed in as you, and add things a browser can't do.
 | Siri and Shortcuts: add a note, task or shopping item, log a reading, open a page | — | ✓ |
 | Home-screen shortcuts (long-press the icon): Scan, Shopping, Notes, What did I read? | ✓ | ✓ (Open LifeHub → page) |
 | **Phone app settings** link in LifeHub's menu | ✓ | ✓ |
+| **Works offline**, then syncs when LifeHub is back | ✓ | ✓ |
 
 > **Your phone must be able to reach LifeHub.**
 > - At home, use the direct port, for example `http://192.168.1.10:8099`. In Home Assistant, map
@@ -43,6 +44,49 @@ The apps are built automatically by GitHub Actions whenever `mobile/` changes:
    save**. It should say "Signed in as …".
 3. Allow notifications when asked.
 4. To change these later, open LifeHub's menu → **Phone app settings**.
+
+## Offline mode
+
+LifeHub's screens are drawn live by your server, so the apps keep their own copy for when it
+can't be reached. Examples: no signal, away from home without an https address, or LifeHub
+restarting for an update.
+
+**What's kept on the phone.** The copy is refreshed whenever the app is online (Android also
+every 15 minutes in the background):
+
+- your open tasks
+- the shopping list
+- your recent notes
+- this week's meals
+- today's Bible verse, reading list and streak
+
+**When the app switches.** If the app can't reach LifeHub, or LifeHub's live connection stays
+down for 12 seconds, it shows the **offline screen**. It has Today, Tasks, Shopping, Notes and
+Meals tabs. On that screen you can:
+
+- add tasks (with a due date), shopping items and notes
+- tick tasks done and tick items off the shopping list
+- tick the verse of the day and your reading plan, or log what you read
+
+**Waiting changes.** Each change is marked **waiting to send** and kept on the phone, even if you
+close the app or restart the phone. They're sent automatically and in order:
+
+- as soon as LifeHub can be reached
+- when you open the app, or press **Try again**
+- in the background: Android checks every 15 minutes once there's a connection; iPhone when iOS
+  allows a background refresh
+
+**What happens on the server.** Each change carries its own id, so a change is never applied
+twice, even if the connection drops mid-send.
+
+- A task added offline gets filed and planned as usual.
+- A note is sorted into a category once it arrives.
+- If something changed meanwhile, the change is skipped rather than causing an error. For
+  example, someone else already ticked that shopping item, or the task was deleted.
+
+**Getting back.** When LifeHub is reachable again, the banner turns green. Press **Open LifeHub**
+to go back to the full app. Features that need the server stay online-only: the AI, the scanner,
+Bible studies, deals and settings.
 
 ---
 

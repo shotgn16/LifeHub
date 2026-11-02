@@ -4,9 +4,13 @@ There are three ways to reach LifeHub:
 
 | Route | Login | HTTPS | Good for |
 |---|---|---|---|
-| **HA sidebar / HA app** (ingress) | Home Assistant's | Same as your HA | Everyday use when you already use the HA app |
-| **Direct port** `http://<ha-ip>:8099` | LifeHub login | No | Quick access on your home network |
-| **Own hostname** (Cloudflare Tunnel or reverse proxy) | LifeHub login | Yes | Phones away from home, and the live barcode scanner |
+| **HA sidebar / HA app** (ingress) | Home Assistant's (several people: "Who's using LifeHub?") | Same as your HA | Everyday use when you already use the HA app |
+| **Direct port** `http://<ha-ip>:8099` | Each person's LifeHub login | No | Quick access on your home network; the phone apps at home |
+| **Own hostname** (Cloudflare Tunnel or reverse proxy) | Each person's LifeHub login | Yes | Phones away from home, the phone apps everywhere, and the live barcode scanner |
+
+The [phone apps](mobile-apps.md) sign in with your API key and need the direct port or your own
+hostname, because ingress needs a Home Assistant sign-in. Away from home without a hostname, they
+keep working **offline** and sync when you're back.
 
 > **The live camera scanner needs HTTPS.** Phones only allow camera access on secure pages. Over
 > plain `http://` you can still use **Take photo**, which reads the barcode from a picture.
@@ -14,7 +18,8 @@ There are three ways to reach LifeHub:
 ## 1. Set a LifeHub login first
 
 Opened through HA, LifeHub trusts Home Assistant's sign-in. Any other route uses LifeHub's own
-login, so create one in **Settings → Security** before opening the port.
+logins, so give yourself a username and password in **Settings → Security & API** before opening
+the port. Admins can do the same for others in **Settings → People**.
 
 ## 2. Open the direct port (HA add-on)
 

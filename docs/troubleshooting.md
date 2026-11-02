@@ -75,6 +75,20 @@
 | "Couldn't find" my area | Try a full postcode (UK) or "Town, Country". |
 | No meal ideas from deals | Ideas need the local AI and at least one deal that suits you. Add recipes and staples so deals can be matched. |
 
+## Phone apps
+
+| Symptom | Fix |
+|---|---|
+| "Couldn't reach LifeHub" on first setup | Use the address you'd type in the phone's browser: `http://<ha-ip>:8099` at home (map the add-on's port first), or your https hostname. The HA ingress link doesn't work in the apps. |
+| "The API key wasn't accepted" | Copy **your** key again from Settings → Security & API. Regenerating a key or removing a person signs their phones out. |
+| The app shows the offline screen at home | Check that the phone is on your Wi-Fi and LifeHub is running, then press **Try again**. The app also switches to offline if LifeHub's live connection stays down for 12 seconds. |
+| Changes made offline didn't appear | They're sent the next time the app reaches LifeHub: when you open it, press **Try again**, or in the background (Android every 15 minutes; iPhone when iOS allows). The offline screen shows how many are still waiting. |
+| "Nothing saved on this phone yet" | Open LifeHub once while connected. The saved copy is refreshed whenever the app is online. |
+| Scanner camera doesn't start in the app | The camera needs an https address. Over http, use **Take photo**. |
+| Android: Bible-app time isn't counted | Phone app settings → Time in the Bible app → **Open Usage access** and allow LifeHub. Set battery usage to **Unrestricted**. |
+| Android: "App not installed" when updating | The new build is signed with a different key. Uninstall the old app, or add your own signing key (see [mobile-apps.md](mobile-apps.md)). |
+| iPhone: the app won't open after a week | Apps installed with a free Apple ID expire after 7 days. Install it again from Xcode or Sideloadly; your settings are kept. |
+
 ## Notifications
 
 | Symptom | Fix |

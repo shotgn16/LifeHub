@@ -35,6 +35,7 @@ Phones only allow camera access on secure pages. Any of these work:
 - your own hostname through Cloudflare Tunnel or a reverse proxy (see
   [remote-access.md](remote-access.md))
 - your Plesk domain with Let's Encrypt
+- the [LifeHub phone apps](mobile-apps.md), when they're set to an https address
 
 Over `http://192.168.x.x:8099`, use **Take photo** instead.
 

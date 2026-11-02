@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.0
+- The phone apps now **work offline**: your tasks, shopping list, notes, meals and Bible reading
+  are kept on the phone. Anything you add or tick off is sent to LifeHub automatically when it's
+  reachable again (update the apps to 1.1.0).
+- Documentation updated throughout.
+
 ## 2.1.0
 - **Phone apps for Android and iPhone**: LifeHub signed in as you, with notifications, the share
   menu, Siri & Shortcuts (iPhone) and Bible-app timing straight from your Android phone. See the

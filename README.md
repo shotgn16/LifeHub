@@ -61,7 +61,7 @@ add-on**, on **Plesk Obsidian**, or anywhere Docker or .NET 8 runs.
 | **Promotions** | Adverts and newsletters go into their own list instead of becoming tasks or shopping items, and clear themselves when they expire. |
 | **Email ↔ task link** | Delete a task and its email moves to the Bin. Delete the email and its task goes. |
 | **Notifications** | In-app bell plus phone push through **Home Assistant or LifeHub's own web push** (or both): a morning digest, renewal and task reminders, food expiry, Bible reminder, and a "you've left home" shopping list. |
-| **Phone apps** | Android and iPhone apps (`mobile/`): LifeHub signed in as you, notifications, share menu, home-screen shortcuts, Siri & Shortcuts, and Bible-app timing measured on Android. Built by GitHub Actions; install them yourself or publish them to the stores. |
+| **Phone apps** | Android and iPhone apps (`mobile/`): LifeHub signed in as you, notifications, share menu, home-screen shortcuts, Siri & Shortcuts, and Bible-app timing measured on Android. **They work offline**: tasks, shopping, notes, meals and today's Bible reading are kept on the phone, and anything you add or tick off is sent when LifeHub is reachable again. Built by GitHub Actions; install them yourself or publish them to the stores. |
 | **REST API** | API-key endpoints for HA automations, Assist, iOS Shortcuts and USB barcode scanners. |
 
 ## Quick start
@@ -78,7 +78,7 @@ add-on**, on **Plesk Obsidian**, or anywhere Docker or .NET 8 runs.
 
 ```bash
 git clone https://github.com/Shotgn16/LifeHub.git && cd LifeHub
-docker compose up -d --build        # then open http://localhost:8099 and create your login
+docker compose up -d --build        # then open http://localhost:8099 and create your account
 ```
 
 For Plesk, IIS, Cloudflare Tunnel and development setups, see the **[installation guide](docs/installation.md)**.
@@ -96,7 +96,7 @@ For Plesk, IIS, Cloudflare Tunnel and development setups, see the **[installatio
 | [Notes](docs/notes.md) | Quick notes, automatic categories, tidy up, sharing |
 | [Kitchen, shopping & meals](docs/kitchen-and-meals.md) | Use-by vs best-before, add from photo, shopping rules, meal planner, deals |
 | [Bible](docs/bible.md) | Verse of the day, YouVersion app tracking, carry-over, studies, starter notes and AI insights |
-| [Phone apps](docs/mobile-apps.md) | Android & iPhone apps, installing them without the stores |
+| [Phone apps](docs/mobile-apps.md) | Android & iPhone apps, offline mode, installing them without the stores |
 | [Publishing the apps](docs/publishing-apps.md) | Google Play and App Store step by step |
 | [AI on your phones](docs/local-ai-on-phones.md) | Local models on Pixel and iPhone, and a phone as LifeHub's AI server |
 | [REST API](docs/api.md) | Endpoints and Home Assistant `rest_command` examples |

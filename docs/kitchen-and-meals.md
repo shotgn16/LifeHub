@@ -1,5 +1,10 @@
 # Kitchen, shopping & meals
 
+With several people, food stock and the shopping list, and meal planning, are **shared by
+default**. You can keep them separate in Settings → People (see [people.md](people.md)). The
+[phone apps](mobile-apps.md) keep the shopping list and this week's meals on the phone, so you
+can tick things off in a shop with no signal.
+
 ## Kitchen stock
 
 The **Kitchen** page lists everything in the fridge, freezer and cupboards. You can add things by:

@@ -62,6 +62,12 @@ everyone else starts an empty one. Turning it back **on** brings everyone's list
 With meal planning shared, the planner also takes other people's calendars into account. For
 example, "Sam: football 18:00" makes that evening a quick-meal night.
 
+## Phone apps
+
+Each person signs in to the [phone apps](mobile-apps.md) with **their own** API key, so the app
+shows their tasks, notes and Bible reading, and their offline copy only holds their data and
+whatever the household shares.
+
 ## Removing someone
 
 Go to **Settings → People → Edit → Remove**. The following of theirs are **deleted**:

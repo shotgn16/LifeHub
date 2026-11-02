@@ -19,7 +19,9 @@ cd LifeHub/lifehub/src/LifeHub
 dotnet run          # http://localhost:5080
 ```
 
-You need the .NET 8 SDK. See [docs/architecture.md](docs/architecture.md) for how the code is laid
+You need the .NET 8 SDK. The phone apps are in `mobile/`. Open `mobile/android` in Android Studio,
+and run `xcodegen` in `mobile/ios`, then open the project in Xcode. GitHub Actions builds both
+on every push. See [docs/architecture.md](docs/architecture.md) for how the code is laid
 out, and [docs/extending.md](docs/extending.md) for the main extension points.
 
 ## Pull requests

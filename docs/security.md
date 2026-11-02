@@ -59,7 +59,11 @@ Your notes, photos and emails are only ever sent to **your own** Ollama server.
   because Home Assistant has already authenticated the user. You can turn this off in Settings →
   Security & API.
 - **Phone apps.** They store your LifeHub address and your API key on the phone: the iPhone app
-  in the Keychain, the Android app in app-private storage. They sign in with `POST /auth/app`,
+  in the Keychain, the Android app in app-private storage. For **offline use** they also keep a
+  copy of your open tasks, shopping list, recent notes, this week's meals and today's Bible
+  reading, plus any changes waiting to be sent. This copy is in the app's private storage and is
+  protected by the phone's own encryption (iOS file protection; Android's app sandbox).
+  Uninstalling the app deletes it. They sign in with `POST /auth/app`,
   which is rate-limited like the login form. Removing a person or regenerating their key signs
   their phones out.
 - **API keys.** Needed for `/api/v1/*`. There is one key per person, it acts as that person, and

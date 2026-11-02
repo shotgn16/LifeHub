@@ -288,6 +288,12 @@ automation:
         target: { entity_id: light.reading_lamp }
 ```
 
+## Offline
+
+In the [phone apps](mobile-apps.md), the offline screen shows today's verse, your reading list and
+your streak. You can tick them, or log what you read, with no connection. The readings are logged
+when LifeHub is reachable again.
+
 ## Several people
 
 Each person has their own reading, verse of the day, app sensor, reading plan, reminder, streak and

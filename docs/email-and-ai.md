@@ -31,7 +31,10 @@ Mailbox ──► LifeHub ──► Ollama (JSON schema) ──► checks & junk
 
 ## 2. Add mailboxes
 
-Open **Settings → Email → Add mailbox**.
+Open **Settings → Email → Add mailbox**. Each person adds their own mailboxes (see
+[People](people.md)). Emails, AI suggestions, promotions and the tasks made from them belong to
+the person whose mailbox it is. The AI settings below are set once for the household by an
+admin.
 
 ### Gmail and other IMAP (iCloud, Fastmail, Yahoo…)
 1. Turn on 2-Step Verification. Then go to **Google Account → Security → App passwords** and
