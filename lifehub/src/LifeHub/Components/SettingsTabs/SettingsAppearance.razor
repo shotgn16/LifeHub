@@ -1,0 +1,77 @@
+@inject SettingsService Settings
+@inject UserContext User
+@inject NavigationManager Nav
+@inject UiState Ui
+
+<div class="grid cols-2">
+    <div class="card">
+        <h2 style="margin-bottom:4px">Your look</h2>
+        <p class="small muted" style="margin-top:0">Only for you@(User.Multi ? " — everyone chooses their own" : "").</p>
+        <div class="field">
+            <label>Light or dark</label>
+            <div class="chips">
+                @foreach (var (key, label) in new[] { ("auto", "Match my device"), ("light", "Light"), ("dark", "Dark") })
+                {
+                    <button class="chip @(theme == key ? "on" : "")" @onclick="() => theme = key">@label</button>
+                }
+            </div>
+        </div>
+        <div class="field">
+            <label>Accent colour</label>
+            <div class="colour-pick">
+                @foreach (var c in Accents)
+                {
+                    <button type="button" class="swatch @(accent == c ? "on" : "")" style="background:@(c.Length == 0 ? "var(--accent)" : c)" title="@(c.Length == 0 ? "Default" : c)" @onclick="() => accent = c"></button>
+                }
+                <input type="color" value="@(accent.Length == 7 ? accent : "#0f766e")" @onchange="e => accent = e.Value?.ToString() ?? string.Empty" title="Any colour" style="width:34px;height:28px;padding:0;border:none;background:none" />
+            </div>
+        </div>
+        <div class="field">
+            <label>Spacing</label>
+            <div class="chips">
+                <button class="chip @(density == "comfortable" ? "on" : "")" @onclick='() => density = "comfortable"'>Comfortable</button>
+                <button class="chip @(density == "compact" ? "on" : "")" @onclick='() => density = "compact"'>Compact</button>
+            </div>
+        </div>
+        <button class="btn primary" @onclick="Save">Save &amp; apply</button>
+        <p class="tiny muted">Home screen cards: press <strong>Customise</strong> on the Today page.</p>
+    </div>
+
+    @if (User.IsAdmin)
+    {
+        <div class="card">
+            <h2 style="margin-bottom:4px">Custom CSS <span class="badge">advanced</span></h2>
+            <p class="small muted" style="margin-top:0">Restyle LifeHub for everyone without changing its code. Applied after the theme, so you can override any colour, font or size from <code>css/theme.css</code>, e.g. <code>:root { --radius: 4px; --font: Georgia, serif; }</code>. You can also put a <code>custom.css</code> file in LifeHub's data folder.</p>
+            <textarea rows="12" class="mono small" style="width:100%" @bind="css" placeholder=":root { --accent: #3355a8; }&#10;.sidebar { background: var(--surface-2); }"></textarea>
+            <button class="btn" style="margin-top:8px" @onclick="SaveCss">Save &amp; apply</button>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] Accents = { "", "#0f766e", "#2563eb", "#7c3aed", "#db2777", "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#475569" };
+    private string theme = "auto", density = "comfortable", accent = "", css = "";
+
+    protected override void OnInitialized()
+    {
+        var me = User.Me;
+        theme = me?.Theme ?? "auto";
+        density = me?.Density ?? "comfortable";
+        accent = me?.Accent ?? "";
+        css = Settings.Household.General.CustomCss;
+    }
+
+    private async Task Save()
+    {
+        var (t, d, a) = (theme, density, accent);
+        await Settings.UpdateUserAsync(User.Id, u => { u.Theme = t; u.Density = d; u.Accent = a; });
+        Nav.NavigateTo(Nav.Uri, forceLoad: true);        // the look is applied when the page loads
+    }
+
+    private async Task SaveCss()
+    {
+        var c = css;
+        await Settings.UpdateAsync(s => s.General.CustomCss = c);
+        Nav.NavigateTo(Nav.Uri, forceLoad: true);
+    }
+}

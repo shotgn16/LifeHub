@@ -13,32 +13,25 @@ public static class Endpoints
         app.MapGet("/health", () => Results.Ok(new { status = "ok", version = typeof(Endpoints).Assembly.GetName().Version?.ToString() }))
             .AllowAnonymous();
 
+        // Settings → Appearance → Custom CSS, then the file custom.css in the data folder (both optional).
+        app.MapGet("/custom.css", (SettingsService settings, DataPaths paths) =>
+        {
+            var css = settings.Household.General.CustomCss ?? "";
+            if (File.Exists(paths.CustomCssFile)) css += "\n" + File.ReadAllText(paths.CustomCssFile);
+            return Results.Text(css, "text/css");
+        }).AllowAnonymous();
+
         MapAuth(app);
         MapApi(app);
 
         // Backup download (signed-in users only).
         app.MapGet("/backup/{name}", (string name, DataPaths paths) =>
         {
-            if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^lifehub-\d{8}-\d{6}\.zip$")) return Results.NotFound();
+            if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^(lifehub|bible-export)-\d{8}-\d{6}\.zip$")) return Results.NotFound();
             var file = Path.Combine(paths.Backups, name);
             return File.Exists(file) ? Results.File(file, "application/zip", name) : Results.NotFound();
         }).RequireAuthorization();
 
-        // Uploaded Bible study notes (signed-in users only).
-        app.MapGet("/bible/files/{name}", (string name, DataPaths paths) =>
-        {
-            if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^[0-9a-f]{32}-[0-9a-f]{32}(\.[a-z0-9]{1,5})?$")) return Results.NotFound();
-            var file = Path.Combine(paths.BibleFiles, name);
-            if (!File.Exists(file)) return Results.NotFound();
-            var type = Path.GetExtension(name) switch
-            {
-                ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", ".webp" => "image/webp", ".gif" => "image/gif",
-                ".pdf" => "application/pdf", ".txt" or ".md" => "text/plain; charset=utf-8",
-                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                _ => "application/octet-stream"
-            };
-            return Results.File(file, type, enableRangeProcessing: true);
-        }).RequireAuthorization();
     }
 
     private static string SafeReturn(HttpContext ctx, string? returnUrl)
@@ -73,13 +66,13 @@ public static class Endpoints
         }).AllowAnonymous();
 
         app.MapPost("/auth/setup", async (HttpContext ctx, [FromForm] string username, [FromForm] string password,
-            [FromForm] string confirm, [FromForm] string? name, SettingsService settings) =>
+            [FromForm] string confirm, [FromForm] string? name, [FromForm] string? returnUrl, SettingsService settings) =>
         {
             // First-run only; afterwards logins are managed in Settings → People / Security.
             if (settings.HasLogin)
                 return Results.Redirect($"{ctx.Request.PathBase}/login");
             if (string.IsNullOrWhiteSpace(username) || password.Length < 8 || password != confirm)
-                return Results.Redirect($"{ctx.Request.PathBase}/setup?error=1");
+                return Results.Redirect($"{ctx.Request.PathBase}/setup?error=1&returnUrl={Uri.EscapeDataString(returnUrl ?? "")}");
             await settings.UpdateAsync(s =>
             {
                 var u = s.Users.FirstOrDefault(x => x.IsAdmin) ?? s.Users[0];
@@ -90,7 +83,25 @@ public static class Endpoints
                 if (string.IsNullOrEmpty(u.ApiKey)) u.ApiKey = PasswordHash.NewApiKey();
             });
             await SignInAsync(ctx, settings.User(settings.PrimaryUserId)!, "password");
-            return Results.Redirect(SafeReturn(ctx, "/"));
+            return Results.Redirect(SafeReturn(ctx, returnUrl ?? "/"));
+        }).AllowAnonymous();
+
+        // The desktop app window signs the main person in with a secret kept in the data folder (only from this computer).
+        app.MapGet("/auth/desktop", async (HttpContext ctx, string? token, string? once, string? returnUrl, SettingsService settings) =>
+        {
+            if (LifeHub.Desktop.DesktopRuntime.TakeOnce(once) is { } created && settings.User(created) is { } person)
+            {
+                await SignInAsync(ctx, person, "password");
+                return Results.Redirect(SafeReturn(ctx, returnUrl));
+            }
+            var ip = ctx.Connection.RemoteIpAddress;
+            if (ip is null || !System.Net.IPAddress.IsLoopback(ip) || !LifeHub.Desktop.DesktopRuntime.CheckToken(token))
+                return Results.Redirect($"{ctx.Request.PathBase}/login");
+            var target = SafeReturn(ctx, returnUrl);
+            if (!settings.HasLogin) return Results.Redirect(target);          // first run: the setup assistant creates the account
+            var main = settings.User(settings.PrimaryUserId) ?? settings.Users.First(u => u.IsAdmin);
+            await SignInAsync(ctx, main, "desktop");
+            return Results.Redirect(target);
         }).AllowAnonymous();
 
         // Home Assistant "Who's using LifeHub?" — only inside HA (ingress), where HA has already signed someone in.
@@ -147,12 +158,8 @@ public static class Endpoints
     public sealed record TaskRequest(string Title, string? Category, DateOnly? Due, TimeOnly? Time, string? Priority, string? Notes);
     public sealed record ShoppingRequest(string Name, decimal? Quantity, string? Unit);
     public sealed record ScanRequest(string Barcode, string? Mode, decimal? Quantity);
-    public sealed record BibleAppRequest(string? Event, string? Device);
-    public sealed record BibleReadRequest(string? Reference, int? Minutes);
     public sealed record NoteRequest(string Text, bool? Shared);
     public sealed record SyncRequest(List<SyncService.Change>? Changes);
-    public sealed record SessionDto(DateTime StartUtc, DateTime? EndUtc);
-    public sealed record BibleSessionsRequest(string? Device, DateTime FromUtc, List<SessionDto> Sessions);
 
     /// <summary>
     /// REST API for Home Assistant automations, scripts, voice assistants, iOS Shortcuts, etc.
@@ -231,40 +238,6 @@ public static class Endpoints
             return Results.Ok(new { status = r.Success ? "ok" : r.NotInStock ? "not_in_stock" : "failed", r.Message, product = r.Product?.Name });
         });
 
-        // ---- Bible ----
-        // iPhone: Shortcuts → Automation → "App: Bible is opened / is closed" → Get contents of URL (POST) with {"event":"opened"}.
-        api.MapPost("/bible/app", async (BibleAppRequest req, BibleService bible, Clock clock) =>
-        {
-            var opened = !string.Equals(req.Event, "closed", StringComparison.OrdinalIgnoreCase);
-            await bible.AppEventAsync(opened, "shortcut", string.IsNullOrWhiteSpace(req.Device) ? "shortcut" : req.Device!.Trim());
-            return Results.Ok(new { status = "ok", minutesToday = Math.Round(bible.AppMinutes(clock.Today), 1) });
-        });
-
-        api.MapPost("/bible/read", async (BibleReadRequest req, BibleService bible, Clock clock) =>
-        {
-            if (string.IsNullOrWhiteSpace(req.Reference))
-            {
-                await bible.MarkVerseReadAsync(clock.Today, "manual");
-                return Results.Ok(new { status = "ok", logged = "verse of the day" });
-            }
-            // Accepts a typed reference, YouVersion share text or a bible.com link (iPhone share-sheet Shortcut).
-            if (BibleBooks.FromShared(req.Reference).Count == 0) return Results.BadRequest(new { status = "unknown_reference" });
-            var logged = await bible.LogSharedAsync(req.Reference, "api");
-            if (req.Minutes is { } m && logged.Count > 0) { logged[0].Minutes = m; await bible.Readings.UpsertAsync(logged[0]); }
-            return Results.Ok(new { status = "ok", logged = string.Join("; ", logged.Select(l => l.Reference)) });
-        });
-
-        api.MapGet("/bible/today", (BibleService bible, Clock clock) =>
-        {
-            var v = bible.VerseFor(clock.Today);
-            return Results.Ok(new
-            {
-                verse = v?.Reference, text = v?.Text, verseRead = v?.Read == true, readToday = bible.ReadOn(clock.Today),
-                streak = bible.Streak(), appMinutes = Math.Round(bible.AppMinutes(clock.Today), 1),
-                toRead = bible.TodayList().Where(p => !p.Done).Select(p => new { p.Reference, p.Kind })
-            });
-        });
-
         // ---- Phone apps ----
         api.MapGet("/me", (SettingsService settings) =>
         {
@@ -273,7 +246,7 @@ public static class Endpoints
             return me is null ? Results.Unauthorized() : Results.Ok(new
             {
                 me.Id, me.Name, me.IsAdmin, version = typeof(Endpoints).Assembly.GetName().Version?.ToString(3),
-                household = s.General.HouseholdName, bible = s.Bible.Enabled, bibleAppMatch = s.Bible.AppMatch, deals = s.Deals.Enabled
+                household = s.General.HouseholdName, deals = s.Deals.Enabled
             });
         });
 
@@ -291,18 +264,6 @@ public static class Endpoints
                 .OrderBy(n => n.CreatedUtc)
                 .Select(n => new { n.Id, n.Title, n.Message, n.Link, level = n.Level.ToString(), n.CreatedUtc, n.Read })));
 
-        // Android app: time in the Bible app measured on the phone (UsageStats). Replaces that phone's sessions from fromUtc.
-        api.MapPost("/bible/sessions", async (BibleSessionsRequest req, BibleService bible, Clock clock) =>
-        {
-            var device = string.IsNullOrWhiteSpace(req.Device) ? "Android" : req.Device.Trim();
-            var from = req.FromUtc.ToUniversalTime();
-            if (DateTime.UtcNow - from > TimeSpan.FromDays(3)) from = DateTime.UtcNow.AddDays(-3);
-            var fresh = req.Sessions.Where(x => x.EndUtc is null || x.EndUtc > x.StartUtc)
-                .Select(x => new AppInterval(x.StartUtc.ToUniversalTime(), x.EndUtc?.ToUniversalTime())).ToList();
-            await bible.ReplaceSessionsAsync("app:" + device, from, fresh, "android");
-            await bible.CheckAppReadingAsync();
-            return Results.Ok(new { status = "ok", minutesToday = Math.Round(bible.AppMinutes(clock.Today), 1) });
-        });
 
         // ---- Notes ----
         api.MapPost("/notes", async (NoteRequest req, NotesService notes) =>

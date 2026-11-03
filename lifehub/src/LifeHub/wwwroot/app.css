@@ -1,66 +1,4 @@
-/* LifeHub — single stylesheet, no framework. Light/dark via prefers-color-scheme. */
-:root {
-  --bg: #f4f5f2;
-  --surface: #ffffff;
-  --surface-2: #f8f9f6;
-  --border: #e3e5df;
-  --text: #1d2321;
-  --muted: #69716d;
-  --accent: #0f766e;
-  --accent-soft: #e2f2ef;
-  --accent-text: #ffffff;
-  --warn: #b45309;
-  --warn-soft: #fdf1e1;
-  --danger: #b42318;
-  --danger-soft: #fdeceb;
-  --ok: #2f7d32;
-  --ok-soft: #e7f4e7;
-  --info: #3355a8;
-  --info-soft: #e8eefb;
-  --work: #3355a8;
-  --free: #2f7d32;
-  --sleep: #6b5ca5;
-  --ai: #7c3aed;
-  --ai-soft: #f3edff;
-  --ai-border: #d9c8fb;
-  --shadow: 0 1px 2px rgba(20, 30, 25, .06), 0 2px 8px rgba(20, 30, 25, .04);
-  --radius: 12px;
-  --radius-sm: 8px;
-  --sidebar: 236px;
-  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #121514;
-    --surface: #1b1f1d;
-    --surface-2: #202523;
-    --border: #2d3330;
-    --text: #e7ebe9;
-    --muted: #97a19c;
-    --accent: #2bb3a3;
-    --accent-soft: #173431;
-    --accent-text: #08201d;
-    --warn: #f0a447;
-    --warn-soft: #3a2a14;
-    --danger: #f2776c;
-    --danger-soft: #3c1d1a;
-    --ok: #74c278;
-    --ok-soft: #1c331d;
-    --info: #8fa9ec;
-    --info-soft: #1e2840;
-    --work: #8fa9ec;
-    --free: #74c278;
-    --sleep: #b2a6e6;
-    --ai: #b79cf5;
-    --ai-soft: #251d3b;
-    --ai-border: #44356e;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
-    color-scheme: dark;
-  }
-}
-
+/* LifeHub — layout and components. Colours, fonts and sizes are in css/theme.css. */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
@@ -658,3 +596,46 @@ table.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 /* Links only shown inside the LifeHub phone apps (they add .in-app to <html>). */
 .app-only { display: none !important; }
 .in-app .app-only { display: block !important; }
+
+/* ---------- 3.0: home screen cards ---------- */
+.widget-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); align-items: start; }
+.widget-grid > .span-2 { grid-column: span 2; }
+@media (max-width: 1100px) { .widget-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .widget-grid { grid-template-columns: 1fr; } .widget-grid > .span-2 { grid-column: auto; } }
+.widget .card-head h2 { font-size: 1rem; }
+.widget-stat { margin: -2px 0 8px; font-size: 1.25rem; }
+.clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tick { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); background: transparent; cursor: pointer; flex: none; padding: 0; }
+.tick:hover { border-color: var(--accent); }
+.row.done .title { color: var(--muted); text-decoration: line-through; }
+.share-card textarea { width: 100%; font-size: 15px; }
+.share-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+/* ---------- Desktop setup assistant (/welcome) ---------- */
+.welcome { max-width: 760px; margin: 0 auto; padding: 28px 18px 60px; display: flex; flex-direction: column; gap: 16px; }
+.welcome-head { display: flex; align-items: center; gap: 14px; }
+.welcome-head h1 { margin: 0; font-size: 1.5rem; }
+.welcome-head .brand-mark { width: 44px; height: 44px; font-size: 1.3rem; border-radius: 12px; }
+.welcome-steps { display: flex; gap: 6px; list-style: none; padding: 0; margin: 0; flex-wrap: wrap; }
+.welcome-steps li { font-size: .8rem; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.welcome-steps li.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.welcome-steps li.done { color: var(--accent); }
+.welcome h2 { margin: 0 0 8px; }
+.mode-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.mode-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 14px; border-radius: var(--radius, 12px);
+  border: 1.5px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font: inherit; position: relative; }
+.mode-card:hover { border-color: var(--accent); }
+.mode-card.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent-soft); }
+.mode-card svg { color: var(--accent); margin-bottom: 4px; }
+.mode-card .badge { position: absolute; top: 10px; right: 10px; }
+.welcome-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.welcome-list { padding-left: 20px; margin: 8px 0; }
+.welcome-list li { margin-bottom: 10px; }
+.welcome-log { max-height: 160px; overflow: auto; font-size: .75rem; background: var(--surface-2); padding: 8px; border-radius: 8px; white-space: pre-wrap; }
+.big-code { display: inline-block; font-size: 1rem; padding: 6px 10px; margin: 4px 0; user-select: all; word-break: break-all; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: lh-spin .8s linear infinite; vertical-align: -2px; margin-right: 4px; }
+@keyframes lh-spin { to { transform: rotate(360deg); } }
+.text-warn { color: var(--warn); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 14px; font-size: .9rem; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; word-break: break-all; }

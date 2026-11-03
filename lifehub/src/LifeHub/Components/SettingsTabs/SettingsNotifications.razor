@@ -95,7 +95,6 @@
     <label class="check"><input type="checkbox" @bind="n.ExpiryReminders" /> Food — once a day (from 9am) when things need using up or checking</label>
     <label class="check"><input type="checkbox" @bind="n.DailyDigest" /> Daily digest</label>
     <div class="field" style="max-width:200px"><label>Digest time</label><input type="time" @bind="n.DailyDigestTime" /></div>
-    <p class="small muted">Bible reading reminders are set in Settings → Bible.</p>
     <div style="display:flex;gap:8px">
         <button class="btn primary" @onclick="Save">Save</button>
         <button class="btn" @onclick="SendTest">Send a test notification</button>

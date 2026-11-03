@@ -1,0 +1,26 @@
+@inherits LiveComponent
+@inject AiService Ai
+
+<WidgetCard Title="AI Inbox" Icon="inbox" Link="inbox" LinkText="Review">
+    @if (!Ai.IsAvailable) { <p class="muted small">Turn on the local AI in <a href="settings?tab=ai">Settings → AI</a> to have your email turned into tasks, events and renewals.</p> }
+    else
+    {
+        <ul class="list">
+            @if (pending.Count == 0) { <li class="empty small">Nothing waiting for you</li> }
+            @foreach (var s in pending.Take(5))
+            {
+                <li class="row">
+                    <span class="badge accent">@s.Type</span>
+                    <div class="grow"><div class="title small">@s.Title</div></div>
+                </li>
+            }
+        </ul>
+    }
+</WidgetCard>
+
+@code {
+    private List<AiSuggestion> pending = new();
+    protected override void OnInitialized() { Watch(Ai.Suggestions); Load(); }
+    protected override void OnDataChanged() => Load();
+    private void Load() => pending = Ai.Suggestions.Where(s => s.Status == SuggestionStatus.Pending).OrderByDescending(s => s.CreatedUtc).ToList();
+}

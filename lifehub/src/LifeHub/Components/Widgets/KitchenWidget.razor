@@ -1,0 +1,28 @@
+@inherits LiveComponent
+@inject KitchenService Kitchen
+@inject SettingsService Settings
+
+<WidgetCard Title="Use it up" Icon="kitchen" Link="kitchen" LinkText="Kitchen">
+    <ul class="list">
+        @if (items.Count == 0) { <li class="empty small">Nothing about to go off</li> }
+        @foreach (var p in items.Take(6))
+        {
+            var fr = Kitchen.Fresh(p);
+            <li class="row">
+                <div class="grow"><div class="title">@p.Name</div><div class="meta">@p.Location · @Fmt.Qty(p.Quantity, p.Unit)</div></div>
+                <span class="badge @fr.Css" title="@fr.Detail">@fr.Label</span>
+                @if (p.Location != StorageLocation.Freezer)
+                {
+                    <button class="icon-btn" title="Freeze" @onclick="() => Kitchen.FreezeAsync(p.Id)"><Icon Name="snow" Size="16" /></button>
+                }
+            </li>
+        }
+    </ul>
+</WidgetCard>
+
+@code {
+    private List<PantryItem> items = new();
+    protected override void OnInitialized() { Watch(Kitchen.Pantry); Load(); }
+    protected override void OnDataChanged() => Load();
+    private void Load() => items = Kitchen.NeedsAttention(Settings.Current.General.ExpiryWarningDays).ToList();
+}

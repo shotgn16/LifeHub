@@ -12,7 +12,7 @@
             <h2>People</h2>
             <button class="btn sm primary right" @onclick="StartAdd"><Icon Name="plus" Size="15" /> Add person</button>
         </div>
-        <p class="small muted" style="margin-top:0">Everyone has their own tasks, email accounts, AI inbox, schedule, notes, Bible reading and studies, and their own phones for notifications.</p>
+        <p class="small muted" style="margin-top:0">Everyone has their own tasks, email accounts, AI inbox, schedule and notes, and their own phones for notifications.</p>
         <ul class="list">
             @foreach (var u in users)
             {
@@ -35,7 +35,7 @@
 
     <div class="card">
         <h2 style="margin-bottom:4px">What's shared</h2>
-        <p class="small muted" style="margin-top:0">Tasks, email, Bible tracking, studies and notes are always each person's own (a note can be shared one at a time). Choose what the household shares:</p>
+        <p class="small muted" style="margin-top:0">Tasks, email and notes are always each person's own (a note can be shared one at a time). Choose what the household shares:</p>
         <label class="check"><input type="checkbox" checked="@h.ShareKitchen" @onchange="e => SetShare(0, (bool)e.Value!)" /> <span><strong>Food stock & shopping list</strong><br /><span class="small muted">Kitchen, scanning, shopping list and the HA shopping list</span></span></label>
         <label class="check"><input type="checkbox" checked="@h.ShareMeals" @onchange="e => SetShare(1, (bool)e.Value!)" /> <span><strong>Meal planning</strong><br /><span class="small muted">Recipes, the meal plan, dietary needs and deals</span></span></label>
         <label class="check"><input type="checkbox" checked="@h.ShareRenewals" @onchange="e => SetShare(2, (bool)e.Value!)" /> <span><strong>Renewals & subscriptions</strong><br /><span class="small muted">Bills, domains, insurance, streaming…</span></span></label>
@@ -82,7 +82,7 @@
         {
             <details class="danger-zone">
                 <summary class="small">Remove @form.Name</summary>
-                <p class="small">Their tasks, emails and mailboxes, AI inbox, notes, Bible reading and studies are deleted. Anything they added to the kitchen, meals or renewals stays with the household.</p>
+                <p class="small">Their tasks, emails and mailboxes, AI inbox and notes are deleted. Anything they added to the kitchen, meals or renewals stays with the household.</p>
                 <button class="btn danger sm" @onclick="Remove" disabled="@LastAdmin">Remove @form.Name</button>
             </details>
         }

@@ -171,7 +171,8 @@ public sealed class SetupAndIngressAuthMiddleware
         }
 
         var exempt = path.StartsWith("/setup") || path.StartsWith("/auth/") || path.StartsWith("/_framework") || path.StartsWith("/_blazor") ||
-                     path.StartsWith("/who") || path.StartsWith("/api/") || path.StartsWith("/health") || Path.HasExtension(path);
+                     path.StartsWith("/who") || path.StartsWith("/api/") || path.StartsWith("/health") || Path.HasExtension(path) ||
+                     (LifeHub.Desktop.DesktopRuntime.Active && path.StartsWith("/welcome"));
         if (trusted && ctx.User.Identity?.IsAuthenticated != true && users.Count > 1 && !exempt)
         {
             // Several people: ask who it is (HA's own sign-in doesn't tell LifeHub reliably who's holding the phone).
@@ -179,9 +180,16 @@ public sealed class SetupAndIngressAuthMiddleware
             ctx.Response.Redirect(ctx.Request.PathBase + "/who?returnUrl=" + Uri.EscapeDataString(back));
             return;
         }
-        if (!settings.HasLogin && !trusted && !exempt)
+        // Before there's an account, only this computer may use the setup assistant.
+        if (path.StartsWith("/welcome") && !settings.HasLogin && ctx.Connection.RemoteIpAddress is { } rip && !IPAddress.IsLoopback(rip))
         {
             ctx.Response.Redirect(ctx.Request.PathBase + "/setup");
+            return;
+        }
+        if (!settings.HasLogin && !trusted && !exempt)
+        {
+            // The desktop app starts with its setup assistant (which creates the account as one of its steps).
+            ctx.Response.Redirect(ctx.Request.PathBase + (LifeHub.Desktop.DesktopRuntime.Active ? "/welcome" : "/setup"));
             return;
         }
         await _next(ctx);

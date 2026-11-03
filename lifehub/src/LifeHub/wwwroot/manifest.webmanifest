@@ -30,7 +30,7 @@
     }
   ],
   "share_target": {
-    "action": "bible/share",
+    "action": "share",
     "method": "GET",
     "params": {
       "title": "title",

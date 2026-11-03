@@ -1,0 +1,18 @@
+@* The frame every home-screen card uses — change it here to restyle all of them. *@
+<div class="card widget @(Wide ? "span-2" : "") @(Flush ? "flush" : "")">
+    <div class="card-head">
+        <h2><Icon Name="@Icon" /> @Title</h2>
+        @if (!string.IsNullOrEmpty(Link)) { <a class="right small" href="@Link">@LinkText</a> }
+    </div>
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Icon { get; set; } = "";
+    [Parameter] public string? Link { get; set; }
+    [Parameter] public string LinkText { get; set; } = "Open";
+    [Parameter] public bool Wide { get; set; }
+    [Parameter] public bool Flush { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -13,8 +13,24 @@
   <ItemGroup>
     <!-- IMAP / MIME parsing (Gmail, generic IMAP, on-prem Exchange with IMAP enabled) -->
     <PackageReference Include="MailKit" Version="4.8.0" />
-    <!-- PDF text and scanned-page images for Bible study notes -->
-    <PackageReference Include="PdfPig" Version="0.1.16" />
+  </ItemGroup>
+
+  <!--
+    Desktop build (Windows, macOS, Linux app with its own window): dotnet publish -p:LifeHubDesktop=true
+    Adds the native window (Photino: WebView2 / WKWebView / WebKitGTK) and Windows-service support.
+    Docker, Home Assistant and IIS builds leave this off.
+  -->
+  <PropertyGroup Condition="'$(LifeHubDesktop)' == 'true'">
+    <DefineConstants>$(DefineConstants);DESKTOP</DefineConstants>
+    <OutputType>WinExe</OutputType>
+    <ApplicationIcon>Desktop/lifehub.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(LifeHubDesktop)' == 'true'">
+    <PackageReference Include="Photino.NET" Version="3.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Desktop/lifehub.ico;Desktop/lifehub.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

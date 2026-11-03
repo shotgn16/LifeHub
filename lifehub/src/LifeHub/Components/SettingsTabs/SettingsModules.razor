@@ -1,0 +1,38 @@
+@inject ModuleRegistry Modules
+@inject SettingsService Settings
+@inject NavigationManager Nav
+@inject UiState Ui
+
+<div class="card" style="max-width:820px">
+    <h2 style="margin-bottom:4px">Modules</h2>
+    <p class="small muted" style="margin-top:0">Switch off the parts of LifeHub your household doesn't use; they disappear from the menu and the home screen (nothing is deleted — switch them back on any time). Developers can add their own modules; see <code>docs/extending.md</code>.</p>
+    <ul class="list">
+        @foreach (var m in Modules.All.Where(m => !m.Core))
+        {
+            var on = !off.Contains(m.Key);
+            <li class="row">
+                <Icon Name="@m.Icon" Size="18" />
+                <div class="grow">
+                    <div class="title">@m.Title @if (m.Requires is { } r) { <span class="badge">needs @Modules.All.FirstOrDefault(x => x.Key == r)?.Title</span> }</div>
+                    <div class="meta">@m.Description</div>
+                </div>
+                <label class="switch"><input type="checkbox" checked="@on" @onchange="e => Toggle(m.Key, (bool)e.Value!)" /></label>
+            </li>
+        }
+    </ul>
+</div>
+
+@code {
+    private List<string> off = new();
+
+    protected override void OnInitialized() => off = Settings.Household.General.DisabledModules.ToList();
+
+    private async Task Toggle(string key, bool on)
+    {
+        off.Remove(key);
+        if (!on) off.Add(key);
+        var list = off.ToList();
+        await Settings.UpdateAsync(s => s.General.DisabledModules = list);
+        Nav.NavigateTo(Nav.Uri, forceLoad: true);       // rebuild the menu
+    }
+}

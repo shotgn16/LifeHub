@@ -1,0 +1,45 @@
+@inject HomeAssistantClient Ha
+@inject SettingsService Settings
+
+<WidgetCard Title="Home" Icon="home" Link="home" LinkText="Details">
+    @if (error is not null) { <div class="alert warn small">@error</div> }
+    else if (!loaded) { <p class="muted small">Loading…</p> }
+    else
+    {
+        <ul class="list">
+            @foreach (var p in presence)
+            {
+                <li class="row"><span class="dot @(p.State == "home" ? "on" : "")"></span><div class="grow">@p.Name</div><span class="muted small">@(p.State switch { "home" => "Home", "not_home" => "Away", _ => p.State })</span></li>
+            }
+            <li class="row"><Icon Name="bulb" Size="16" /><div class="grow">Lights on</div><span class="small">@lightsOn</span></li>
+            @foreach (var e in energy) { <li class="row"><Icon Name="bolt" Size="16" /><div class="grow">@e.Label</div><span class="small">@e.Value</span></li> }
+        </ul>
+    }
+</WidgetCard>
+
+@code {
+    private bool loaded;
+    private string? error;
+    private List<HaState> presence = new();
+    private int lightsOn;
+    private List<(string Label, string Value)> energy = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var s = Settings.Current.HomeAssistant;
+            var states = await Ha.GetStatesAsync();
+            presence = states.Where(x => s.PresenceEntities.Contains(x.EntityId)).ToList();
+            if (presence.Count == 0) presence = states.Where(x => x.Domain == "person").ToList();
+            lightsOn = states.Count(x => x.Domain == "light" && x.State == "on");
+            energy = s.EnergySensors.Select(es =>
+            {
+                var st = states.FirstOrDefault(x => x.EntityId == es.EntityId);
+                return (string.IsNullOrEmpty(es.Label) ? st?.Name ?? es.EntityId : es.Label, st is null ? "—" : $"{st.State} {st.Unit}");
+            }).ToList();
+        }
+        catch (Exception ex) { error = "Home Assistant: " + ex.Message; }
+        loaded = true;
+    }
+}

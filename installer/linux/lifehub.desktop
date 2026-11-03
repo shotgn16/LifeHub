@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=LifeHub
+GenericName=Household organiser
+Comment=Tasks, kitchen, meals, renewals and notes for your household
+Exec=__EXEC__ %U
+Icon=lifehub
+Terminal=false
+Categories=Office;Utility;
+Keywords=tasks;shopping;meals;kitchen;notes;household;
+StartupWMClass=LifeHub
+Actions=Setup;
+
+[Desktop Action Setup]
+Name=Setup assistant
+Exec=__EXEC__ --setup

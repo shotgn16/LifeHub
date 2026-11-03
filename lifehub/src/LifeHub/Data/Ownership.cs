@@ -8,7 +8,7 @@ public enum OwnScope
 {
     /// <summary>Everyone (product catalogue, sync bookkeeping, store deals).</summary>
     Global,
-    /// <summary>Only the person who created it (tasks, email, Bible, notes…).</summary>
+    /// <summary>Only the person who created it (tasks, email, notes…).</summary>
     Personal,
     /// <summary>Food stock, shopping list and purchase history — shared or personal per the household setting.</summary>
     Kitchen,

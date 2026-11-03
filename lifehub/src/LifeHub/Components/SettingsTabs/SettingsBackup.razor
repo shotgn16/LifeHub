@@ -1,6 +1,7 @@
 @inject BackupService Backups
 @inject DataPaths Paths
 @inject UiState Ui
+@inject BibleArchiveService BibleArchive
 
 <div class="card" style="max-width:760px">
     <h2 style="margin-bottom:8px">Backups</h2>
@@ -23,7 +24,41 @@
     <p class="small muted">Stop LifeHub, unzip a backup into the data folder (replacing <code>db/</code>, <code>settings.json</code> and <code>keys/</code>), then start it again.</p>
 </div>
 
+@if (BibleArchive.Exists)
+{
+    <div class="card" style="max-width:760px;margin-top:16px">
+        <h2 style="margin-bottom:8px">Bible data from LifeHub 2</h2>
+        <p class="small muted">Bible tracking and studies have moved to their own app, so LifeHub no longer uses this data. Export it to a zip (readings, studies, uploaded notes and the old settings), then delete it here.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn primary" @onclick="ExportBible"><Icon Name="download" Size="15" /> Export Bible data</button>
+            @if (BibleArchive.Exports().Count > 0)
+            {
+                <button class="btn danger" @onclick="DeleteBible">@(confirmBible ? "Tap again to delete it" : "Delete Bible data")</button>
+            }
+        </div>
+        @foreach (var f in BibleArchive.Exports())
+        {
+            <div class="small" style="margin-top:8px"><a href="backup/@f.Name" target="_top" download>@f.Name</a> · @((f.Length / 1024.0).ToString("0.#")) KB</div>
+        }
+    </div>
+}
+
 @code {
+    private bool confirmBible;
+
+    private void ExportBible()
+    {
+        try { var f = BibleArchive.Export(); Ui.Show("Exported: " + Path.GetFileName(f) + " — download it below"); }
+        catch (Exception ex) { Ui.Error(ex); }
+    }
+
+    private async Task DeleteBible()
+    {
+        if (!confirmBible) { confirmBible = true; return; }
+        await Ui.Try(async () => { var n = await BibleArchive.DeleteAsync(); Ui.Show($"Bible data deleted ({n} files). Your export is kept in Backups."); });
+        confirmBible = false;
+    }
+
     private void Create()
     {
         try { var f = Backups.Create(); Ui.Show("Backup created: " + Path.GetFileName(f)); }

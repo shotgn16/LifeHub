@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>LifeHub</string>
+  <key>CFBundleDisplayName</key><string>LifeHub</string>
+  <key>CFBundleIdentifier</key><string>io.github.shotgn16.lifehub</string>
+  <key>CFBundleExecutable</key><string>LifeHub</string>
+  <key>CFBundleIconFile</key><string>LifeHub</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>__VERSION__</string>
+  <key>CFBundleVersion</key><string>__VERSION__</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>NSHumanReadableCopyright</key><string>LifeHub · MIT licence</string>
+  <!-- LifeHub runs on http://localhost (or your network) inside the app, so plain http must be allowed. -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key><true/>
+    <key>NSAllowsLocalNetworking</key><true/>
+  </dict>
+  <key>NSLocalNetworkUsageDescription</key><string>LifeHub talks to your phone, Home Assistant and Ollama on your home network.</string>
+  <key>NSCameraUsageDescription</key><string>LifeHub uses the camera to scan barcodes and photograph your fridge.</string>
+</dict>
+</plist>

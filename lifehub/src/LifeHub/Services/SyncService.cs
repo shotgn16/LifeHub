@@ -14,17 +14,16 @@ public sealed class SyncService
     private readonly KitchenService _kitchen;
     private readonly NotesService _notes;
     private readonly MealService _meals;
-    private readonly BibleService _bible;
     private readonly IRepository<SyncReceipt> _receipts;
     private readonly SettingsService _settings;
     private readonly Clock _clock;
     private readonly ILogger<SyncService> _log;
     private readonly SemaphoreSlim _one = new(1, 1);
 
-    public SyncService(TaskService tasks, KitchenService kitchen, NotesService notes, MealService meals, BibleService bible,
+    public SyncService(TaskService tasks, KitchenService kitchen, NotesService notes, MealService meals,
         IRepository<SyncReceipt> receipts, SettingsService settings, Clock clock, ILogger<SyncService> log)
     {
-        _tasks = tasks; _kitchen = kitchen; _notes = notes; _meals = meals; _bible = bible; _receipts = receipts;
+        _tasks = tasks; _kitchen = kitchen; _notes = notes; _meals = meals; _receipts = receipts;
         _settings = settings; _clock = clock; _log = log;
     }
 
@@ -37,7 +36,6 @@ public sealed class SyncService
         var today = _clock.Today;
         var s = _settings.Current;
         var me = _settings.Me;
-        var verse = s.Bible.Enabled ? _bible.VerseFor(today) : null;
         return new
         {
             generatedUtc = DateTime.UtcNow,
@@ -58,13 +56,7 @@ public sealed class SyncService
             meals = _meals.EntriesFor(today, today.AddDays(6)).OrderBy(e => e.Date).Select(e => new
             {
                 date = e.Date.ToString("yyyy-MM-dd"), e.Slot, title = _meals.TitleOf(e), e.Cooked
-            }),
-            bible = !s.Bible.Enabled ? null : new
-            {
-                verse = verse?.Reference ?? "", verseText = verse?.Text ?? "", verseRead = verse?.Read == true,
-                streak = _bible.Streak(), readToday = _bible.ReadOn(today),
-                toRead = _bible.TodayList().Select(p => new { id = p.Id, p.Reference, p.Kind, p.Done })
-            }
+            })
         };
     }
 
@@ -153,22 +145,6 @@ public sealed class SyncService
                 if (text.Length == 0) throw new SkipException("empty");
                 var n = await _notes.AddAsync(text, d.TryGetProperty("shared", out var sh) && sh.ValueKind == JsonValueKind.True, "app");
                 return $"note {n.Id}";
-            }
-            case "bible.read":
-            {
-                var reference = Str(d, "reference");
-                var day = c.At is { } at ? DateOnly.FromDateTime(_clock.ToLocal(at.ToUniversalTime())) : _clock.Today;
-                if (reference.Length == 0) { await _bible.MarkVerseReadAsync(day, "app"); return "verse read"; }
-                var logged = await _bible.LogSharedAsync(reference, "app");
-                if (logged.Count == 0) throw new SkipException("not a Bible reference");
-                return "logged " + string.Join("; ", logged.Select(l => l.Reference));
-            }
-            case "bible.tick":
-            {
-                var item = _bible.Plan.Get(Id(d)) ?? throw new SkipException("reading no longer on the list");
-                if (item.Done) throw new SkipException("already done");
-                await _bible.CompleteAsync(item.Id);
-                return "ticked";
             }
             default:
                 throw new SkipException($"unknown change '{c.Type}' — update the app or LifeHub");

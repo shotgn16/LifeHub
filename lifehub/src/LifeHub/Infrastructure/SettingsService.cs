@@ -32,7 +32,7 @@ public sealed class SettingsService
 
     /// <summary>
     /// A copy of the current settings (decrypted), as seen by the current person: their own phones, calendars,
-    /// schedule, Bible settings and mailboxes take the place of the household ones. Edit it, then pass to UpdateAsync.
+    /// schedule and mailboxes take the place of the household ones. Edit it, then pass to UpdateAsync.
     /// </summary>
     public AppSettings Current
     {
@@ -79,9 +79,6 @@ public sealed class SettingsService
         n.DailyDigest = u.DailyDigest;
         n.DailyDigestTime = u.DailyDigestTime;
         view.Schedule = Json.Clone(u.Schedule);
-        var bible = Json.Clone(u.Bible);
-        BibleSettings.CopyHousehold(view.Bible, bible);
-        view.Bible = bible;
         view.Email.Accounts = view.Email.Accounts.Where(a => OwnedBy(a, userId, primary)).ToList();
     }
 
@@ -103,7 +100,6 @@ public sealed class SettingsService
         u.DailyDigest = working.Notifications.DailyDigest;
         u.DailyDigestTime = working.Notifications.DailyDigestTime;
         u.Schedule = Json.Clone(working.Schedule);
-        u.Bible = Json.Clone(working.Bible);
 
         result.HomeAssistant.NotifyServices = new(before.HomeAssistant.NotifyServices);
         result.HomeAssistant.NotifyService = before.HomeAssistant.NotifyService;
@@ -117,9 +113,6 @@ public sealed class SettingsService
         result.Notifications.DailyDigest = before.Notifications.DailyDigest;
         result.Notifications.DailyDigestTime = before.Notifications.DailyDigestTime;
         result.Schedule = Json.Clone(before.Schedule);
-        var bible = Json.Clone(before.Bible);
-        BibleSettings.CopyHousehold(working.Bible, bible);
-        result.Bible = bible;
 
         foreach (var a in working.Email.Accounts) if (a.OwnerId == Guid.Empty) a.OwnerId = userId;
         result.Email.Accounts = before.Email.Accounts.Where(a => !OwnedBy(a, userId, primary))
@@ -129,8 +122,8 @@ public sealed class SettingsService
 
     /// <summary>
     /// 2.0 upgrade (and first start): there is always at least one person. The existing login, API key, phones,
-    /// calendars, schedule and Bible settings become the first person's own; the household copies of the schedule
-    /// and Bible settings stay as the starting point for people added later.
+    /// calendars and schedule become the first person's own; the household copy of the schedule
+    /// stays as the starting point for people added later.
     /// </summary>
     private static bool EnsureUsers(AppSettings s)
     {
@@ -149,7 +142,7 @@ public sealed class SettingsService
             Channel = s.Notifications.Channel, TaskReminders = s.Notifications.TaskReminders,
             RenewalReminders = s.Notifications.RenewalReminders, ExpiryReminders = s.Notifications.ExpiryReminders,
             DailyDigest = s.Notifications.DailyDigest, DailyDigestTime = s.Notifications.DailyDigestTime,
-            Schedule = Json.Clone(s.Schedule), Bible = Json.Clone(s.Bible),
+            Schedule = Json.Clone(s.Schedule),
             PersonEntity = ha.PresenceEntities.Count == 1 ? ha.PresenceEntities[0] : ""
         };
         if (string.IsNullOrEmpty(u.ApiKey)) u.ApiKey = PasswordHash.NewApiKey();
@@ -157,8 +150,6 @@ public sealed class SettingsService
         foreach (var a in s.Email.Accounts) a.OwnerId = u.Id;
         s.Auth.Username = ""; s.Auth.PasswordHash = ""; s.Auth.ApiKey = "";
         ha.NotifyServices = new(); ha.NotifyService = ""; ha.CalendarEntities = new(); ha.DefaultCalendarEntity = ""; ha.TasksTodoEntity = "";
-        // New people start with the Bible tracking sensors empty (they're someone's phone).
-        s.Bible.AppSensors = new(); s.Bible.PlanEnabled = false;
         return true;
     }
 

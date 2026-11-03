@@ -1,0 +1,33 @@
+@inherits LiveComponent
+@inject KitchenService Kitchen
+
+<WidgetCard Title="Shopping list" Icon="cart" Link="shopping" LinkText="Open list">
+    <div class="inline-form" style="margin-bottom:6px">
+        <input type="text" placeholder="Add an item…" @bind="quick" @bind:event="oninput" @onkeydown="Key" />
+    </div>
+    <ul class="list">
+        @if (items.Count == 0) { <li class="empty small">Nothing to buy</li> }
+        @foreach (var i in items.Take(7))
+        {
+            <li class="row">
+                <button class="tick" aria-label="Got it" @onclick="() => Kitchen.ToggleAsync(i.Id)"></button>
+                <div class="grow"><div class="title">@i.Name @if (i.Quantity != 1 || i.Unit.Length > 0) { <span class="muted small">×@Fmt.Qty(i.Quantity, i.Unit)</span> }</div></div>
+            </li>
+        }
+        @if (items.Count > 7) { <li class="row small muted"><a href="shopping">+@(items.Count - 7) more</a></li> }
+    </ul>
+</WidgetCard>
+
+@code {
+    private List<ShoppingItem> items = new();
+    private string quick = "";
+    protected override void OnInitialized() { Watch(Kitchen.Shopping); Load(); }
+    protected override void OnDataChanged() => Load();
+    private void Load() => items = Kitchen.Shopping.Where(s => !s.Checked).OrderBy(s => s.Category).ThenBy(s => s.Name).ToList();
+    private async Task Key(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || string.IsNullOrWhiteSpace(quick)) return;
+        await Kitchen.AddToShoppingAsync(quick.Trim());
+        quick = "";
+    }
+}

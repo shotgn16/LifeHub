@@ -1,10 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="@Look.Theme" data-density="@Look.Density">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <base href="@BaseHref" />
-    <link rel="stylesheet" href="app.css?v=10" />
+    <link rel="stylesheet" href="css/theme.css?v=11" />
+    <link rel="stylesheet" href="app.css?v=11" />
+    @if (!string.IsNullOrEmpty(Look.Accent))
+    {
+        <style>:root{--accent:@Look.Accent;--accent-soft:color-mix(in srgb,@Look.Accent 14%,var(--surface));}</style>
+    }
+    <link rel="stylesheet" href="custom.css?v=@CustomVersion" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -18,8 +24,29 @@
 </body>
 </html>
 
+@inject SettingsService Settings
+@inject DataPaths Paths
+
 @code {
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    private sealed record Appearance(string Theme, string Density, string Accent);
+
+    /// <summary>The signed-in person's choices from Settings → Appearance.</summary>
+    private Appearance Look
+    {
+        get
+        {
+            var me = Settings.Me;
+            var accent = me?.Accent ?? "";
+            if (!System.Text.RegularExpressions.Regex.IsMatch(accent, "^#[0-9a-fA-F]{6}$")) accent = "";
+            return new(me?.Theme is "light" or "dark" ? me.Theme : "auto", me?.Density == "compact" ? "compact" : "comfortable", accent);
+        }
+    }
+
+    /// <summary>Changes whenever the custom CSS changes, so browsers fetch the new one.</summary>
+    private string CustomVersion => (Settings.Household.General.CustomCss.GetHashCode() ^
+        (File.Exists(Paths.CustomCssFile) ? File.GetLastWriteTimeUtc(Paths.CustomCssFile).Ticks.GetHashCode() : 0)).ToString("x");
 
     // Works at "/" and under Home Assistant ingress ("/api/hassio_ingress/<token>/").
     private string BaseHref => (HttpContext.Request.PathBase.Value ?? "").TrimEnd('/') + "/";

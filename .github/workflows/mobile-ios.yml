@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths: ["mobile/ios/**", ".github/workflows/mobile-ios.yml"]
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build:

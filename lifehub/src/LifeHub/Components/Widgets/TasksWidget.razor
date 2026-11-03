@@ -1,0 +1,36 @@
+@inherits LiveComponent
+@inject TaskService Tasks
+@inject SettingsService Settings
+@inject Clock Clock
+
+<WidgetCard Title="Due today" Icon="tasks" Link="tasks" LinkText="All tasks" Wide="true" Flush="true">
+    <div style="padding:8px 16px 4px">
+        <div class="inline-form">
+            <input type="text" placeholder="Add a task for today…" @bind="quick" @bind:event="oninput" @onkeydown="Key" />
+            <button class="btn" @onclick="Add" disabled="@string.IsNullOrWhiteSpace(quick)" aria-label="Add"><Icon Name="plus" Size="15" /></button>
+        </div>
+    </div>
+    <ul class="list">
+        @if (due.Count == 0) { <li class="empty">Nothing due today. 🎉</li> }
+        @foreach (var t in due.Take(10)) { <TaskRow Task="t" /> }
+        @if (due.Count > 10) { <li class="row small muted"><a href="tasks">+@(due.Count - 10) more</a></li> }
+    </ul>
+</WidgetCard>
+
+@code {
+    private List<TaskItem> due = new();
+    private string quick = "";
+
+    protected override void OnInitialized() { Watch(Tasks.Repo); Load(); }
+    protected override void OnDataChanged() => Load();
+    private void Load() => due = Tasks.DueToday().ToList();
+
+    private async Task Key(KeyboardEventArgs e) { if (e.Key == "Enter") await Add(); }
+
+    private async Task Add()
+    {
+        if (string.IsNullOrWhiteSpace(quick)) return;
+        await Tasks.QuickAddAsync(quick, Settings.Current.General.TaskCategories.FirstOrDefault() ?? "Admin", Clock.Today);
+        quick = "";
+    }
+}

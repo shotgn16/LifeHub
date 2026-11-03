@@ -1,0 +1,19 @@
+LifeHub for Mac
+===============
+
+1. Drag LifeHub onto the Applications folder.
+2. Open Applications and double-click LifeHub.
+
+The first time, macOS says LifeHub "can't be opened" or is from an
+"unidentified developer" (it isn't notarised by Apple yet). To allow it once:
+
+   System Settings → Privacy & Security → scroll down → next to
+   "LifeHub was blocked…" press "Open Anyway", then "Open".
+
+   (Or in Terminal:  xattr -dr com.apple.quarantine /Applications/LifeHub.app)
+
+LifeHub then opens its setup assistant and asks how you want to use it:
+just this Mac, this Mac + your phone, a household server, Docker or
+Home Assistant. It can also install the free AI (Ollama) for you.
+
+Full manual: https://github.com/shotgn16/LifeHub/tree/main/docs/manual

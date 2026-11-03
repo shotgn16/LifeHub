@@ -1,40 +1,86 @@
 name: Release
 
+# Tag a version (git tag v3.0.0 && git push --tags) to publish a GitHub release with everything:
+# desktop installers (Windows, macOS, Linux), the Android APK, the unsigned iPhone/iPad app, and a
+# portable build for servers. Release notes come from CHANGELOG.md.
+
 on:
   push:
     tags: ["v*"]
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
+  desktop:
+    uses: ./.github/workflows/desktop.yml
+    with:
+      version: ${{ github.ref_name }}
+  android:
+    uses: ./.github/workflows/mobile-android.yml
+    secrets: inherit
+  ios:
+    uses: ./.github/workflows/mobile-ios.yml
+
   release:
+    needs: [desktop, android, ios]
+    if: ${{ !cancelled() && needs.desktop.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Publish (framework-dependent, any OS)
+      - name: Version
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Portable server build (any OS with .NET 8)
         run: |
-          dotnet publish lifehub/src/LifeHub/LifeHub.csproj -c Release -o publish /p:UseAppHost=false
-          cd publish && zip -qr ../lifehub-${GITHUB_REF_NAME}-portable.zip .
+          dotnet publish lifehub/src/LifeHub/LifeHub.csproj -c Release -o publish /p:UseAppHost=false /p:Version=${{ steps.v.outputs.version }}
+          mkdir -p files && (cd publish && zip -qr ../files/LifeHub-${{ steps.v.outputs.version }}-server-portable.zip .)
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect files
+        run: |
+          v=${{ steps.v.outputs.version }}
+          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.tar.gz" -o -name "LifeHub-*-macOS-*.zip" \) -exec cp {} files/ \;
+          apk=$(find artifacts -name "*.apk" | head -1); [ -n "$apk" ] && cp "$apk" "files/LifeHub-$v-Android.apk"
+          ipa=$(find artifacts -name "*.ipa" | head -1); [ -n "$ipa" ] && cp "$ipa" "files/LifeHub-$v-iPhone-iPad-unsigned.ipa"
+          (cd files && sha256sum * > SHA256SUMS.txt)
+          ls -la files
       - name: Release notes from CHANGELOG.md
         run: |
-          ver="${GITHUB_REF_NAME#v}"
+          ver="${{ steps.v.outputs.version }}"
           awk -v v="$ver" '
             $0 ~ "^## \\[" v "\\]" {f=1; next}
             f && /^## \[/ {exit}
             f {print}
           ' CHANGELOG.md > notes.md
-          cat notes.md
+          cat >> notes.md <<'MD'
+
+          ### Downloads
+          | You have | Download |
+          |---|---|
+          | Windows 10/11 | `…-Windows-x64-Setup.exe` |
+          | Mac with Apple chip (M1 or later) | `…-macOS-AppleSilicon.dmg` |
+          | Mac with Intel chip | `…-macOS-Intel.dmg` |
+          | Ubuntu, Debian, Mint, Raspberry Pi OS | `…-Linux-amd64.deb` (or `arm64`) |
+          | Other Linux | `…-Linux-amd64.tar.gz` (or `arm64`), then `./install.sh` |
+          | Android | `…-Android.apk` |
+          | iPhone / iPad | `…-iPhone-iPad-unsigned.ipa` (sideload) |
+          | Docker | `docker run -d -p 8099:8099 -v lifehub-data:/data ghcr.io/shotgn16/lifehub:latest` |
+          | Home Assistant | add the repository `https://github.com/shotgn16/LifeHub` |
+
+          Step-by-step guides: [docs/manual](https://github.com/shotgn16/LifeHub/tree/main/docs/manual)
+          MD
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" lifehub-${GITHUB_REF_NAME}-portable.zip --clobber
+            gh release upload "$GITHUB_REF_NAME" files/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" lifehub-${GITHUB_REF_NAME}-portable.zip \
-              --title "LifeHub ${GITHUB_REF_NAME}" --notes-file notes.md
+            gh release create "$GITHUB_REF_NAME" files/* --title "LifeHub ${GITHUB_REF_NAME}" --notes-file notes.md
           fi

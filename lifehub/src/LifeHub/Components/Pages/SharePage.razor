@@ -1,0 +1,68 @@
+@page "/share"
+@page "/bible/share"
+@* Things shared to LifeHub from a phone's share menu (the installed web app or the LifeHub phone apps). *@
+@inject NotesService Notes
+@inject TaskService Tasks
+@inject KitchenService Kitchen
+@inject SettingsService Settings
+@inject UiState Ui
+@inject NavigationManager Nav
+
+<PageTitle>Save to LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Save to LifeHub</h1>
+        <div class="sub">Choose what to do with what you shared.</div>
+    </div>
+</div>
+
+<div class="card share-card">
+    <textarea rows="6" @bind="text" @bind:event="oninput"></textarea>
+    @if (done is null)
+    {
+        <div class="share-actions">
+            <button class="btn primary" @onclick="AsNote" disabled="@string.IsNullOrWhiteSpace(text)"><Icon Name="note" Size="15" /> Save as a note</button>
+            <button class="btn" @onclick="AsTask" disabled="@string.IsNullOrWhiteSpace(text)"><Icon Name="tasks" Size="15" /> Add as a task</button>
+            <button class="btn" @onclick="AsShopping" disabled="@string.IsNullOrWhiteSpace(text)"><Icon Name="cart" Size="15" /> Add to shopping (one item per line)</button>
+        </div>
+    }
+    else
+    {
+        <div class="alert ok" style="margin:12px 0 0">@done <a href="@doneLink" style="margin-left:6px">Open</a></div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Title { get; set; }
+    [SupplyParameterFromQuery] public string? Text { get; set; }
+    [SupplyParameterFromQuery] public string? Url { get; set; }
+
+    private string text = "";
+    private string? done;
+    private string doneLink = "";
+
+    protected override void OnInitialized() =>
+        text = string.Join("\n", new[] { Title, Text, Url }.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct()).Trim();
+
+    private async Task AsNote() => await Ui.Try(async () =>
+    {
+        await Notes.AddAsync(text, source: "share");
+        done = "Saved to your notes."; doneLink = "notes";
+    });
+
+    private async Task AsTask() => await Ui.Try(async () =>
+    {
+        var first = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? text;
+        var t = await Tasks.QuickAddAsync(first.Length > 140 ? first[..140] : first, Settings.Current.General.TaskCategories.FirstOrDefault() ?? "Admin", source: "share");
+        if (text.Trim() != first) { t.Notes = text.Trim(); await Tasks.SaveAsync(t); }
+        done = "Added to your tasks."; doneLink = "tasks";
+    });
+
+    private async Task AsShopping() => await Ui.Try(async () =>
+    {
+        var lines = text.Split(new[] { '\n', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(l => l.Length is > 0 and < 80).ToList();
+        foreach (var l in lines) await Kitchen.AddToShoppingAsync(l, reason: "Shared");
+        done = $"{lines.Count} item{(lines.Count == 1 ? "" : "s")} added to the shopping list."; doneLink = "shopping";
+    });
+}

@@ -14,7 +14,7 @@ public sealed class PeopleService
         _settings = settings; _sp = sp; _log = log;
     }
 
-    /// <summary>A new person starts from the household's default schedule and Bible settings, with their own API key.</summary>
+    /// <summary>A new person starts from the household's default schedule, with their own API key.</summary>
     public async Task<UserProfile> AddAsync(string name, bool admin, string personEntity = "", string username = "", string password = "")
     {
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Enter a name");
@@ -29,15 +29,14 @@ public sealed class PeopleService
             Colour = Colours[users.Count % Colours.Length],
             Username = username.Trim(), PasswordHash = password.Length > 0 ? PasswordHash.Create(password) : "",
             ApiKey = PasswordHash.NewApiKey(),
-            Schedule = Json.Clone(household.Schedule), Bible = Json.Clone(household.Bible)
+            Schedule = Json.Clone(household.Schedule)
         };
-        user.Bible.AppSensors = new();
         await _settings.UpdateAsync(s => s.Users.Add(user));
         return user;
     }
 
     /// <summary>
-    /// Removes a person: their tasks, emails, mailboxes, Bible history, studies and notes are deleted; anything they
+    /// Removes a person: their tasks, emails, mailboxes and notes are deleted; anything they
     /// added to the kitchen, meals or renewals stays with the household.
     /// </summary>
     public async Task<int> RemoveAsync(Guid id)

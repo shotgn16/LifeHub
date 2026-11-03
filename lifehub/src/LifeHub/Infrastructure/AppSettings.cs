@@ -12,8 +12,8 @@ public sealed class AppSettings
     public OllamaSettings Ollama { get; set; } = new();
     public EmailSettings Email { get; set; } = new();
     public ScheduleSettings Schedule { get; set; } = new();
+
     public NotificationSettings Notifications { get; set; } = new();
-    public BibleSettings Bible { get; set; } = new();
     public MealSettings Meals { get; set; } = new();
     public DealSettings Deals { get; set; } = new();
     /// <summary>The people using LifeHub. The first admin is the "main person" who keeps household data when sharing is off.</summary>
@@ -21,7 +21,7 @@ public sealed class AppSettings
     public HouseholdSettings Household { get; set; } = new();
 }
 
-/// <summary>What the household shares. Tasks, email, Bible and notes are always each person's own.</summary>
+/// <summary>What the household shares. Tasks, email and notes are always each person's own.</summary>
 public sealed class HouseholdSettings
 {
     /// <summary>Food stock, the shopping list and purchase history.</summary>
@@ -32,7 +32,7 @@ public sealed class HouseholdSettings
     public bool ShareRenewals { get; set; } = true;
 }
 
-/// <summary>One person using LifeHub, with their own sign-in, phones, calendars, schedule and Bible settings.</summary>
+/// <summary>One person using LifeHub, with their own sign-in, phones, calendars and schedule.</summary>
 public sealed class UserProfile
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -61,7 +61,17 @@ public sealed class UserProfile
     public bool DailyDigest { get; set; } = true;
     public TimeOnly DailyDigestTime { get; set; } = new(8, 0);
     public ScheduleSettings Schedule { get; set; } = new();
-    public BibleSettings Bible { get; set; } = new();
+
+    // ---- Appearance (Settings → Appearance) ----
+    /// <summary>auto (follow the device) · light · dark</summary>
+    public string Theme { get; set; } = "auto";
+    /// <summary>Accent colour, e.g. #0f766e (empty = the theme's).</summary>
+    public string Accent { get; set; } = "";
+    /// <summary>comfortable · compact</summary>
+    public string Density { get; set; } = "comfortable";
+    /// <summary>Home screen cards this person has hidden, and the order they chose (module keys).</summary>
+    public List<string> DashboardHidden { get; set; } = new();
+    public List<string> DashboardOrder { get; set; } = new();
 
     public bool HasPassword => !string.IsNullOrEmpty(Username) && !string.IsNullOrEmpty(PasswordHash);
     public string Initials => string.Concat((string.IsNullOrWhiteSpace(Name) ? Username : Name).Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -90,6 +100,10 @@ public sealed class GeneralSettings
     public bool ScanInstantKnown { get; set; } = true;
     /// <summary>1.3 upgrade flag: shopping items LifeHub added by itself (low stock, predictions, email) were removed once.</summary>
     public bool ShoppingSourcesMigrated { get; set; }
+    /// <summary>Modules switched off for the whole household (Settings → Modules), e.g. "renewals".</summary>
+    public List<string> DisabledModules { get; set; } = new();
+    /// <summary>Extra CSS applied after the theme (Settings → Appearance), for restyling LifeHub without changing code.</summary>
+    public string CustomCss { get; set; } = "";
     public List<string> TaskCategories { get; set; } = new() { "Work", "Home DIY", "Smart Home", "Personal Care", "Admin", "Errands" };
     public List<string> FoodCategories { get; set; } = new() { "Dairy", "Meat & Fish", "Fruit & Veg", "Bakery", "Frozen", "Tins & Jars", "Dry Goods", "Drinks", "Snacks", "Household", "Other" };
 }
@@ -283,72 +297,6 @@ public sealed class NotificationSettings
 }
 
 public enum NotifyChannel { HomeAssistant, LifeHub, Both }
-
-public sealed class BibleSettings
-{
-    public bool Enabled { get; set; } = true;
-
-    // ---- Reading tracking ----
-    /// <summary>HA sensors reporting the app in use on a phone (Android Companion "Last used app"), e.g. sensor.pixel_8_last_used_app.</summary>
-    public List<string> AppSensors { get; set; } = new();
-    /// <summary>Text that identifies the Bible app in that sensor (package name or app name).</summary>
-    public string AppMatch { get; set; } = "com.sirma.mobile.bible.android";
-    /// <summary>A day counts as "read" (and today's verse as done) after this many minutes in the app.</summary>
-    public int MinMinutes { get; set; } = 2;
-    /// <summary>Time in the Bible app counts as reading the verse of the day.</summary>
-    public bool AppCountsAsVerse { get; set; } = true;
-    /// <summary>After a reading session in the app, send a "What did you read?" notification with one-tap logging.</summary>
-    public bool AskWhatIRead { get; set; }
-    /// <summary>Visits to the app shorter than this don't count (opened by accident, a quick glance).</summary>
-    public int MinSessionSeconds { get; set; } = 45;
-
-    // ---- Verse of the day (YouVersion Platform API, optional) ----
-    /// <summary>Free app key from platform.youversion.com. Without it you can type the day's verse yourself.</summary>
-    public string YouVersionAppKey { get; set; } = "";
-    /// <summary>Bible version id for verse text and links (e.g. 3034 = BSB, 111 = NIV, 59 = ESV, 1 = KJV).</summary>
-    public int VersionId { get; set; } = 3034;
-    public string YouVersionApiBase { get; set; } = "https://api.youversion.com";
-
-    // ---- Keeping on track ----
-    /// <summary>Unread verses and plan readings move to the next day.</summary>
-    public bool CarryOver { get; set; } = true;
-    public bool Reminder { get; set; } = true;
-    public TimeOnly ReminderTime { get; set; } = new(20, 30);
-
-    // ---- Reading plan ----
-    public bool PlanEnabled { get; set; }
-    public string PlanBook { get; set; } = "John";
-    public int PlanNextChapter { get; set; } = 1;
-    public int PlanChaptersPerDay { get; set; } = 1;
-
-    // ---- Study helpers (only when you press "Ask for insights") ----
-    public bool StudyLightEnabled { get; set; } = true;
-    /// <summary>{book} {chapter} {verse} {usfm} placeholders.</summary>
-    public string StudyLightUrl { get; set; } = "https://www.studylight.org/commentary/{book}/{chapter}-{verse}.html";
-    public bool BibliaGraphiaEnabled { get; set; } = true;
-
-    // ---- Go deeper ----
-    /// <summary>1 = Overview (quick), 2 = Detailed, 3 = In-depth study. Deeper reads more StudyLight commentary and takes longer.</summary>
-    public int DeeperLevel { get; set; } = 2;
-    /// <summary>Include original-language (Hebrew/Greek) word studies.</summary>
-    public bool DeeperWordStudies { get; set; } = true;
-    /// <summary>Include reflection questions and a prayer.</summary>
-    public bool DeeperReflection { get; set; } = true;
-    /// <summary>Where you'd like application to focus, e.g. "family life, my small group, work".</summary>
-    public string DeeperFocus { get; set; } = "";
-    public string BibliaGraphiaUrl { get; set; } = "https://bibliagraphia.com/";
-
-    /// <summary>Copies the household-wide parts (app key and study sites) — everything else is each person's own.</summary>
-    public static void CopyHousehold(BibleSettings from, BibleSettings to)
-    {
-        to.YouVersionAppKey = from.YouVersionAppKey;
-        to.YouVersionApiBase = from.YouVersionApiBase;
-        to.StudyLightEnabled = from.StudyLightEnabled;
-        to.StudyLightUrl = from.StudyLightUrl;
-        to.BibliaGraphiaEnabled = from.BibliaGraphiaEnabled;
-        to.BibliaGraphiaUrl = from.BibliaGraphiaUrl;
-    }
-}
 
 public sealed class MealSettings
 {

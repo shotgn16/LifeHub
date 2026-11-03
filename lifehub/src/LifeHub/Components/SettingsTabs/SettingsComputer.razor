@@ -1,0 +1,57 @@
+@using LifeHub.Desktop
+@inject NavigationManager Nav
+
+@* Desktop app only: how LifeHub runs on this computer. Changes go through the setup assistant. *@
+
+<div class="grid cols-2">
+    <div class="card">
+        <h2 style="margin-bottom:8px">How LifeHub runs here</h2>
+        <dl class="facts">
+            <dt>Mode</dt><dd>@ModeText</dd>
+            @if (cfg.Mode is HostMode.LocalAndPhone or HostMode.Server or HostMode.Docker)
+            {
+                <dt>Port</dt><dd>@cfg.Port</dd>
+            }
+            @if (cfg.Mode is HostMode.LocalAndPhone or HostMode.Server)
+            {
+                <dt>In the background</dt><dd>@(serviceInstalled ? cfg.ServiceScope == "system" ? "Yes — starts with the computer" : "Yes — starts when you sign in" : "No — only while the app is open")</dd>
+            }
+            <dt>Data folder</dt><dd><code>@DesktopRuntime.DataDir</code></dd>
+            <dt>System</dt><dd>@DesktopRuntime.Os</dd>
+        </dl>
+        <button class="btn primary" @onclick="RunSetup"><Icon Name="wand" Size="15" /> Change how LifeHub runs…</button>
+        <p class="small muted">Opens the setup assistant again: switch between this computer only, this computer + phone, a household server, Docker, Home Assistant or another LifeHub. Your data stays where it is.</p>
+    </div>
+
+    @if (cfg.OnNetwork)
+    {
+        <div class="card">
+            <h2 style="margin-bottom:8px">Phones and other devices</h2>
+            <p class="small muted" style="margin-top:0">On your Wi-Fi, LifeHub is at:</p>
+            @foreach (var a in DesktopRuntime.LanAddresses()) { <div><code class="big-code">http://@a:@cfg.Port</code></div> }
+            <p class="small muted">Each person's API key is in Settings → Security & API. Away from home you need an https address — see the manual's Remote access page.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private HostConfig cfg = new();
+    private bool serviceInstalled;
+
+    protected override void OnInitialized()
+    {
+        cfg = DesktopRuntime.Config();
+        serviceInstalled = ServiceManager.IsInstalled();
+    }
+
+    private string ModeText => cfg.Mode switch
+    {
+        HostMode.Local => "This computer only",
+        HostMode.LocalAndPhone => "This computer + my phone",
+        HostMode.Server => "Household server",
+        HostMode.Docker => "Docker",
+        _ => "LifeHub somewhere else"
+    };
+
+    private void RunSetup() => Nav.NavigateTo("welcome", forceLoad: true);
+}

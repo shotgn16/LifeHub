@@ -1,0 +1,99 @@
+name: Desktop apps
+
+# Builds the LifeHub desktop apps and their installers. Everything is self-contained (its own .NET runtime):
+#   Windows  LifeHub-<v>-Windows-x64-Setup.exe        (Inno Setup; adds WebView2 if the PC lacks it)
+#   macOS    LifeHub-<v>-macOS-AppleSilicon.dmg / -Intel.dmg   (unsigned, ad-hoc signed)
+#   Linux    LifeHub-<v>-Linux-amd64.deb / -arm64.deb, and .tar.gz with install.sh for other distributions
+# Each build is started once without a window (--server) to check it really runs.
+# Download them from this run's "Artifacts"; tagged releases attach them to the GitHub release.
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["lifehub/src/**", "installer/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64,     name: windows }
+          - { os: macos-15,       rid: osx-arm64,   name: macos-arm64, arch: arm64 }
+          - { os: macos-15,       rid: osx-x64,     name: macos-x64,   arch: x64 }
+          - { os: ubuntu-latest,  rid: linux-x64,   name: linux-amd64, arch: amd64 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64, name: linux-arm64, arch: arm64 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Version
+        id: v
+        run: |
+          v="${{ inputs.version }}"
+          v="${v#v}"
+          [ -z "$v" ] && v=$(grep -oE '<Version>[^<]+' lifehub/src/LifeHub/LifeHub.csproj | sed 's/<Version>//')
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Publish (self-contained, with the app window)
+        run: |
+          set +e +o pipefail
+          dotnet publish lifehub/src/LifeHub/LifeHub.csproj -c Release -r ${{ matrix.rid }} --self-contained true \
+            -p:LifeHubDesktop=true -p:Version=${{ steps.v.outputs.version }} -p:DebugType=none -o out/${{ matrix.rid }} > publish.log 2>&1
+          code=$?
+          grep -E "error|warning NU" publish.log | sort -u | head -30 | while read -r l; do echo "::error::$l"; done
+          [ $code -eq 0 ] || { tail -40 publish.log; exit $code; }
+          ls out/${{ matrix.rid }} | head -50
+      - name: Check it starts (no window)
+        run: |
+          set +e
+          exe=out/${{ matrix.rid }}/LifeHub; [ "${{ matrix.name }}" = windows ] && exe=out/${{ matrix.rid }}/LifeHub.exe
+          if [ "${{ matrix.rid }}" = osx-x64 ]; then echo "Intel build on an Apple Silicon runner — start check skipped"; exit 0; fi
+          "$exe" --server --data "$RUNNER_TEMP/lh-data" --port 18099 > run.log 2>&1 &
+          for i in $(seq 1 40); do curl -sf http://127.0.0.1:18099/health && ok=1 && break; sleep 1; done
+          kill %1 2>/dev/null
+          if [ -z "$ok" ]; then cat run.log | tail -40 | while read -r l; do echo "::error::$l"; done; exit 1; fi
+          curl -sf -o /dev/null -w "welcome: %{http_code}\n" http://127.0.0.1:18099/ || true
+
+      # ---------------------------------------------------------------- Windows
+      - name: Windows installer
+        if: matrix.name == 'windows'
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y | Out-Null
+          Invoke-WebRequest "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile installer/windows/MicrosoftEdgeWebview2Setup.exe
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DAppVersion=${{ steps.v.outputs.version }}" "/DSourceDir=$PWD\out\win-x64" installer/windows/LifeHub.iss
+          if ($LASTEXITCODE -ne 0) { Write-Output "::error::Inno Setup failed ($LASTEXITCODE)"; exit 1 }
+          Get-ChildItem dist
+
+      # ---------------------------------------------------------------- macOS
+      - name: macOS app and disk image
+        if: startsWith(matrix.name, 'macos')
+        run: bash installer/macos/make-app.sh out/${{ matrix.rid }} ${{ steps.v.outputs.version }} ${{ matrix.arch }} dist
+
+      # ---------------------------------------------------------------- Linux
+      - name: Linux packages
+        if: startsWith(matrix.name, 'linux')
+        run: bash installer/linux/build-deb.sh out/${{ matrix.rid }} ${{ steps.v.outputs.version }} ${{ matrix.arch }} dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LifeHub-desktop-${{ matrix.name }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.deb
+            dist/*.tar.gz
+          if-no-files-found: error

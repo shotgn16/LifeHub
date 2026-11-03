@@ -185,8 +185,6 @@ public sealed class AutomationService : BackgroundService
                 var meals = S<MealService>().EntriesFor(today, today).Where(e => !e.Cooked).ToList();
                 if (meals.Count > 0)
                     sections.Add("🍽 Meals today\n" + NotificationService.Bullets(meals.Select(e => $"{e.Slot} · {S<MealService>().TitleOf(e)}"), 3));
-                if (settings.Bible.Enabled && S<BibleService>().VerseFor(today) is { Reference.Length: > 0 } verse)
-                    sections.Add($"📖 Verse of the day · {verse.Reference}");
                 var extras = new List<string>();
                 if (food.Count > 0) extras.Add($"🥛 {food.Count} to use up");
                 if (shopping > 0) extras.Add($"🛒 {shopping} to buy");

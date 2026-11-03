@@ -8,7 +8,7 @@
 @inject SettingsService Settings
 @inject UiState UiState
 @inject NavigationManager Nav
-@inject BibleService Bible
+@inject ModuleRegistry Modules
 @inject Clock Clock
 @inject UserContext User
 
@@ -17,24 +17,18 @@
     <label for="nav-toggle" class="nav-scrim"></label>
     <aside class="sidebar" @onclick="CloseMenu">
         <div class="brand"><span class="brand-mark">L</span> @householdName</div>
-        <NavLink class="nav-link" href="" Match="NavLinkMatch.All"><Icon Name="today" /> Today</NavLink>
-        <NavLink class="nav-link" href="tasks"><Icon Name="tasks" /> Tasks @if (tasksDue > 0) { <span class="count">@tasksDue</span> }</NavLink>
-        <NavLink class="nav-link" href="schedule"><Icon Name="calendar" /> Schedule</NavLink>
-        <NavLink class="nav-link" href="notes"><Icon Name="note" /> Notes</NavLink>
-        <div class="nav-section">Life admin</div>
-        <NavLink class="nav-link" href="renewals"><Icon Name="renewals" /> Renewals</NavLink>
-        <NavLink class="nav-link" href="kitchen"><Icon Name="kitchen" /> Kitchen</NavLink>
-        <NavLink class="nav-link" href="scan"><Icon Name="barcode" /> Scan</NavLink>
-        <NavLink class="nav-link" href="shopping"><Icon Name="cart" /> Shopping @if (shopping > 0) { <span class="count">@shopping</span> }</NavLink>
-        <NavLink class="nav-link" href="meals"><Icon Name="pot" /> Meals</NavLink>
-        @if (bibleEnabled)
+        @foreach (var group in nav.GroupBy(m => m.Section))
         {
-            <div class="nav-section">Faith</div>
-            <NavLink class="nav-link" href="bible"><Icon Name="book" /> Bible @if (bibleToRead > 0) { <span class="count" title="Still to read today">@bibleToRead</span> }</NavLink>
+            @if (group.Key != nav[0].Section) { <div class="nav-section">@group.Key</div> }
+            @foreach (var m in group)
+            {
+                var count = Modules.BadgeOf(m);
+                <NavLink class="nav-link" href="@m.Route" Match="@(m.Route.Length == 0 ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+                    <Icon Name="@m.Icon" /> @m.Title @if (count > 0) { <span class="count">@count</span> }
+                </NavLink>
+            }
         }
-        <div class="nav-section">Connected</div>
-        <NavLink class="nav-link" href="home"><Icon Name="home" /> Home</NavLink>
-        <NavLink class="nav-link" href="inbox"><Icon Name="inbox" /> AI Inbox @if (aiPending > 0) { <span class="count">@aiPending</span> }</NavLink>
+        <div class="nav-section"></div>
         <NavLink class="nav-link" href="settings"><Icon Name="settings" /> Settings</NavLink>
         <div class="sidebar-foot">
             <AuthorizeView>
@@ -110,11 +104,25 @@
     </div>
 
     <nav class="bottom-nav">
-        <NavLink href="" Match="NavLinkMatch.All"><Icon Name="today" Size="21" />Today</NavLink>
-        <NavLink href="tasks"><Icon Name="tasks" Size="21" />Tasks @if (tasksDue > 0) { <span class="count">@tasksDue</span> }</NavLink>
-        <NavLink href="scan" class="scan-fab"><span class="fab"><Icon Name="barcode" Size="22" /></span>Scan</NavLink>
-        <NavLink href="shopping"><Icon Name="cart" Size="21" />Shopping @if (shopping > 0) { <span class="count">@shopping</span> }</NavLink>
-        <label for="nav-toggle"><Icon Name="menu" Size="21" />More @if (aiPending > 0) { <span class="count" title="AI suggestions waiting">@aiPending</span> }</label>
+        @foreach (var m in nav.Where(m => m.BottomBar).Take(2))
+        {
+            var count = Modules.BadgeOf(m);
+            <NavLink href="@m.Route" Match="@(m.Route.Length == 0 ? NavLinkMatch.All : NavLinkMatch.Prefix)"><Icon Name="@m.Icon" Size="21" />@m.Title @if (count > 0) { <span class="count">@count</span> }</NavLink>
+        }
+        @if (Modules.IsOn("scan"))
+        {
+            <NavLink href="scan" class="scan-fab"><span class="fab"><Icon Name="barcode" Size="22" /></span>Scan</NavLink>
+        }
+        else
+        {
+            <a href="" @onclick:preventDefault @onclick="() => captureOpen = true" class="scan-fab"><span class="fab"><Icon Name="plus" Size="22" /></span>Add</a>
+        }
+        @foreach (var m in nav.Where(m => m.BottomBar).Skip(2).Take(1))
+        {
+            var count = Modules.BadgeOf(m);
+            <NavLink href="@m.Route"><Icon Name="@m.Icon" Size="21" />@m.Title @if (count > 0) { <span class="count">@count</span> }</NavLink>
+        }
+        <label for="nav-toggle"><Icon Name="menu" Size="21" />More</label>
     </nav>
 </div>
 
@@ -133,8 +141,8 @@
 
 @code {
     private bool menuOpen, captureOpen, noticesOpen;
-    private int tasksDue, shopping, aiPending, unread, bibleToRead;
-    private bool bibleEnabled;
+    private int unread;
+    private List<LifeHubModule> nav = new();
     private string householdName = "LifeHub";
     private CurrentPeriod? period;
     private List<Notice> recent = new();
@@ -149,8 +157,6 @@
         Ai.Suggestions.Changed += OnChanged;
         Notices.Repo.Changed += OnChanged;
         Settings.Changed += OnChanged;
-        Bible.Plan.Changed += OnChanged;
-        Bible.Verses.Changed += OnChanged;
         UiState.Changed += OnUi;
         Nav.LocationChanged += OnLocation;
         timer = new Timer(_ => _ = InvokeAsync(LoadPeriodAsync), null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
@@ -158,18 +164,11 @@
 
     private void Refresh()
     {
-        tasksDue = Tasks.DueToday().Count;
-        shopping = Kitchen.Shopping.Where(s => !s.Checked).Count;
-        aiPending = Ai.PendingCount;
+        // Menu entries and their counts come from the modules (Modules/ModuleRegistry.cs).
+        nav = Modules.Enabled().ToList();
         unread = Notices.UnreadCount;
         recent = Notices.Recent(25).ToList();
         householdName = Settings.Current.General.HouseholdName;
-        bibleEnabled = Settings.Current.Bible.Enabled;
-        if (bibleEnabled)
-        {
-            var today = Bible.VerseFor(Clock.Today);
-            bibleToRead = Bible.TodayList().Count(p => !p.Done) + (today is { Read: false } && !string.IsNullOrEmpty(today.Reference) ? 1 : 0);
-        }
         Fmt.Culture = CultureInfo.GetCultureInfo(Settings.Current.General.Culture);
     }
 
@@ -207,8 +206,6 @@
         Ai.Suggestions.Changed -= OnChanged;
         Notices.Repo.Changed -= OnChanged;
         Settings.Changed -= OnChanged;
-        Bible.Plan.Changed -= OnChanged;
-        Bible.Verses.Changed -= OnChanged;
         UiState.Changed -= OnUi;
         Nav.LocationChanged -= OnLocation;
     }

@@ -1,0 +1,104 @@
+/*
+  LifeHub theme — every colour, size and font the app uses. Change the look of LifeHub here, or override
+  these in Settings → Appearance (accent colour, light/dark, spacing) or in a custom stylesheet
+  (Settings → Appearance → Custom CSS, or the file custom.css in LifeHub's data folder).
+*/
+:root {
+  --bg: #f4f5f2;
+  --surface: #ffffff;
+  --surface-2: #f8f9f6;
+  --border: #e3e5df;
+  --text: #1d2321;
+  --muted: #69716d;
+  --accent: #0f766e;
+  --accent-soft: #e2f2ef;
+  --accent-text: #ffffff;
+  --warn: #b45309;
+  --warn-soft: #fdf1e1;
+  --danger: #b42318;
+  --danger-soft: #fdeceb;
+  --ok: #2f7d32;
+  --ok-soft: #e7f4e7;
+  --info: #3355a8;
+  --info-soft: #e8eefb;
+  --work: #3355a8;
+  --free: #2f7d32;
+  --sleep: #6b5ca5;
+  --ai: #7c3aed;
+  --ai-soft: #f3edff;
+  --ai-border: #d9c8fb;
+  --shadow: 0 1px 2px rgba(20, 30, 25, .06), 0 2px 8px rgba(20, 30, 25, .04);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --sidebar: 236px;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+
+/* Dark: follows the device unless someone chose light or dark in Settings → Appearance. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121514;
+    --surface: #1b1f1d;
+    --surface-2: #202523;
+    --border: #2d3330;
+    --text: #e7ebe9;
+    --muted: #97a19c;
+    --accent: #2bb3a3;
+    --accent-soft: #173431;
+    --accent-text: #08201d;
+    --warn: #f0a447;
+    --warn-soft: #3a2a14;
+    --danger: #f2776c;
+    --danger-soft: #3c1d1a;
+    --ok: #74c278;
+    --ok-soft: #1c331d;
+    --info: #8fa9ec;
+    --info-soft: #1e2840;
+    --work: #8fa9ec;
+    --free: #74c278;
+    --sleep: #b2a6e6;
+    --ai: #b79cf5;
+    --ai-soft: #251d3b;
+    --ai-border: #44356e;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+    --bg: #121514;
+    --surface: #1b1f1d;
+    --surface-2: #202523;
+    --border: #2d3330;
+    --text: #e7ebe9;
+    --muted: #97a19c;
+    --accent: #2bb3a3;
+    --accent-soft: #173431;
+    --accent-text: #08201d;
+    --warn: #f0a447;
+    --warn-soft: #3a2a14;
+    --danger: #f2776c;
+    --danger-soft: #3c1d1a;
+    --ok: #74c278;
+    --ok-soft: #1c331d;
+    --info: #8fa9ec;
+    --info-soft: #1e2840;
+    --work: #8fa9ec;
+    --free: #74c278;
+    --sleep: #b2a6e6;
+    --ai: #b79cf5;
+    --ai-soft: #251d3b;
+    --ai-border: #44356e;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+}
+
+/* Spacing: "compact" fits more on screen. */
+:root[data-density="compact"] {
+  --radius: 10px;
+  --radius-sm: 7px;
+  --gap: 10px;
+  font-size: 14px;
+}
+:root { --gap: 16px; }

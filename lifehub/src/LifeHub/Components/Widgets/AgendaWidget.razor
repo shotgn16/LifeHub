@@ -1,0 +1,80 @@
+@inherits LiveComponent
+@inject TaskService Tasks
+@inject ScheduleService Schedule
+@inject CalendarService Calendar
+@inject Clock Clock
+
+<WidgetCard Title="Agenda" Icon="calendar" Link="schedule" LinkText="Schedule">
+    @if (periods.Count > 0)
+    {
+        <div class="period-bar" title="Today's periods">
+            @foreach (var seg in Segments())
+            {
+                <span class="@seg.Css" style="width:@seg.Pct.ToString("0.##", CultureInfo.InvariantCulture)%" title="@seg.Title"></span>
+            }
+        </div>
+        <div class="tiny muted" style="display:flex;justify-content:space-between"><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+    }
+    <ul class="list" style="margin-top:8px">
+        @if (!loaded) { <li class="empty small">Loading…</li> }
+        else if (agenda.Count == 0) { <li class="empty small">Nothing on today</li> }
+        @foreach (var a in agenda)
+        {
+            <li class="row">
+                <span class="small muted nowrap" style="width:48px">@a.When</span>
+                <div class="grow"><div class="title small">@a.Title</div>@if (!string.IsNullOrEmpty(a.Meta)) { <div class="meta">@a.Meta</div> }</div>
+                <span class="badge @(a.IsTask ? "accent" : "warn")">@(a.IsTask ? "task" : "event")</span>
+            </li>
+        }
+    </ul>
+    @if (Calendar.LastErrors.Count > 0) { <div class="alert warn small" style="margin-top:8px">@string.Join("; ", Calendar.LastErrors)</div> }
+</WidgetCard>
+
+@code {
+    private bool loaded;
+    private DateOnly today;
+    private List<DaySegment> periods = new();
+    private List<(string When, string Title, string Meta, bool IsTask)> agenda = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Watch(Tasks.Repo);
+        await LoadAsync();
+    }
+
+    protected override void OnDataChanged() => _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    private async Task LoadAsync()
+    {
+        today = Clock.Today;
+        try
+        {
+            var (p, events) = await Schedule.DayAsync(today);
+            periods = p;
+            var scheduled = Tasks.Open().Where(t => t.ScheduledStart is { } s && DateOnly.FromDateTime(s) == today);
+            agenda = events.Select(e => (e.AllDay ? "all day" : e.Start.ToString("HH:mm"), e.Title, e.Location, false))
+                .Concat(scheduled.Select(t => (t.ScheduledStart!.Value.ToString("HH:mm"), t.Title, t.Category, true)))
+                .OrderBy(a => a.Item1 == "all day" ? "" : a.Item1).ToList();
+        }
+        catch { agenda = new(); }
+        loaded = true;
+    }
+
+    private record Seg(string Css, double Pct, string Title);
+
+    private IEnumerable<Seg> Segments()
+    {
+        var start = today.ToDateTime(new TimeOnly(6, 0));
+        var total = 18 * 60.0;
+        var cursor = start;
+        foreach (var p in periods.OrderBy(p => p.Start))
+        {
+            var s = p.Start < start ? start : p.Start;
+            var e = p.End > start.AddMinutes(total) ? start.AddMinutes(total) : p.End;
+            if (e <= s) continue;
+            if (s > cursor) yield return new Seg("gap", (s - cursor).TotalMinutes / total * 100, "");
+            yield return new Seg("k-" + p.Kind, (e - s).TotalMinutes / total * 100, $"{p.Label} {p.Start:HH:mm}–{p.End:HH:mm}");
+            cursor = e;
+        }
+    }
+}

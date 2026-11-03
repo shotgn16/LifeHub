@@ -1,0 +1,22 @@
+@inherits LiveComponent
+@inject MealService Meals
+@inject Clock Clock
+
+<WidgetCard Title="Meals" Icon="pot" Link="meals" LinkText="Planner">
+    <ul class="list">
+        @if (entries.Count == 0) { <li class="empty small">Nothing planned for today or tomorrow. <a href="meals">Plan meals</a></li> }
+        @foreach (var e in entries)
+        {
+            <li class="row @(e.Cooked ? "done" : "")">
+                <div class="grow"><div class="title">@Meals.TitleOf(e)</div><div class="meta">@Fmt.RelDay(e.Date, Clock.Today) · @e.Slot</div></div>
+            </li>
+        }
+    </ul>
+</WidgetCard>
+
+@code {
+    private List<MealPlanEntry> entries = new();
+    protected override void OnInitialized() { Watch(Meals.Entries); Load(); }
+    protected override void OnDataChanged() => Load();
+    private void Load() => entries = Meals.EntriesFor(Clock.Today, Clock.Today.AddDays(1)).OrderBy(e => e.Date).ToList();
+}

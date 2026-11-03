@@ -22,6 +22,7 @@
             }
             <form method="post" action="auth/setup">
                 <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                 <div class="field">
                     <label for="n">Your name</label>
                     <input id="n" type="text" name="name" autocomplete="name" placeholder="e.g. Alex" />
@@ -47,4 +48,5 @@
 @code {
     [CascadingParameter] private HttpContext? HttpContext { get; set; }
     [SupplyParameterFromQuery] public string? Error { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
 }

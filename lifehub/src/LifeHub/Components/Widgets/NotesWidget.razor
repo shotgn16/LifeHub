@@ -1,0 +1,32 @@
+@inherits LiveComponent
+@inject NotesService Notes
+
+<WidgetCard Title="Notes" Icon="note" Link="notes" LinkText="All notes">
+    <div class="inline-form" style="margin-bottom:6px">
+        <input type="text" placeholder="Drop a note…" @bind="quick" @bind:event="oninput" @onkeydown="Key" />
+    </div>
+    <ul class="list">
+        @if (notes.Count == 0) { <li class="empty small">No notes yet</li> }
+        @foreach (var n in notes)
+        {
+            <li class="row">
+                @if (n.Pinned) { <Icon Name="pin" Size="14" /> }
+                <div class="grow"><div class="title small clamp-2">@n.Text</div><div class="meta">@(string.IsNullOrEmpty(n.Category) ? NotesService.Unsorted : n.Category)</div></div>
+            </li>
+        }
+    </ul>
+</WidgetCard>
+
+@code {
+    private List<Note> notes = new();
+    private string quick = "";
+    protected override void OnInitialized() { Watch(Notes.Repo); Load(); }
+    protected override void OnDataChanged() => Load();
+    private void Load() => notes = Notes.All().Take(4).ToList();
+    private async Task Key(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || string.IsNullOrWhiteSpace(quick)) return;
+        await Notes.AddAsync(quick);
+        quick = "";
+    }
+}

@@ -1,0 +1,542 @@
+@page "/welcome"
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@using LifeHub.Desktop
+@inject SettingsService Settings
+@inject UserContext User
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+@* The desktop app's setup assistant: how LifeHub runs on this computer, the account, the AI and the phone app.
+   Opened automatically on first run, and from Settings → This computer (or "LifeHub --setup") later. *@
+
+<PageTitle>Welcome · LifeHub</PageTitle>
+
+<div class="welcome">
+    <div class="welcome-head">
+        <span class="brand-mark">L</span>
+        <div>
+            <h1>@Heading</h1>
+            <div class="muted small">LifeHub @Version · @DesktopRuntime.Os</div>
+        </div>
+    </div>
+
+    @if (!DesktopRuntime.Active)
+    {
+        <div class="card"><p>The setup assistant is part of the LifeHub desktop app. This LifeHub is set up in <a href="settings">Settings</a>.</p></div>
+    }
+    else if (Settings.HasLogin && !User.IsAdmin)
+    {
+        <div class="card"><p>Only an admin can change how LifeHub runs on this computer. <a href="login?returnUrl=%2Fwelcome">Sign in</a></p></div>
+    }
+    else
+    {
+        <ol class="welcome-steps" aria-label="Steps">
+            @foreach (var (s, label) in Steps)
+            {
+                <li class="@(s == step ? "on" : StepIndex(s) < StepIndex(step) ? "done" : "")">@label</li>
+            }
+        </ol>
+
+        @if (!string.IsNullOrEmpty(Problem))
+        {
+            <div class="alert warn">
+                @(Problem == "docker" ? "LifeHub in Docker isn't answering. Start Docker (Docker Desktop on Windows and Mac), then choose Docker again — or pick another way below."
+                                      : "The LifeHub address you chose can't be reached right now. Check the address and that the other computer (or Home Assistant) is on, or pick another way below.")
+            </div>
+        }
+        @if (serviceNote is { } sn)
+        {
+            <div class="alert @(sn.Ok ? "ok" : "warn")">@sn.Text</div>
+        }
+
+        @switch (step)
+        {
+            case Step.Mode:
+                <div class="card">
+                    <h2>How do you want to use LifeHub?</h2>
+                    <p class="muted small" style="margin-top:0">You can change this later in Settings → This computer.</p>
+                    <div class="mode-grid">
+                        @foreach (var m in Modes)
+                        {
+                            <button type="button" class="mode-card @(choice == m.Key ? "on" : "")" @onclick="() => Pick(m.Key)">
+                                <Icon Name="@m.Icon" Size="22" />
+                                <strong>@m.Title</strong>
+                                <span class="small muted">@m.Text</span>
+                                @if (m.Best) { <span class="badge ok">most people</span> }
+                            </button>
+                        }
+                    </div>
+                </div>
+                <div class="welcome-actions">
+                    <button class="btn primary" disabled="@(choice is null)" @onclick="() => step = Step.Details">Next</button>
+                </div>
+                break;
+
+            case Step.Details:
+                <div class="card">
+                    @switch (choice)
+                    {
+                        case "local":
+                            <h2>This computer only</h2>
+                            <p>LifeHub runs inside this app and keeps everything in your user folder:</p>
+                            <p><code>@DesktopRuntime.DataDir</code></p>
+                            <p class="small muted">Nothing is reachable from other devices. Want your phone too later? Run the setup again and pick “This computer + my phone”.</p>
+                            break;
+
+                        case "phone":
+                            <h2>This computer + my phone</h2>
+                            <p>LifeHub runs in the background so the phone app can reach it, even when this window is closed.</p>
+                            <div class="form-grid">
+                                <div class="field"><label>Port</label><input type="number" min="1024" max="65535" @bind="port" /><div class="help">8099 unless something else uses it.</div></div>
+                                <div class="field full">
+                                    <label class="check"><input type="checkbox" @bind="background" /> <span>Keep LifeHub running when I close the app, and start it when I sign in <span class="small muted">(recommended, so the phone always works)</span></span></label>
+                                </div>
+                            </div>
+                            <p class="small muted">Your computer may ask whether LifeHub may accept connections from your network — choose <strong>Allow</strong> (private networks).</p>
+                            break;
+
+                        case "server":
+                            <h2>A server for my household</h2>
+                            <p>LifeHub runs all the time in the background. Everyone gets their own account, and each person's phone app connects to this computer.</p>
+                            <div class="form-grid">
+                                <div class="field"><label>Port</label><input type="number" min="1024" max="65535" @bind="port" /></div>
+                                <div class="field full choice-list">
+                                    <label class="check"><input type="radio" name="scope" checked="@(scope == "system")" @onchange="@(() => scope = "system")" /> <span><strong>When the computer starts</strong><br /><span class="small muted">Even before anyone signs in. Your computer asks for an administrator password once.</span></span></label>
+                                    <label class="check"><input type="radio" name="scope" checked="@(scope == "user")" @onchange="@(() => scope = "user")" /> <span><strong>When I sign in to this computer</strong><br /><span class="small muted">No administrator password needed.</span></span></label>
+                                </div>
+                            </div>
+                            <p class="small muted">Leave the computer on (and set it not to sleep) so phones can always reach LifeHub. Add the rest of the household afterwards in Settings → People.</p>
+                            break;
+
+                        case "docker":
+                            <h2>Docker</h2>
+                            <p>LifeHub runs in a Docker container on this computer (the image <code>@DockerSetup.Image</code>, with your data in the <code>@DockerSetup.Volume</code> volume). This app becomes a window onto it.</p>
+                            <div class="form-grid">
+                                <div class="field"><label>Port</label><input type="number" min="1024" max="65535" @bind="port" /></div>
+                            </div>
+                            @if (docker is null)
+                            {
+                                <p class="muted small">Checking for Docker…</p>
+                            }
+                            else
+                            {
+                                <p class="@(docker.Running ? "" : "text-warn")">@docker.Detail</p>
+                                @if (!docker.Installed)
+                                {
+                                    <p><button class="btn" @onclick="() => Open(DockerSetup.DownloadPage)"><Icon Name="download" Size="15" /> Get Docker</button> <button class="btn" @onclick="CheckDocker"><Icon Name="refresh" Size="15" /> Check again</button></p>
+                                }
+                                else if (!docker.Running)
+                                {
+                                    <p><button class="btn" @onclick="CheckDocker"><Icon Name="refresh" Size="15" /> Check again</button></p>
+                                }
+                            }
+                            @if (log.Count > 0) { <pre class="welcome-log">@string.Join("\n", log.TakeLast(8))</pre> }
+                            <p class="small muted">After it starts, LifeHub in Docker asks you to create your account.</p>
+                            break;
+
+                        case "ha":
+                            <h2>Home Assistant</h2>
+                            <ol class="welcome-list">
+                                <li>
+                                    Add LifeHub to Home Assistant:
+                                    <button class="btn sm" @onclick="@(() => Open("https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fshotgn16%2FLifeHub"))"><Icon Name="link" Size="14" /> Open in Home Assistant</button>
+                                    <div class="small muted">Or in Home Assistant: Settings → Add-ons → Add-on store → ⋮ → Repositories → add <code>https://github.com/shotgn16/LifeHub</code>.</div>
+                                </li>
+                                <li>Install <strong>LifeHub</strong>, turn on <strong>Show in sidebar</strong> and press <strong>Start</strong>.</li>
+                                <li>Enter your Home Assistant address below. This app then opens Home Assistant — LifeHub is in its sidebar.</li>
+                            </ol>
+                            <div class="field"><label>Home Assistant address</label><input type="url" @bind="remote" placeholder="http://homeassistant.local:8123" /></div>
+                            <p class="small muted">Prefer LifeHub on its own? Map the add-on's port (Configuration → Network, e.g. 8099) and enter <code>http://homeassistant.local:8099</code> instead.</p>
+                            break;
+
+                        case "remote":
+                            <h2>LifeHub on another computer</h2>
+                            <p>This app becomes a window onto a LifeHub that's already running somewhere else.</p>
+                            <div class="field"><label>LifeHub address</label><input type="url" @bind="remote" placeholder="http://192.168.1.10:8099" /></div>
+                            break;
+                    }
+                    @if (!string.IsNullOrEmpty(error)) { <div class="alert danger">@error</div> }
+                </div>
+                <div class="welcome-actions">
+                    <button class="btn" @onclick="() => step = Step.Mode" disabled="@busy">Back</button>
+                    <button class="btn primary" @onclick="SaveMode" disabled="@(busy || (choice == "docker" && docker?.Running != true))">
+                        @if (busy) { <span class="spinner"></span> } @(choice is "docker" ? "Install and start" : choice is "ha" or "remote" ? "Connect" : "Next")
+                    </button>
+                </div>
+                break;
+
+            case Step.Account:
+                <div class="card">
+                    <h2>Create your account</h2>
+                    <p class="muted small" style="margin-top:0">@(Config.Mode == HostMode.Local
+                        ? "On this computer the app signs you in automatically. The password is for signing in from a browser."
+                        : "Use this to sign in from a browser. The phone app uses your API key instead (next steps).") You can add the rest of your household later in Settings → People.</p>
+                    <div class="form-grid">
+                        <div class="field full"><label for="n">Your name</label><input id="n" type="text" @bind="acct.Name" autocomplete="name" placeholder="e.g. Alex" /></div>
+                        <div class="field full"><label for="u">Username</label><input id="u" type="text" @bind="acct.Username" autocomplete="username" /></div>
+                        <div class="field"><label for="p">Password</label><input id="p" type="password" @bind="acct.Password" autocomplete="new-password" /></div>
+                        <div class="field"><label for="c">Confirm password</label><input id="c" type="password" @bind="acct.Confirm" autocomplete="new-password" /></div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(error)) { <div class="alert danger">@error</div> }
+                    <div class="welcome-actions">
+                        <button class="btn primary" disabled="@busy" @onclick="CreateAccount">Create account</button>
+                    </div>
+                </div>
+                break;
+
+            case Step.Ai:
+                <div class="card">
+                    <h2>The AI assistant (optional)</h2>
+                    <p class="muted small" style="margin-top:0">LifeHub's AI sorts notes, reads emails into tasks and plans meals. It runs on this computer with <strong>Ollama</strong> (free) — nothing is sent to the internet.</p>
+                    @if (ollama is null)
+                    {
+                        <p class="muted small">Checking for Ollama…</p>
+                    }
+                    else if (!ollama.Running)
+                    {
+                        @if (OllamaSetup.InstalledPath() is not null)
+                        {
+                            <p>Ollama is installed but not running.</p>
+                            <p><button class="btn primary" disabled="@busy" @onclick="InstallOllama">@if (busy) { <span class="spinner"></span> } Start Ollama</button></p>
+                        }
+                        else
+                        {
+                            <p>Ollama isn't installed on this computer. Shall LifeHub install it for you? <span class="small muted">(about 1 GB, then the model below)</span></p>
+                            <p>
+                                <button class="btn primary" disabled="@busy" @onclick="InstallOllama">@if (busy) { <span class="spinner"></span> } Yes, install Ollama</button>
+                                <button class="btn" disabled="@busy" @onclick="SkipAi">No thanks</button>
+                            </p>
+                        }
+                    }
+                    else
+                    {
+                        <p><Icon Name="check" Size="15" /> Ollama is running@(ollama.Models.Count > 0 ? $" with {ollama.Models.Count} model{(ollama.Models.Count == 1 ? "" : "s")}" : "").</p>
+                        <div class="field">
+                            <label>Model</label>
+                            <select @bind="model" disabled="@busy">
+                                @foreach (var m in ModelChoices) { <option value="@m">@m@(m == recommended.Model ? " (recommended)" : "")@(ollama.Models.Contains(m) ? " — downloaded" : "")</option> }
+                            </select>
+                            <div class="help">@recommended.Why</div>
+                        </div>
+                        <p>
+                            <button class="btn primary" disabled="@busy" @onclick="UseModel">
+                                @if (busy) { <span class="spinner"></span> } @(ollama.Models.Contains(model) ? "Use this model" : "Download and use")
+                            </button>
+                        </p>
+                    }
+                    @if (progressText.Length > 0)
+                    {
+                        <div class="small">@progressText</div>
+                        @if (progressPct is { } pct) { <div class="progress"><span style="width:@(pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture))%"></span></div> }
+                    }
+                    @if (!string.IsNullOrEmpty(error)) { <div class="alert danger">@error</div> }
+                    <p class="tiny muted">Skipped it? Set it up any time in Settings → AI (Ollama can also run on another computer).</p>
+                </div>
+                <div class="welcome-actions">
+                    <button class="btn" disabled="@busy" @onclick="SkipAi">@(aiDone ? "Next" : "Skip for now")</button>
+                </div>
+                break;
+
+            case Step.Phone:
+                <div class="card">
+                    <h2>Connect your phone</h2>
+                    <ol class="welcome-list">
+                        <li>Install the LifeHub app (see the manual: <em>Phone apps</em>). Android: the APK from the LifeHub releases page. iPhone and iPad: sideload or TestFlight.</li>
+                        <li>
+                            Enter this address in the app:
+                            @foreach (var a in Addresses) { <div><code class="big-code">@a</code></div> }
+                            @if (Addresses.Count == 0) { <div class="small muted">This computer's network address couldn't be found — check it's connected to your Wi-Fi.</div> }
+                        </li>
+                        <li>
+                            Paste your API key:
+                            @if (showKey) { <div><code class="big-code">@User.Me?.ApiKey</code></div> }
+                            else { <button class="btn sm" @onclick="() => showKey = true"><Icon Name="eye" Size="14" /> Show my API key</button> }
+                            <div class="small muted">Everyone in the household has their own key, in Settings → Security & API.</div>
+                        </li>
+                    </ol>
+                    <p class="small muted">The phone must be on the same Wi-Fi. To use it when you're out, see the manual's <em>Remote access</em> page. The camera scanner needs an https address; elsewhere use <strong>Take photo</strong>.</p>
+                </div>
+                <div class="welcome-actions">
+                    <button class="btn primary" @onclick="() => step = Step.Done">Next</button>
+                </div>
+                break;
+
+            case Step.Done:
+                <div class="card">
+                    <h2>You're all set</h2>
+                    <ul class="welcome-list">
+                        <li><strong>@ModeTitle(Config.Mode)</strong>@(Config.OnNetwork ? $" on port {Config.Port}" : "")</li>
+                        <li>Your data: <code>@DesktopRuntime.DataDir</code></li>
+                        <li>Change any of this in <strong>Settings → This computer</strong>.</li>
+                    </ul>
+                    <p class="small muted">Tip: the home screen is yours to arrange — press <strong>Customise</strong> on it. Turn whole sections on or off in Settings → Modules.</p>
+                </div>
+                <div class="welcome-actions">
+                    <button class="btn primary" @onclick="Finish">Open LifeHub</button>
+                </div>
+                break;
+        }
+    }
+</div>
+
+@code {
+    private enum Step { Mode, Details, Account, Ai, Phone, Done }
+
+    private sealed record ModeInfo(string Key, string Icon, string Title, string Text, bool Best = false);
+
+    private static readonly ModeInfo[] Modes =
+    {
+        new("local", "user", "This computer only", "Just me, on this computer. Simplest.", true),
+        new("phone", "phone", "This computer + my phone", "Just me, here and in the phone app."),
+        new("server", "users", "A server for my household", "Several people and phones, always on."),
+        new("docker", "box", "Docker", "Run LifeHub in a container on this computer."),
+        new("ha", "home", "Home Assistant", "Install it as a Home Assistant add-on."),
+        new("remote", "link", "LifeHub somewhere else", "Open a LifeHub that's already running."),
+    };
+
+    [SupplyParameterFromQuery] public string? Problem { get; set; }
+    [SupplyParameterFromQuery] public string? Svc { get; set; }
+
+    private Step step;
+    private string? choice;
+    private int port = 8099;
+    private bool background = true, busy, aiDone, showKey;
+    private string scope = "system", remote = "", error = "", model = "", progressText = "";
+    private double? progressPct;
+    private (bool Ok, string Text)? serviceNote;
+    private DockerSetup.Status? docker;
+    private OllamaSetup.Status? ollama;
+    private (string Model, string Why) recommended = ("qwen2.5:7b", "");
+    private readonly List<string> log = new();
+    private sealed class AccountForm { public string Name = "", Username = "", Password = "", Confirm = ""; }
+    private readonly AccountForm acct = new();
+    private readonly CancellationTokenSource cts = new();
+
+    private HostConfig Config => DesktopRuntime.Config();
+    private static string Version => typeof(WelcomePage).Assembly.GetName().Version?.ToString(3) ?? "";
+    private string Heading => step == Step.Done ? "Ready" : Settings.HasLogin && Config.SetupDone ? "Set up this computer" : "Welcome to LifeHub";
+
+    private IEnumerable<(Step, string)> Steps
+    {
+        get
+        {
+            yield return (Step.Mode, "How");
+            yield return (Step.Details, "Details");
+            if (choice is not ("docker" or "ha" or "remote"))
+            {
+                yield return (Step.Account, "Account");
+                yield return (Step.Ai, "AI");
+                if (Config.OnNetwork || choice is "phone" or "server") yield return (Step.Phone, "Phone");
+                yield return (Step.Done, "Done");
+            }
+        }
+    }
+
+    private int StepIndex(Step s) => (int)s;
+
+    private List<string> Addresses => DesktopRuntime.LanAddresses().Select(a => $"http://{a}:{Config.Port}").ToList();
+
+    private IEnumerable<string> ModelChoices =>
+        new[] { recommended.Model, "qwen2.5:7b", "qwen2.5:3b", "qwen2.5:1.5b", "llama3.1:8b" }.Concat(ollama?.Models ?? Array.Empty<string>()).Distinct();
+
+    private static string ModeTitle(HostMode m) => m switch
+    {
+        HostMode.Local => "This computer only",
+        HostMode.LocalAndPhone => "This computer + my phone",
+        HostMode.Server => "Household server",
+        HostMode.Docker => "Docker",
+        _ => "LifeHub somewhere else"
+    };
+
+    protected override void OnInitialized()
+    {
+        if (!DesktopRuntime.Active) return;
+        var c = Config;
+        port = c.Port;
+        background = c.Background;
+        scope = c.Mode == HostMode.Server ? c.ServiceScope : "system";
+        remote = c.RemoteUrl;
+        choice = c.ModeChosen ? c.Mode switch
+        {
+            HostMode.Local => "local", HostMode.LocalAndPhone => "phone", HostMode.Server => "server",
+            HostMode.Docker => "docker", _ => remote.Contains(":8123") ? "ha" : "remote"
+        } : null;
+        recommended = OllamaSetup.Recommended();
+        model = recommended.Model;
+        if (Svc is { Length: > 0 } svc)
+            serviceNote = svc.StartsWith("ok:") ? (true, svc[3..]) : (false, svc.StartsWith("error:") ? svc[6..] : svc);
+
+        // Pick up where the assistant left off.
+        if (!string.IsNullOrEmpty(Problem) || !c.ModeChosen || c.Mode is HostMode.Docker or HostMode.Remote) step = Step.Mode;
+        else if (!Settings.HasLogin) step = Step.Account;
+        else if (!c.SetupDone) step = Step.Ai;
+        else step = Step.Mode;     // run again later: start from the top
+        if (!string.IsNullOrEmpty(Problem) && choice is not null) step = Step.Details;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first || !DesktopRuntime.Active) return;
+        if (step == Step.Ai) await CheckOllama();
+        if (choice == "docker") await CheckDocker();
+    }
+
+    private async Task Pick(string key)
+    {
+        choice = key;
+        error = "";
+        if (key == "docker") { docker = null; _ = CheckDocker(); }
+        if (key == "ha" && string.IsNullOrEmpty(remote)) remote = "http://homeassistant.local:8123";
+        await Task.CompletedTask;
+    }
+
+    private async Task CheckDocker()
+    {
+        docker = await DockerSetup.CheckAsync(cts.Token);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CheckOllama()
+    {
+        ollama = await OllamaSetup.CheckAsync();
+        if (ollama.Running && ollama.Models.Count > 0 && !ollama.Models.Contains(model))
+        {
+            var have = ollama.Models.FirstOrDefault(m => m.StartsWith("qwen2.5") || m.StartsWith("llama3"));
+            if (have is not null) model = have;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void Open(string url) => DesktopRuntime.OpenInBrowser(url);
+
+    private async Task<bool> Restart()
+    {
+        try { return await JS.InvokeAsync<bool>("eval", "!!(window.external && window.external.sendMessage && (window.external.sendMessage('restart'), true))"); }
+        catch { return false; }
+    }
+
+    private async Task SaveMode()
+    {
+        error = "";
+        if (port is < 1024 or > 65535) { error = "Choose a port between 1024 and 65535."; return; }
+        var c = Config;
+        var portChanged = c.Port != port;
+        if (choice is "phone" or "server" or "docker" && portChanged && !DesktopRuntime.PortFree(port))
+        {
+            error = $"Port {port} is already in use on this computer. Try another, such as {port + 1}.";
+            return;
+        }
+        busy = true;
+        try
+        {
+            c.Port = port;
+            c.ModeChosen = true;
+            switch (choice)
+            {
+                // The rest of the assistant (account, AI, phone) follows once LifeHub runs in its new place.
+                case "local": c.Mode = HostMode.Local; c.Background = false; c.SetupDone = false; break;
+                case "phone": c.Mode = HostMode.LocalAndPhone; c.Background = background; c.ServiceScope = "user"; c.SetupDone = false; break;
+                case "server": c.Mode = HostMode.Server; c.Background = true; c.ServiceScope = scope; c.SetupDone = false; break;
+                case "docker":
+                    log.Clear();
+                    var p = new Progress<string>(line => { lock (log) log.Add(line); _ = InvokeAsync(StateHasChanged); });
+                    await DockerSetup.RunContainerAsync(port, p, cts.Token);
+                    c.Mode = HostMode.Docker; c.SetupDone = true;
+                    break;
+                case "ha":
+                case "remote":
+                    var url = remote.Trim().TrimEnd('/');
+                    if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || u.Scheme is not ("http" or "https"))
+                        throw new InvalidOperationException("Enter the full address, starting with http:// or https://");
+                    c.Mode = HostMode.Remote; c.RemoteUrl = url; c.SetupDone = true;
+                    break;
+            }
+            DesktopRuntime.Save(c);
+
+            // The app window moves LifeHub to where it now runs (the background service, Docker…) and comes back here.
+            if (await Restart()) return;
+            step = c.SetupDone ? Step.Done : Settings.HasLogin ? Step.Ai : Step.Account;
+            if (step == Step.Ai) await CheckOllama();
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task InstallOllama()
+    {
+        busy = true; error = "";
+        try
+        {
+            await OllamaSetup.InstallAsync(new Progress<string>(t => { progressText = t; progressPct = null; _ = InvokeAsync(StateHasChanged); }), cts.Token);
+            progressText = "";
+            await CheckOllama();
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task UseModel()
+    {
+        busy = true; error = "";
+        try
+        {
+            if (ollama?.Models.Contains(model) != true)
+            {
+                await OllamaSetup.PullAsync(model, new Progress<(string Status, double? Percent)>(x =>
+                {
+                    progressText = x.Status switch { "success" => "Downloaded", var s when s.StartsWith("pulling") => "Downloading " + model + "…", var s => s };
+                    progressPct = x.Percent;
+                    _ = InvokeAsync(StateHasChanged);
+                }), cts.Token);
+            }
+            var m = model;
+            await Settings.UpdateAsync(s => { s.Ollama.Enabled = true; s.Ollama.Url = OllamaSetup.Url; s.Ollama.Model = m; });
+            progressText = $"The AI is ready, using {model}.";
+            progressPct = null;
+            aiDone = true;
+            await CheckOllama();
+        }
+        catch (Exception ex) { error = "The model couldn't be downloaded: " + ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task CreateAccount()
+    {
+        error = "";
+        if (Settings.HasLogin) { step = Step.Ai; return; }
+        if (string.IsNullOrWhiteSpace(acct.Username)) { error = "Choose a username."; return; }
+        if (acct.Password.Length < 8) { error = "Passwords need at least 8 characters."; return; }
+        if (acct.Password != acct.Confirm) { error = "The two passwords don't match."; return; }
+        busy = true;
+        try
+        {
+            var a = acct;
+            await Settings.UpdateAsync(s =>
+            {
+                var u = s.Users.FirstOrDefault(x => x.IsAdmin) ?? s.Users[0];
+                u.Username = a.Username.Trim();
+                u.PasswordHash = PasswordHash.Create(a.Password);
+                if (!string.IsNullOrWhiteSpace(a.Name)) u.Name = a.Name.Trim();
+                else if (u.Name is "" or "Me") u.Name = char.ToUpperInvariant(u.Username[0]) + u.Username[1..];
+                if (string.IsNullOrEmpty(u.ApiKey)) u.ApiKey = PasswordHash.NewApiKey();
+            });
+            // Sign in (cookies need a page load) and come back to the next step.
+            Nav.NavigateTo("auth/desktop?once=" + DesktopRuntime.IssueOnce(Settings.PrimaryUserId) + "&returnUrl=%2Fwelcome", forceLoad: true);
+        }
+        catch (Exception ex) { error = ex.Message; busy = false; }
+    }
+
+    private void SkipAi() => step = Config.OnNetwork ? Step.Phone : Step.Done;
+
+    private async Task Finish()
+    {
+        var c = Config;
+        c.SetupDone = true;
+        DesktopRuntime.Save(c);
+        if (!await Restart()) Nav.NavigateTo(Nav.BaseUri, forceLoad: true);
+    }
+
+    public void Dispose() { cts.Cancel(); cts.Dispose(); }
+}

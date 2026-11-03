@@ -1,0 +1,35 @@
+@inherits LiveComponent
+@inject RenewalService Renewals
+@inject SettingsService Settings
+@inject Clock Clock
+
+<WidgetCard Title="Renewals" Icon="renewals" Link="renewals" LinkText="All">
+    <div class="widget-stat"><strong>@Fmt.Money(monthly, Settings.Current.General.Currency)</strong> <span class="muted small">a month</span></div>
+    <ul class="list">
+        @if (soon.Count == 0) { <li class="empty small">Nothing renewing in the next @Settings.Current.General.RenewalWarningDays days</li> }
+        @foreach (var r in soon.Take(5))
+        {
+            var d = r.DaysUntil(Clock.Today);
+            <li class="row">
+                <div class="grow">
+                    <div class="title">@r.Name</div>
+                    <div class="meta">@Fmt.Money(r.Cost, r.Currency) @r.CycleLabel @if (!r.AutoRenew) { <span class="badge warn">manual</span> }</div>
+                </div>
+                <span class="badge @Fmt.DaysClass(d, 7)">@Fmt.RelDay(r.NextRenewal, Clock.Today)</span>
+            </li>
+        }
+    </ul>
+</WidgetCard>
+
+@code {
+    private List<Renewal> soon = new();
+    private decimal monthly;
+
+    protected override void OnInitialized() { Watch(Renewals.Repo); Load(); }
+    protected override void OnDataChanged() => Load();
+    private void Load()
+    {
+        soon = Renewals.DueWithin(Settings.Current.General.RenewalWarningDays).ToList();
+        monthly = Renewals.MonthlyTotal();
+    }
+}

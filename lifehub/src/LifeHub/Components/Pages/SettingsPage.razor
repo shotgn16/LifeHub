@@ -12,7 +12,7 @@
 </div>
 
 <div class="tabs">
-    @foreach (var (key, label) in Tabs.Where(t => User.IsAdmin || PersonalTabs.Contains(t.Item1)))
+    @foreach (var (key, label) in Tabs.Where(t => (User.IsAdmin || PersonalTabs.Contains(t.Item1)) && (t.Item1 != "computer" || LifeHub.Desktop.DesktopRuntime.Active)))
     {
         <a class="tab @(Current == key ? "on" : "")" href="settings?tab=@key" style="text-decoration:none">@label</a>
     }
@@ -21,14 +21,16 @@
 @switch (Current)
 {
     case "people" when User.IsAdmin: <SettingsPeople /> break;
+    case "modules" when User.IsAdmin: <SettingsModules /> break;
+    case "appearance": <SettingsAppearance /> break;
     case "ha": <SettingsHomeAssistant /> break;
     case "ai" when User.IsAdmin: <SettingsAi /> break;
     case "email": <SettingsEmail /> break;
     case "notifications": <SettingsNotifications /> break;
-    case "bible": <SettingsBible /> break;
     case "security": <SettingsSecurity /> break;
     case "backup" when User.IsAdmin: <SettingsBackup /> break;
     case "general" when User.IsAdmin: <SettingsGeneral /> break;
+    case "computer" when User.IsAdmin && LifeHub.Desktop.DesktopRuntime.Active: <SettingsComputer /> break;
     default:
         if (User.IsAdmin) { <SettingsGeneral /> } else { <SettingsEmail /> }
         break;
@@ -37,12 +39,12 @@
 @code {
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
     private string Current => Tab ?? (User.IsAdmin ? "general" : "email");
-    /// <summary>Tabs everyone sees (their own mailboxes, phones, Bible and sign-in); the rest are for admins.</summary>
-    private static readonly HashSet<string> PersonalTabs = new() { "ha", "email", "notifications", "bible", "security" };
+    /// <summary>Tabs everyone sees (their own mailboxes, phones and sign-in); the rest are for admins.</summary>
+    private static readonly HashSet<string> PersonalTabs = new() { "appearance", "ha", "email", "notifications", "security" };
 
     private static readonly (string, string)[] Tabs =
     {
-        ("general", "General"), ("people", "People"), ("ha", "Home Assistant"), ("ai", "AI"), ("email", "Email"),
-        ("notifications", "Notifications"), ("bible", "Bible"), ("security", "Security & API"), ("backup", "Backup")
+        ("general", "General"), ("appearance", "Appearance"), ("modules", "Modules"), ("people", "People"), ("ha", "Home Assistant"), ("ai", "AI"), ("email", "Email"),
+        ("notifications", "Notifications"), ("security", "Security & API"), ("backup", "Backup"), ("computer", "This computer")
     };
 }
