@@ -19,7 +19,7 @@ import java.net.URLEncoder
 
 /**
  * LifeHub in a full-screen web view, signed in with your API key. Adds what a browser can't:
- * the share menu, home-screen shortcuts, background notifications and Bible-app timing.
+ * the share menu, home-screen shortcuts, background notifications and offline mode.
  */
 class MainActivity : Activity() {
     private lateinit var prefs: Prefs
@@ -145,7 +145,7 @@ class MainActivity : Activity() {
         if (intent.action == Intent.ACTION_SEND) {
             val text = listOfNotNull(intent.getStringExtra(Intent.EXTRA_SUBJECT), intent.getStringExtra(Intent.EXTRA_TEXT))
                 .joinToString("\n").trim()
-            if (text.isNotEmpty()) return "bible/share?text=" + URLEncoder.encode(text, "UTF-8")
+            if (text.isNotEmpty()) return "share?text=" + URLEncoder.encode(text, "UTF-8")
         }
         val data = intent.data
         if (data?.scheme == "lifehub") return data.getQueryParameter("path") ?: ""

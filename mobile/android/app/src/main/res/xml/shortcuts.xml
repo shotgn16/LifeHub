@@ -15,9 +15,9 @@
         <intent android:action="android.intent.action.VIEW" android:data="lifehub://open?path=notes"
             android:targetPackage="io.github.shotgn16.lifehub" android:targetClass="io.github.shotgn16.lifehub.MainActivity" />
     </shortcut>
-    <shortcut android:shortcutId="bible" android:enabled="true" android:icon="@drawable/ic_shortcut"
-        android:shortcutShortLabel="@string/sc_bible">
-        <intent android:action="android.intent.action.VIEW" android:data="lifehub://open?path=bible%2Flog"
+    <shortcut android:shortcutId="tasks" android:enabled="true" android:icon="@drawable/ic_shortcut"
+        android:shortcutShortLabel="@string/sc_tasks">
+        <intent android:action="android.intent.action.VIEW" android:data="lifehub://open?path=tasks"
             android:targetPackage="io.github.shotgn16.lifehub" android:targetClass="io.github.shotgn16.lifehub.MainActivity" />
     </shortcut>
 </shortcuts>

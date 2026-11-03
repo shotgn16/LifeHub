@@ -3,8 +3,6 @@ package io.github.shotgn16.lifehub
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.usage.UsageEvents
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -30,8 +28,8 @@ import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
- * Every 15 minutes (Android's shortest background interval): shows new LifeHub notifications and,
- * if switched on, sends today's time in the Bible app (measured by Android's Usage access).
+ * Every 15 minutes (Android's shortest background interval): sends changes made offline, refreshes the
+ * offline copy and shows new LifeHub notifications.
  */
 class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
 
@@ -43,7 +41,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
             // Send changes made offline and refresh the copy kept on the phone.
             OfflineStore(applicationContext).sync()
             if (prefs.notifications) notices(api, prefs)
-            if (prefs.bibleTracking && SetupActivity.usageAccess(applicationContext)) bibleTime(api, prefs)
+            prefs.lastSync = SimpleDateFormat("EEE HH:mm", Locale.getDefault()).format(Date())
             Result.success()
         } catch (e: Api.HttpError) {
             Result.success()          // wrong key etc. — nothing to retry
@@ -90,48 +88,6 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
             .setAutoCancel(true)
             .build()
         try { NotificationManagerCompat.from(ctx).notify(id, notification) } catch (_: SecurityException) { }
-    }
-
-    /** Rebuilds the last 30 hours of Bible-app sessions from Android's usage events and sends them. */
-    private fun bibleTime(api: Api, prefs: Prefs) {
-        val usage = applicationContext.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val end = System.currentTimeMillis()
-        val begin = end - TimeUnit.HOURS.toMillis(30)
-        val events = usage.queryEvents(begin, end)
-        val e = UsageEvents.Event()
-        val sessions = mutableListOf<Pair<Long, Long?>>()
-        var start: Long? = null
-        while (events.hasNextEvent()) {
-            events.getNextEvent(e)
-            val mine = e.packageName == prefs.bibleApp
-            when {
-                mine && e.eventType == UsageEvents.Event.ACTIVITY_RESUMED -> if (start == null) start = e.timeStamp
-                mine && (e.eventType == UsageEvents.Event.ACTIVITY_PAUSED || e.eventType == UsageEvents.Event.ACTIVITY_STOPPED) ||
-                    e.eventType == UsageEvents.Event.SCREEN_NON_INTERACTIVE -> {
-                    start?.let { sessions.add(it to e.timeStamp) }
-                    start = null
-                }
-            }
-        }
-        start?.let { sessions.add(it to null) }       // still reading now
-
-        // Merge quick hops out of the app (answering a message) and drop accidental opens.
-        val merged = mutableListOf<Pair<Long, Long?>>()
-        for (s in sessions.sortedBy { it.first }) {
-            val last = merged.lastOrNull()
-            if (last?.second != null && s.first - last.second!! < 120_000) merged[merged.size - 1] = last.first to s.second
-            else merged.add(s)
-        }
-        val kept = merged.filter { it.second == null || it.second!! - it.first >= 45_000 }
-
-        val arr = JSONArray()
-        kept.forEach { (s, f) -> arr.put(JSONObject().put("startUtc", iso(Date(s))).apply { if (f != null) put("endUtc", iso(Date(f))) }) }
-        val body = JSONObject()
-            .put("device", Build.MODEL ?: "Android")
-            .put("fromUtc", iso(Date(begin)))
-            .put("sessions", arr)
-        api.post("/api/v1/bible/sessions", body.toString())
-        prefs.lastSync = SimpleDateFormat("EEE HH:mm", Locale.getDefault()).format(Date())
     }
 
     companion object {

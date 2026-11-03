@@ -19,12 +19,6 @@ class Prefs(context: Context) {
     var notifications: Boolean
         get() = p.getBoolean("notifications", true)
         set(v) = p.edit().putBoolean("notifications", v).apply()
-    var bibleTracking: Boolean
-        get() = p.getBoolean("bibleTracking", false)
-        set(v) = p.edit().putBoolean("bibleTracking", v).apply()
-    var bibleApp: String
-        get() = p.getString("bibleApp", "com.sirma.mobile.bible.android") ?: "com.sirma.mobile.bible.android"
-        set(v) = p.edit().putString("bibleApp", v).apply()
     /** Newest notification already shown (ISO time from the server). */
     var lastNotice: String
         get() = p.getString("lastNotice", "") ?: ""

@@ -169,7 +169,7 @@ public sealed class OllamaSettings
     public int MaxEmailChars { get; set; } = 6000;
     /// <summary>Model that can see images (OCR of study notes, groceries from photos), e.g. qwen2.5vl:7b, llama3.2-vision, minicpm-v.</summary>
     public string VisionModel { get; set; } = "";
-    /// <summary>Optional embedding model for finding related Bible studies, e.g. nomic-embed-text.</summary>
+    /// <summary>Optional embedding model (not used by LifeHub 3; kept so older settings files load).</summary>
     public string EmbeddingModel { get; set; } = "";
     /// <summary>Let "thinking" models (qwen3, qwen3-vl, deepseek-r1…) reason before answering. Much slower; off by default.</summary>
     public bool Thinking { get; set; }

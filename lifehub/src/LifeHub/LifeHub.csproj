@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <!-- IMAP / MIME parsing (Gmail, generic IMAP, on-prem Exchange with IMAP enabled) -->
-    <PackageReference Include="MailKit" Version="4.8.0" />
+    <PackageReference Include="MailKit" Version="4.16.0" />
   </ItemGroup>
 
   <!--

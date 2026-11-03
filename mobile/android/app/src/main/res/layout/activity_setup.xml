@@ -33,13 +33,6 @@
             android:layout_marginTop="24dp" android:text="On this phone" android:textSize="18sp" android:textStyle="bold" />
         <Switch android:id="@+id/notify" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="8dp" android:text="Show LifeHub notifications (checks every 15 minutes)" />
-        <Switch android:id="@+id/bible" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" android:text="Time in the Bible app" />
-        <TextView android:id="@+id/bibleStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:alpha="0.75" android:textSize="13sp" />
-        <Button android:id="@+id/usageAccess" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Open Usage access" android:visibility="gone" />
-
         <Button android:id="@+id/open" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="24dp" android:text="Open LifeHub" />
     </LinearLayout>

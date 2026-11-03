@@ -47,9 +47,7 @@ struct SetupView: View {
                 Text("Checked whenever you open the app and when iOS allows a background refresh (a few times a day). For instant reminders, also keep notifications on in the Home Assistant app.")
             }
             Section("Siri & Shortcuts") {
-                Text("Add notes, tasks and shopping, log a Bible reading, or open a page — say “Add a note in LifeHub”, or use the LifeHub actions in the Shortcuts app.")
-                Text("Time in the Bible app: Shortcuts → Automation → + → App → Bible → Is Opened → Run Immediately → add “Bible app opened (LifeHub)”. Repeat for Is Closed with “Bible app closed”.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                Text("Add notes, tasks and shopping, or open a page — say “Add a note in LifeHub”, or use the LifeHub actions in the Shortcuts app.")
             }
         }
         .navigationTitle(firstRun ? "" : "Phone app settings")

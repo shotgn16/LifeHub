@@ -202,7 +202,9 @@ internal sealed class DesktopWindow
         _server = null; _serverUrl = "";
     }
 
-    private static string StartingPage(string text) => $$"""
+    private static string StartingPage(string text) => StartingTemplate.Replace("__TEXT__", text);
+
+    private const string StartingTemplate = """
         <!doctype html><html><head><meta charset="utf-8"><style>
         html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f6f7f9;color:#1f2933}
         @media (prefers-color-scheme:dark){html,body{background:#14171c;color:#e6e8eb}}
@@ -210,7 +212,7 @@ internal sealed class DesktopWindow
         .m{width:56px;height:56px;border-radius:16px;background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700}
         .s{width:28px;height:28px;border:3px solid #0f766e33;border-top-color:#0f766e;border-radius:50%;animation:r 1s linear infinite}
         @keyframes r{to{transform:rotate(360deg)}}</style></head>
-        <body><div class="c"><div class="m">L</div><div>{{text}}</div><div class="s"></div></div></body></html>
+        <body><div class="c"><div class="m">L</div><div>__TEXT__</div><div class="s"></div></div></body></html>
         """;
 }
 #endif
