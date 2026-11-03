@@ -65,6 +65,26 @@ jobs:
           if [ -z "$ok" ]; then cat run.log | tail -40 | while read -r l; do echo "::error::$l"; done; exit 1; fi
           curl -sf -o /dev/null -w "welcome: %{http_code}\n" http://127.0.0.1:18099/ || true
 
+      - name: Check the app window opens (Linux, virtual screen)
+        if: matrix.name == 'linux-amd64'
+        run: |
+          set +e
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libwebkit2gtk-4.1-0 > /dev/null
+          d="$RUNNER_TEMP/lh-window"
+          xvfb-run -a out/${{ matrix.rid }}/LifeHub --data "$d" > window.log 2>&1 &
+          for i in $(seq 1 60); do [ -s "$d/desktop.url" ] && break; sleep 1; done
+          url=$(cat "$d/desktop.url" 2>/dev/null)
+          echo "Window loaded: $url"
+          base=$(echo "$url" | sed -E 's#(https?://[^/]+).*#\1#')
+          if [ -n "$base" ] && curl -sf "$base/health"; then echo; echo "::notice::App window started LifeHub at $base and opened $url"
+          else
+            echo "::error::The app window didn't start LifeHub"
+            tail -30 window.log | while read -r l; do echo "::error::$l"; done
+            [ -f "$d/lifehub.log" ] && tail -10 "$d/lifehub.log" | while read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
+          pkill -f "out/${{ matrix.rid }}/LifeHub" || true
+
       # ---------------------------------------------------------------- Windows
       - name: Windows installer
         if: matrix.name == 'windows'

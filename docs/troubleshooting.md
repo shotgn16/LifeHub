@@ -1,5 +1,7 @@
 # Troubleshooting
 
+Installing or starting the desktop app? See the easy [Problems?](manual/problems.md) page first.
+
 ## Installing
 
 | Symptom | Fix |
@@ -44,20 +46,12 @@
 | Microsoft can't move emails to Deleted Items | Since 1.2.0 the app needs `Mail.ReadWrite`. Add the permission and sign in again. |
 | Junk was added from old emails | Use **AI Inbox → History → Clean up**, and **Merge duplicates** on the Tasks page. |
 
-## Bible, kitchen photos & meals
+## Kitchen photos & meals
 
 | Symptom | Fix |
 |---|---|
-| No verse of the day | Add a YouVersion app key in Settings → Bible, or type the verse on the Bible page. |
-| Verse shows without text | That Bible version isn't licensed for apps like LifeHub. Try BSB (3034) or KJV (1). |
-| App time too high (Android) | Turn on the Companion app's **Interactive** sensor (screen on/off). LifeHub then stops counting when the phone is locked. Mark wrong sessions **Wasn't reading** on Bible → What did I read?. |
-| LifeHub doesn't know which passage I read | Share the verses from YouVersion to LifeHub (Android share menu / iPhone "Log in LifeHub" shortcut), or tap it on **What did I read?**. |
-| App time not counted (Android) | Turn on the Companion app's **Last used app** sensor and tick it in Settings → Bible. Set *Sensor update frequency* to **Fast always**. |
-| App time not counted (iPhone) | Check the Shortcuts automations are set to **Run Immediately** and the URL and API key are right. Your phone must reach LifeHub at that address. |
-| Handwriting not read / "model can't see images" | Set a **vision model** in Settings → AI (`ollama pull qwen3-vl:4b-instruct` on 8 GB machines, `qwen3-vl:8b-instruct` with 16 GB or more). |
+| Photos not read / "model can't see images" | Set a **vision model** in Settings → AI (`ollama pull qwen3-vl:4b-instruct` on 8 GB machines, `qwen3-vl:8b-instruct` with 16 GB or more). |
 | "The model did not return JSON" / "answer was cut off" | Update to 1.5.0 or later, which keeps requests within the AI's working memory and rescues cut-off answers. On bigger machines you can raise **Context** in Settings → AI. |
-| "Go deeper" takes a long time | Choose **Overview** or **Detailed** in Settings → Bible. **In-depth study** reads up to six commentary pages and is slow on 8 GB machines. |
-| "Biblia Graphia: page didn't contain readable text" | That site builds its pages with JavaScript. Use the link in **Read more**, or turn it off in Settings → Bible. |
 | Photo finds no food | Get closer, use good light, and spread items out with labels facing the camera. One bag per photo. |
 | Dates read wrongly | Check the day/month order follows Settings → General → Culture. You can always correct the date before adding. |
 | Meal suggestions are odd | Add your requirements and preferences on Meals → Dietary needs. Bigger models give better plans. |
@@ -85,7 +79,6 @@
 | Changes made offline didn't appear | They're sent the next time the app reaches LifeHub: when you open it, press **Try again**, or in the background (Android every 15 minutes; iPhone when iOS allows). The offline screen shows how many are still waiting. |
 | "Nothing saved on this phone yet" | Open LifeHub once while connected. The saved copy is refreshed whenever the app is online. |
 | Scanner camera doesn't start in the app | The camera needs an https address. Over http, use **Take photo**. |
-| Android: Bible-app time isn't counted | Phone app settings → Time in the Bible app → **Open Usage access** and allow LifeHub. Set battery usage to **Unrestricted**. |
 | Android: "App not installed" when updating | The new build is signed with a different key. Uninstall the old app, or add your own signing key (see [mobile-apps.md](mobile-apps.md)). |
 | iPhone: the app won't open after a week | Apps installed with a free Apple ID expire after 7 days. Install it again from Xcode or Sideloadly; your settings are kept. |
 

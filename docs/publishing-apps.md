@@ -27,7 +27,7 @@ anyone else running LifeHub.
 - **Versions.** Bump `versionName` / `MARKETING_VERSION` for each release. The build number is
   set automatically from the GitHub run number.
 
-## Google Play (Pixel)
+## Google Play (Android)
 
 **Cost:** a one-off US$25 registration.
 
@@ -57,10 +57,8 @@ anyone else running LifeHub.
      - the app collects no data for the developer
      - data is sent only to the user's own server
      - data in transit is encrypted when the server uses https
-   - **Sensitive permissions**: the optional **Usage access** (`PACKAGE_USAGE_STATS`) feature may
-     be queried. Explain that it's off by default, user-enabled, used only to measure time in the
-     Bible app, and sent only to the user's own server. If Play rejects it, remove that
-     permission from the manifest for the Play build; the Home Assistant sensor still works.
+   - **Sensitive permissions**: none. The app asks only for the camera (barcode scanning) and
+     notifications.
 5. **Closed testing** (required for personal accounts created after 13 November 2023): you must
    run a closed test with **at least 12 testers opted in for 14 days in a row** before you can
    apply for production.
@@ -111,7 +109,7 @@ Mac.
      client. List what the app adds beyond the website:
      - Siri and Shortcuts actions
      - background notifications
-     - Bible-app timing through Shortcuts
+     - an offline mode that keeps working without a connection
      - camera scanning
      - Keychain storage of the key
 

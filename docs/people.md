@@ -1,15 +1,15 @@
 # People & sharing
 
-LifeHub 2.0 lets several people use one LifeHub. Each person gets their own space, and you choose
+Several people can use one LifeHub (for a household server on your own computer, see
+[Household](manual/household.md)). Each person gets their own space, and you choose
 what the household shares.
 
 | Always each person's own | Shared or personal (your choice) |
 |---|---|
 | Tasks and the schedule they're planned into | Food stock, the shopping list and purchase history |
 | Email accounts, the AI inbox and promotions | Recipes, the meal plan, dietary needs and deals |
-| Bible reading, the verse of the day, reading plan, streak and app time | Renewals and subscriptions |
-| Bible studies, starter notes and Go deeper | |
-| Notes (each note can be shared on its own) | |
+| Notes (each note can be shared on its own) | Renewals and subscriptions |
+| Appearance: theme, accent colour, home-screen layout | |
 | Phones and devices for notifications, calendars, the HA tasks list | |
 | Reminders and the morning digest | |
 | API key | |
@@ -29,13 +29,13 @@ The household-wide settings are shared: Home Assistant, the AI, the kitchen setu
 5. Tick **Admin** if they should be able to change household settings, such as Home Assistant, the
    AI, people and sharing.
 
-New people start with the household's default schedule and Bible settings. They then set up their
+New people start with the household's default schedule. They then set up their
 own in Settings:
 
 - **Email**: their own mailboxes
 - **Home Assistant**: their phones, calendars and tasks list
 - **Notifications**: how reminders reach them
-- **Bible**: their app sensor, plan and reminder
+- **Appearance**: their theme, accent colour and home screen
 - **Security & API**: their password, PIN and API key
 
 ## Signing in
@@ -47,7 +47,7 @@ own in Settings:
   - **Switch person** in the menu goes back to that screen.
 - **Direct port or your own address**: each person signs in with their own username and password.
 - **API**: each person has their **own API key**. A Shortcut or HA automation using Sam's key adds
-  Sam's tasks, logs Sam's Bible reading, and so on.
+  Sam's tasks, Sam's notes, and so on.
 
 ## Sharing
 
@@ -65,7 +65,7 @@ example, "Sam: football 18:00" makes that evening a quick-meal night.
 ## Phone apps
 
 Each person signs in to the [phone apps](mobile-apps.md) with **their own** API key, so the app
-shows their tasks, notes and Bible reading, and their offline copy only holds their data and
+shows their tasks and notes, and their offline copy only holds their data and
 whatever the household shares.
 
 ## Removing someone
@@ -76,8 +76,6 @@ Go to **Settings → People → Edit → Remove**. The following of theirs are *
 - emails and mailboxes
 - AI inbox
 - notes
-- Bible history
-- studies
 
 Anything they added to the kitchen, meals or renewals **stays with the household**. Their sign-in
 and API key stop working immediately.
@@ -86,17 +84,11 @@ and API key stop working immediately.
 
 Nothing changes until you add someone. On upgrade:
 
-- your existing login, API key, phones, calendars, schedule and Bible settings become the first
-  person's
+- your existing login, API key, phones, calendars and schedule become the first person's
 - all existing data stays theirs, or stays shared in the shared areas
 - existing Shortcuts and automations keep working with the same API key
 
 ## Home Assistant sensors
 
-The household sensors (`sensor.lifehub_tasks_due`, `sensor.lifehub_bible_streak`, …) show the main
-person. Everyone else gets their own copies:
-
-- `sensor.lifehub_tasks_due_<name>`
-- `sensor.lifehub_bible_streak_<name>`
-
-For example, `sensor.lifehub_bible_streak_sam`.
+The household sensors (`sensor.lifehub_tasks_due`, …) show the main person. Everyone else gets
+their own copy: `sensor.lifehub_tasks_due_<name>`, for example `sensor.lifehub_tasks_due_sam`.

@@ -4,7 +4,7 @@ Open **LifeHub** from the Home Assistant sidebar. You're signed in automatically
 Assistant has already authenticated you. Once you add more people (Settings → People), LifeHub
 asks **"Who's using LifeHub?"** instead. Each person can add a PIN.
 
-Full documentation: <https://github.com/Shotgn16/LifeHub/tree/main/docs>
+Full documentation: <https://github.com/shotgn16/LifeHub/tree/main/docs>
 
 ## First steps
 
@@ -15,12 +15,10 @@ Full documentation: <https://github.com/Shotgn16/LifeHub/tree/main/docs>
    `http://192.168.1.50:11434`) and pick a model. `localhost` means the add-on container itself,
    so use the Ollama machine's IP.
 3. **Settings → Email.** Add Gmail/IMAP, Microsoft 365 or Exchange mailboxes.
-4. **Settings → Bible** (optional): a YouVersion key for the verse of the day, and tick your phone's
-   *Last used app* sensor to track time in the YouVersion app.
-5. **Settings → Notifications**: Home Assistant app, LifeHub's own notifications, or both.
-6. **Settings → People** (optional): add the rest of the household and choose what's shared
-   (food & shopping, meals, renewals). Tasks, email, Bible and notes are always each person's own.
-7. **Settings → Security & API** (optional). Set your own username and password if you also want
+4. **Settings → Notifications**: Home Assistant app, LifeHub's own notifications, or both.
+5. **Settings → People** (optional): add the rest of the household and choose what's shared
+   (food & shopping, meals, renewals). Tasks, email and notes are always each person's own.
+6. **Settings → Security & API** (optional). Set your own username and password if you also want
    to use the direct port (8099) or your own hostname. Copy **your** API key for `rest_command`s,
    Shortcuts and the phone apps.
 
@@ -33,10 +31,10 @@ Under **Configuration → Network**, map `8099/tcp` to a host port. Then use
 ## Phone apps
 
 There are Android and iPhone apps that open LifeHub signed in as you. They add notifications, the
-share menu, Siri & Shortcuts and Bible-app timing, and **keep working offline**: your tasks,
-shopping, notes, meals and Bible reading are saved on the phone, and anything you change is sent
+share menu and Siri & Shortcuts, and **keep working offline**: your tasks, shopping, notes and
+meals are saved on the phone, and anything you change is sent
 when LifeHub is reachable again. They need the direct port or an https address. See the
-[phone apps guide](https://github.com/Shotgn16/LifeHub/blob/main/docs/mobile-apps.md).
+[phone apps guide](https://github.com/shotgn16/LifeHub/blob/main/docs/mobile-apps.md).
 
 ## Barcode scanner
 
@@ -54,10 +52,8 @@ These refresh every 5 minutes, and their attributes include the item lists:
 - `sensor.lifehub_food_expiring`
 - `sensor.lifehub_shopping_list`
 - `sensor.lifehub_ai_pending`
-- `sensor.lifehub_bible_streak`
 
-With several people, others also get `sensor.lifehub_tasks_due_<name>` and
-`sensor.lifehub_bible_streak_<name>`.
+With several people, others also get `sensor.lifehub_tasks_due_<name>`.
 
 ## Data
 

@@ -1,7 +1,8 @@
 # Extending LifeHub
 
 Everything is plain C#, and most extension points are a single interface plus one line in
-`Program.cs`.
+`Program.cs`. To change how LifeHub *looks*, see [Restyle it](#restyle-it) — or, without touching
+code, [Make it yours](manual/customise.md).
 
 ## Give the AI a new ability
 
@@ -53,26 +54,97 @@ fields can go in `AiSuggestion.Extra`.
 3. Register the provider in `Program.cs`.
 4. Add its fields to `Components/SettingsTabs/SettingsEmail.razor`.
 
-## Add a page or module
+## Add a module (a new section)
 
-New entities need an ownership scope, so they work with several people:
+Every section of LifeHub — its menu entry, home-screen card, badge and bottom-bar button — is a
+**module**, registered in one place: `AddLifeHubModules()` in
+[`Modules/ModuleRegistry.cs`](../lifehub/src/LifeHub/Modules/ModuleRegistry.cs). Admins can switch
+modules on and off in **Settings → Modules**; each person arranges the cards on their home screen.
+
+Here's a complete "Habits" module.
+
+**1. The data.** A class deriving from `Entity` in `Domain/`. `IRepository<Habit>` is available
+straight away, stored as `data/db/Habit.json`. Give it an ownership scope so it works with several
+people:
 
 ```csharp
 [Owned(OwnScope.Personal)]       // or Kitchen / Meals / Renewals (shared per household setting) / Global
-public sealed class Habit : Entity { … }
+public sealed class Habit : Entity
+{
+    public string Name { get; set; } = "";
+    public List<DateOnly> Done { get; set; } = new();
+}
 ```
 
-That's all the repository needs. Reads only return what the current person may see, and new
-records are stamped with their owner. Background jobs run as *system*. For per-person work, wrap
-it in `using (UserScope.As(user.Id)) { … }`, looping over `SettingsService.Users`.
+Reads only return what the current person may see, and new records are stamped with their owner.
+Background jobs run as *system*; for per-person work wrap it in `using (UserScope.As(user.Id)) { … }`,
+looping over `SettingsService.Users`.
 
+**2. The page.** `Components/Pages/HabitsPage.razor`:
 
-1. Add a class deriving from `Entity` in `Domain/`. `IRepository<YourType>` is available
-   straight away, stored as `data/db/YourType.json`.
-2. Add a service in `Services/` and register it in `Program.cs`.
-3. Add `Components/Pages/YourPage.razor` with `@page "/your-page"`. Inherit `LiveComponent` and
-   call `Watch(repo)` so the page refreshes when data changes.
-4. Add a `NavLink` in `Components/Layout/MainLayout.razor`.
+```razor
+@page "/habits"
+@inherits LiveComponent
+@inject IRepository<Habit> Habits
+
+<h1>Habits</h1>
+@foreach (var h in list) { <div class="card">@h.Name</div> }
+
+@code {
+    private List<Habit> list = new();
+    protected override void OnInitialized() { Watch(Habits); Load(); }   // refreshes when data changes
+    protected override void OnDataChanged() => Load();
+    private void Load() => list = Habits.All().ToList();
+}
+```
+
+**3. A home-screen card (optional).** `Components/Widgets/HabitsWidget.razor`, using the shared
+`WidgetCard` frame:
+
+```razor
+@inherits LiveComponent
+@inject IRepository<Habit> Habits
+
+<WidgetCard Title="Habits" Icon="check" Link="habits" LinkText="All habits">
+    <ul class="list">@foreach (var h in Habits.All().Take(4)) { <li class="row">@h.Name</li> }</ul>
+</WidgetCard>
+
+@code { protected override void OnInitialized() => Watch(Habits); }
+```
+
+**4. Register it** — one line in `AddLifeHubModules()` (or in `Program.cs` with
+`builder.Services.AddLifeHubModule(...)`):
+
+```csharp
+services.AddLifeHubModule(new LifeHubModule
+{
+    Key = "habits", Title = "Habits", Icon = "check", Route = "habits",
+    Section = "Organise", Order = 35,
+    Description = "Daily habits and streaks.",
+    Widget = typeof(HabitsWidget),
+    Badge = sp => 0,                       // number shown next to the menu entry
+});
+```
+
+That's it: Habits appears in the menu, in **Settings → Modules**, and as a card people can add in
+**Customise**. Other options: `WideWidget` (card spans two columns), `BottomBar` (phone bottom
+bar), `Available` (e.g. only when Home Assistant is connected), `Requires` (depends on another
+module), `Core` (can't be switched off). Icons are the names in
+`Components/Shared/Icon.razor`. To leave a built-in feature out of your build entirely, delete its
+line in `AddLifeHubModules()`.
+
+## Restyle it
+
+- **Design tokens** — colours, corners, spacing and fonts — are CSS variables at the top of
+  [`wwwroot/css/theme.css`](../lifehub/src/LifeHub/wwwroot/css/theme.css), with light and dark
+  sets. `<html>` carries `data-theme` (`light`/`dark`, absent for automatic) and `data-density`
+  (`compact`). Change the tokens there to restyle the whole app.
+- **Components** use those tokens in `wwwroot/app.css`. Every home-screen card is drawn by
+  `Components/Widgets/WidgetCard.razor` (`.card.widget`), so restyling cards is one place.
+- **Without rebuilding:** **Settings → Appearance → Custom CSS**, or `custom.css` in the data
+  folder, is loaded after everything else (see [customise](manual/customise.md)).
+- **Per person:** theme, accent colour (applied with `color-mix`), density and the home-screen
+  layout live on `UserProfile`.
 
 ## Swap the storage
 
@@ -92,9 +164,10 @@ Add to `AutomationService.PublishSensorsAsync`. Each `SetStateAsync` call create
 ## Releasing a new version
 
 1. **Build the image first.** Go to Actions → **Add-on image** → Run workflow, and enter the new
-   version. This publishes `ghcr.io/shotgn16/lifehub-{amd64,aarch64}:X.Y.Z`. Home Assistant
+   version. This publishes `ghcr.io/shotgn16/lifehub-{amd64,aarch64}:X.Y.Z` and the Docker image
+   `ghcr.io/shotgn16/lifehub:X.Y.Z` (and `:latest`). Home Assistant
    downloads this image, so it must exist before HA offers the update.
-   - On a first publish, check both packages are **Public**: your GitHub profile → Packages →
+   - On a first publish, check the packages are **Public**: your GitHub profile → Packages →
      Package settings.
 2. Bump `<Version>` in `lifehub/src/LifeHub/LifeHub.csproj` and `version:` in
    `lifehub/config.yaml`.
@@ -104,5 +177,6 @@ Add to `AutomationService.PublishSensorsAsync`. Each `SetStateAsync` call create
    `view()`/`queue()` code in `mobile/shared/offline.html`, and the docs. Older apps skip types they
    don't know.
 4. Add an entry to both `CHANGELOG.md` (root) and `lifehub/CHANGELOG.md`.
-5. Commit, tag `vX.Y.Z` and push the tag. The release workflow creates the GitHub release, and
-   Home Assistant offers the update to everyone who added the repository.
+5. Commit, tag `vX.Y.Z` and push the tag. The release workflow builds the desktop installers and
+   phone apps and creates the GitHub release with all of them, and Home Assistant offers the update
+   to everyone who added the repository.

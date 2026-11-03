@@ -1,6 +1,6 @@
 # Notes
 
-**Notes** is a place to drop little bits of text: an idea, a link, a gift idea, a verse, a door
+**Notes** is a place to drop little bits of text: an idea, a link, a gift idea, a quote, a door
 code, a film to watch. LifeHub keeps them and sorts them into categories for you.
 
 <img src="images/notes.png" alt="Notes" width="80%">
@@ -11,8 +11,7 @@ You can add a note in any of these ways:
 
 - **Notes page**: type in the box at the top and press **Save note** (or Ctrl+Enter).
 - **Quick capture**: the **+ Capture** button → **Note**.
-- **Share sheet**: share text or a link to LifeHub from your phone. If it isn't a Bible passage,
-  press **Save it as a note**.
+- **Share sheet**: share text or a link to LifeHub from your phone and press **Save as a note**.
 - **API**: `POST /api/v1/notes {"text": "…"}`. This works from an iPhone Shortcut, Assist or an NFC
   tag (see [api.md](api.md)).
 - **Offline**: in the phone apps' offline screen. The note is filed into a category once it

@@ -6,7 +6,7 @@ hardware barcode scanners.
 ## Authentication
 
 Create or copy **your** key in **Settings → Security & API**. Each person has their own key, and
-everything done with it is done as that person: their tasks, their notes, their Bible reading.
+everything done with it is done as that person: their tasks, their notes, their shopping.
 Send it with every request, either way:
 
 ```
@@ -33,15 +33,11 @@ ingress URLs need a Home Assistant session, so they don't suit API calls.
 | POST | `/api/v1/scan` | `{"barcode":"5000112637922","mode":"add\|use\|shopping","quantity":1}` | The scan result. Unknown barcodes return 404; scan them once in the app to name them. |
 | POST | `/api/v1/notes` | `{"text":"Door code 4471","shared":false}` | Saves a note; the AI files it into a category. Returns `category` (a first guess while the AI works). |
 | GET | `/api/v1/notes` | `?category=Gift Ideas&q=scarf` | Your notes (and shared ones), newest first |
-| GET | `/api/v1/me` | | Who the key belongs to: `id`, `name`, `isAdmin`, `version`, `household`, and whether Bible and deals are on |
+| GET | `/api/v1/me` | | Who the key belongs to: `id`, `name`, `isAdmin`, `version`, `household`, and whether deals are on |
 | GET | `/api/v1/notices` | `?since=2026-11-02T08:00:00Z` | Your notifications (newest 30), oldest first: `id`, `title`, `message`, `link`, `level`, `createdUtc`, `read`. Used by the phone apps. |
-| GET | `/api/v1/offline` | | What the phone apps keep for offline use: open tasks, the shopping list, recent notes, this week's meals, and today's Bible verse, list and streak |
-| POST | `/api/v1/sync` | `{"changes":[{"id":"<uuid>","type":"shopping.add","at":"…","data":{"name":"Milk"}}]}` | Applies changes made offline, oldest first. Types: `task.add` (`title`, `category`, `due`), `task.complete` (`id`), `shopping.add` (`name`, `quantity`), `shopping.check` (`id`, `checked`), `note.add` (`text`, `shared`), `bible.read` (`reference`, empty = verse of the day), `bible.tick` (`id`). Each `id` is applied only once (`duplicate` on retries). Returns per-change `status` (`ok`, `skipped`, `duplicate`, `error`) and a fresh snapshot. |
-| POST | `/api/v1/bible/sessions` | `{"device":"Pixel","fromUtc":"…","sessions":[{"startUtc":"…","endUtc":"…"}]}` | Replaces that phone's Bible-app sessions from `fromUtc` (Android app, Usage access). Returns `minutesToday`. |
+| GET | `/api/v1/offline` | | What the phone apps keep for offline use: open tasks, the shopping list, recent notes, and this week's meals |
+| POST | `/api/v1/sync` | `{"changes":[{"id":"<uuid>","type":"shopping.add","at":"…","data":{"name":"Milk"}}]}` | Applies changes made offline, oldest first. Types: `task.add` (`title`, `category`, `due`), `task.complete` (`id`), `shopping.add` (`name`, `quantity`), `shopping.check` (`id`, `checked`), `note.add` (`text`, `shared`). Each `id` is applied only once (`duplicate` on retries). Returns per-change `status` (`ok`, `skipped`, `duplicate`, `error`) and a fresh snapshot. |
 | GET | `/api/v1/meals` | `?days=1` (1–14) | Planned meals: date, slot, title, servings, cooked |
-| POST | `/api/v1/bible/app` | `{"event":"opened\|closed","device":"iPhone"}` | Times the Bible app (for the iPhone Shortcuts automation). Returns `minutesToday`. |
-| POST | `/api/v1/bible/read` | `{"reference":"Ps 23","minutes":10}` | Logs a reading. `reference` can be typed, YouVersion share text or a bible.com link; matching list items and the verse are ticked. Leave it out to mark today's verse as read. |
-| GET | `/api/v1/bible/today` | | Verse of the day (and text), whether you've read today, the streak, minutes in the app, and what's still to read |
 
 Outside `/api/v1`, `POST /auth/app` (form fields `key` and `returnUrl`) signs a browser or web view in as
 the key's owner. The phone apps use it so you never type a password on the phone.
@@ -98,22 +94,6 @@ intent_script:
           title: "{{ title }}"
     speech:
       text: "Added {{ title }} to LifeHub"
-```
-
-### Bible
-
-The iPhone Shortcuts setup for timing the YouVersion app is in [bible.md](bible.md#iphone-shortcuts).
-To log a reading from an NFC tag on your Bible:
-
-```yaml
-rest_command:
-  lifehub_bible_read:
-    url: "http://192.168.1.10:8099/api/v1/bible/read"
-    method: POST
-    headers:
-      X-Api-Key: !secret lifehub_api_key
-    content_type: "application/json"
-    payload: '{}'          # marks today's verse of the day as read
 ```
 
 ### Drop a note from Assist

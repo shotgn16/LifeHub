@@ -137,18 +137,16 @@ actions.
 
 ## Other things the local AI does
 
-- [Bible studies](bible.md): reads handwritten notes, breaks studies down, finds connections, and
-  compares your notes with StudyLight.
+- [Notes](notes.md): files each note into a category with tags.
 - [Kitchen photos](kitchen-and-meals.md#add-from-photo): lists your groceries and reads their dates.
 - [Meal planner](kitchen-and-meals.md#meal-planner): moves meals around your week, adapts recipes
   for dietary needs, and uses up food.
 
-Two optional models help with these. Set them in **Settings → AI**:
+An optional vision model helps with photos. Set them in **Settings → AI**:
 
 | Model | For | Example |
 |---|---|---|
 | Vision model | photos and scans | `ollama pull qwen3-vl:4b-instruct` |
-| Embedding model | linking studies by meaning | `ollama pull nomic-embed-text` |
 
 ## Privacy
 - Email bodies are sent to **your** Ollama server only, and are never stored. LifeHub keeps the

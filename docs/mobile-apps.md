@@ -1,23 +1,26 @@
-# Phone apps (Android & iPhone)
+# Phone apps (Android, iPhone & iPad)
+
+> Just want to install them? The short, easy version is in the manual: [Phone apps](manual/phone-apps.md).
 
 The LifeHub apps are companions to **your own LifeHub server**. They show LifeHub full screen,
 signed in as you, and add things a browser can't do.
 
-| | Android (`mobile/android`) | iPhone (`mobile/ios`) |
+| | Android (`mobile/android`) | iPhone & iPad (`mobile/ios`) |
 |---|---|---|
 | LifeHub signed in as you (with your API key, no password) | ✓ | ✓ |
 | Barcode scanner, photos and uploads | ✓ (camera needs an https address) | ✓ (camera needs an https address) |
 | Notifications from LifeHub | ✓ checks every 15 minutes | ✓ when you open the app, and when iOS allows a background refresh |
-| **Time in the Bible app**, measured on the phone (no Home Assistant needed) | ✓ Usage access | Shortcuts automation with the app's **Bible app opened / closed** actions |
-| Share text or links to LifeHub (passages are logged; anything else becomes a note) | ✓ share menu | Shortcuts actions |
-| Siri and Shortcuts: add a note, task or shopping item, log a reading, open a page | — | ✓ |
-| Home-screen shortcuts (long-press the icon): Scan, Shopping, Notes, What did I read? | ✓ | ✓ (Open LifeHub → page) |
+| Share text or links to LifeHub (save as a note, task or shopping item) | ✓ share menu | Shortcuts actions |
+| Siri and Shortcuts: add a note, task or shopping item, open a page | — | ✓ |
+| Home-screen shortcuts (long-press the icon): Scan, Shopping, Notes, Tasks | ✓ | ✓ (Open LifeHub → page) |
 | **Phone app settings** link in LifeHub's menu | ✓ | ✓ |
 | **Works offline**, then syncs when LifeHub is back | ✓ | ✓ |
 
 > **Your phone must be able to reach LifeHub.**
-> - At home, use the direct port, for example `http://192.168.1.10:8099`. In Home Assistant, map
->   the add-on's port under the add-on's **Configuration → Network**.
+> - At home, use the direct port, for example `http://192.168.1.10:8099`. On the desktop app,
+>   choose **This computer + my phone** or **A server for my household**; the address is shown in
+>   **Settings → This computer**. In Home Assistant, map the add-on's port under the add-on's
+>   **Configuration → Network**.
 > - When you're out, use an https address, for example a Cloudflare Tunnel (see
 >   [remote-access.md](remote-access.md)).
 > - The camera scanner only works over **https**. Over http, use **Take photo** instead.
@@ -26,7 +29,10 @@ signed in as you, and add things a browser can't do.
 
 ## Getting the apps
 
-The apps are built automatically by GitHub Actions whenever `mobile/` changes:
+**Ready-made:** every [release](https://github.com/shotgn16/LifeHub/releases/latest) includes
+`LifeHub-<version>-Android.apk` and `LifeHub-<version>-iPhone-iPad-unsigned.ipa`.
+
+**Latest build:** the apps are also built by GitHub Actions whenever `mobile/` changes:
 
 1. Go to **github.com/shotgn16/LifeHub → Actions**.
 2. Open **Android app** or **iPhone app**, then the latest green run.
@@ -58,7 +64,6 @@ every 15 minutes in the background):
 - the shopping list
 - your recent notes
 - this week's meals
-- today's Bible verse, reading list and streak
 
 **When the app switches.** If the app can't reach LifeHub, or LifeHub's live connection stays
 down for 12 seconds, it shows the **offline screen**. It has Today, Tasks, Shopping, Notes and
@@ -66,7 +71,6 @@ Meals tabs. On that screen you can:
 
 - add tasks (with a due date), shopping items and notes
 - tick tasks done and tick items off the shopping list
-- tick the verse of the day and your reading plan, or log what you read
 
 **Waiting changes.** Each change is marked **waiting to send** and kept on the phone, even if you
 close the app or restart the phone. They're sent automatically and in order:
@@ -86,11 +90,11 @@ twice, even if the connection drops mid-send.
 
 **Getting back.** When LifeHub is reachable again, the banner turns green. Press **Open LifeHub**
 to go back to the full app. Features that need the server stay online-only: the AI, the scanner,
-Bible studies, deals and settings.
+deals and settings.
 
 ---
 
-## Installing on your Pixel 9 Pro XL (unofficially, no Play Store)
+## Installing on Android (without the Play Store)
 
 ### Option A: download and tap (simplest)
 
@@ -107,7 +111,7 @@ outside the Play Store:
 - Before that, Google is rolling out an **"advanced flow"** for installing apps from unverified
   developers.
 
-If your Pixel refuses with a message about an **unverified developer**, either:
+If your phone refuses with a message about an **unverified developer**, either:
 
 - Turn it on once in **Settings → System → Developer options → Allow apps from unverified
   developers**. Read the warnings and wait out the one-time **24-hour** delay. Then install as
@@ -131,12 +135,6 @@ If your Pixel refuses with a message about an **unverified developer**, either:
 
 ### Turning on the extras
 
-- **Time in the Bible app**:
-  1. In the app, go to **Phone app settings → Time in the Bible app**.
-  2. Press **Open Usage access**, find **LifeHub** and switch it on.
-  3. Sessions are sent every 15 minutes and appear on the Bible page as "LifeHub app". If you
-     also use the Home Assistant sensor, untick that phone in Settings → Bible to avoid counting
-     twice.
 - **Battery.** If notifications arrive late, go to **Settings → Apps → LifeHub → App battery
   usage** and choose **Unrestricted**.
 
@@ -169,10 +167,12 @@ connected.
 
 ---
 
-## Installing on your iPhone Air (unofficially, no App Store)
+## Installing on iPhone and iPad (without the App Store)
 
-Apple only lets you install apps that are signed for your iPhone. In the UK there are no
-alternative app marketplaces (those are EU-only), so these are your options:
+The same app runs on iPhone and iPad.
+
+Apple only lets you install apps that are signed for your device. Outside the EU there are no
+alternative app marketplaces, so these are your options:
 
 | Way | Needs | Lasts |
 |---|---|---|
@@ -203,7 +203,8 @@ alternative app marketplaces (those are EU-only), so these are your options:
 
 1. Install [Sideloadly](https://sideloadly.io) and, on Windows, iTunes and iCloud from Apple's
    website (not the Microsoft Store).
-2. Download `LifeHub-unsigned.ipa` from the **iPhone app** workflow's artifacts.
+2. Download `LifeHub-<version>-iPhone-iPad-unsigned.ipa` from the latest release (or
+   `LifeHub-unsigned.ipa` from the **iPhone app** workflow's artifacts).
 3. Connect the iPhone, drag the `.ipa` into Sideloadly, enter your Apple ID and press **Start**.
 4. On the iPhone, turn on **Developer Mode**, then trust the certificate under **Settings →
    General → VPN & Device Management**.
@@ -218,13 +219,8 @@ spare Apple ID with them.
 - **Notifications**: allow them on first run. iOS decides how often apps refresh in the
   background, so for instant reminders keep LifeHub's Home Assistant notifications on as well
   (Settings → Notifications → **Both**).
-- **Time in the Bible app**:
-  1. Open **Shortcuts → Automation → + → App**, choose **Bible**, tick **Is Opened**, and choose
-     **Run Immediately**.
-  2. Add the action **Bible app opened** (from LifeHub).
-  3. Make a second automation with **Is Closed** → **Bible app closed**.
-- **Siri**: say "Add a note in LifeHub", "Add to my LifeHub shopping list", "Log my Bible reading
-  in LifeHub" or "Open LifeHub". All the actions are also in the Shortcuts app; for example, add
+- **Siri**: say "Add a note in LifeHub", "Add to my LifeHub shopping list", "Add a task in
+  LifeHub" or "Open LifeHub". All the actions are also in the Shortcuts app; for example, add
   "Add a note" to a share-sheet shortcut.
 
 ---

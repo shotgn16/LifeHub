@@ -18,9 +18,8 @@ start it detects:
 | `notify.mobile_app_*` phones | Push notifications. Untick any you don't want in **Settings → Home Assistant**. |
 | Power and energy sensors | Energy tiles and 24-hour charts |
 | `todo.shopping_list` and other to-do lists | Two-way sync of the shopping list (and optionally tasks) |
-| `sensor.*_last_used_app` (Android Companion) | Timing reading in the YouVersion app. Tick it in Settings → Bible. |
 
-You can review or change any of these in **Settings → Home Assistant**. Running outside HA (Docker
+You can review or change any of these in **Settings → Home Assistant**. Running outside HA (the desktop app, Docker
 or Plesk)? Enter the HA URL and a **long-lived access token** there instead. To create a token, go
 to your HA profile → **Security** → **Long-lived access tokens**.
 
@@ -73,7 +72,6 @@ The notifications themselves:
 - **while you're out**: when someone leaves home and the shopping list isn't empty, that person's
   phone gets the list
 - the **evening plan** for tomorrow
-- the **Bible reading reminder**, if you haven't read by the time you set (see [bible.md](bible.md))
 
 Notifications of the same kind replace each other instead of stacking up. Tapping one opens
 LifeHub: at the **LifeHub web address** if one is set in Settings → General, otherwise at the HA
@@ -91,13 +89,11 @@ These update every 5 minutes. Their attributes contain the item lists.
 | `sensor.lifehub_food_expiring` | count | `items` |
 | `sensor.lifehub_shopping_list` | count | `items` |
 | `sensor.lifehub_ai_pending` | count | |
-| `sensor.lifehub_bible_streak` | days | `read_today`, `verse`, `verse_read`, `app_minutes_today`, `to_read` |
 
 With several people (see [people.md](people.md)), the sensors above show the main person. Everyone
 else also gets these:
 
 - `sensor.lifehub_tasks_due_<name>`
-- `sensor.lifehub_bible_streak_<name>`
 
 Each person picks their own phones, calendars and tasks list in Settings → Home Assistant, and
 links their HA person in Settings → People. The shopping list stays the household's.

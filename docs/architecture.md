@@ -3,14 +3,23 @@
 LifeHub is a single ASP.NET Core 8 process. The UI is **Blazor Server** (interactive server
 rendering), so the pages are Razor components in C#. The browser holds a SignalR connection and
 there's no JavaScript framework. The only JavaScript is the barcode scanner, the vendored ZXing
-library and web push.
+library, web push and a two-line bridge to the desktop window.
+
+The **desktop apps** are the same program built with `-p:LifeHubDesktop=true`
+(`DESKTOP` defined): `Desktop/DesktopHost.cs` adds a native window (Photino: WebView2 on Windows,
+WKWebView on macOS, WebKitGTK on Linux) and decides where LifeHub runs — inside the app on
+`127.0.0.1`, as a background service (`--server`; a scheduled task or Windows service, a
+LaunchAgent/LaunchDaemon, or a systemd user service — `ServiceManager.cs`), in Docker
+(`DockerSetup.cs`) or on another machine. The setup assistant (`/welcome`, `WelcomePage.razor`)
+writes `desktop.json` and asks the window to look again; `OllamaSetup.cs` installs Ollama and pulls
+a model.
 
 The **phone apps** (`mobile/`) are thin native shells around the same UI:
 
 - Android is written in Kotlin.
 - iPhone is written in SwiftUI.
 
-They add notifications, the share menu, Siri & Shortcuts, Bible-app timing and an **offline
+They add notifications, the share menu, Siri & Shortcuts and an **offline
 mode**. The offline screen, `mobile/shared/offline.html`, is shared by both apps. It shows a
 snapshot from `GET /api/v1/offline` and queues changes. The apps replay those changes through
 `POST /api/v1/sync`, which `SyncService` makes idempotent with `SyncReceipt`s.
@@ -22,22 +31,24 @@ snapshot from `GET /api/v1/offline` and queues changes. The apps replay those ch
  (ingress)      │                 │                         │                                │
  HA / Shortcuts ┤ REST /api/v1 ───┘                 IRepository<T>  ──► /data/db/*.json      │
  (API key)      │                                   SettingsService ──► /data/settings.json  │
-                │ Background: EmailSync · Automation · HaListSync · BibleTracking (1 min)    │
+                │ Background: EmailSync · Automation · HaListSync (1 min)                   │
                 └──────┬───────────────────┬──────────────────────┬──────────────────────────┘
                        │                   │                      │
             Home Assistant REST     Ollama /api/chat        IMAP · Microsoft Graph · EWS
      (states, services, templates,  (JSON schema, images,
       calendars, history, to-do,     /api/embed)            Web Push services (VAPID)
-      notify; publishes sensor.lifehub_*)                   YouVersion API · StudyLight (on request)
+      notify; publishes sensor.lifehub_*)
 ```
 
 ## Source layout (`lifehub/src/LifeHub`)
 
 | Folder | Contents |
 |---|---|
-| `Domain/` | Plain entity classes: `TaskItem`, `Renewal`, `PantryItem`, `StapleItem`, `ShoppingItem`, `ProductInfo`, `EmailRecord`, `Promotion`, `AiSuggestion`, `BibleStudy`, `DailyVerse`, `Recipe`, `MealPlanEntry`, `PushDevice`, … plus `BibleRef`, the Bible reference parser (66 books, abbreviations, USFM) |
+| `Domain/` | Plain entity classes: `TaskItem`, `Renewal`, `PantryItem`, `StapleItem`, `ShoppingItem`, `ProductInfo`, `EmailRecord`, `Promotion`, `AiSuggestion`, `Note`, `Recipe`, `MealPlanEntry`, `PushDevice`, … |
 | `Data/` | `IRepository<T>` and `JsonRepository<T>`, which keeps an in-memory copy, writes the file atomically and raises a change event. `Ownership.cs` holds `UserScope`, `[Owned]` and the visibility rules for several people |
-| `Services/` | Business logic and background jobs. New in 2.0: `PeopleService`, `NotesService`, `DealsService` (nearby stores, offers, ideas), starter notes in `BibleStudyService`. New in 1.3: `BibleService`, `BibleTrackingService`, `BibleStudyService` (uploads, OCR, PdfPig, insights), `MealService`, `KitchenPhotoService`, `Freshness` (use-by vs best-before), `WebPushService` (RFC 8291/8292) |
+| `Services/` | Business logic and background jobs: `TaskService`, `RenewalService`, `KitchenService`, `MealService`, `PeopleService`, `NotesService`, `DealsService` (nearby stores, offers, ideas), `KitchenPhotoService`, `Freshness` (use-by vs best-before), `WebPushService` (RFC 8291/8292), `SyncService` (offline changes), `BibleArchiveService` (exports and removes LifeHub 2 Bible data) |
+| `Modules/` | `LifeHubModule` and `ModuleRegistry`: every section (menu entry, home-screen card, badge, bottom bar) is registered in `AddLifeHubModules()` |
+| `Desktop/` | Desktop app: window, setup decisions, background services, Ollama and Docker setup |
 | `Integrations/HomeAssistant/` | REST client, entity catalogue (names, areas, devices), automatic setup, two-way to-do sync |
 | `Integrations/Email/` | `IEmailProvider` implementations: IMAP (MailKit), Microsoft Graph, EWS (SOAP) |
 | `Integrations/Ollama/` | `/api/chat` client with JSON-schema structured output |
@@ -45,8 +56,8 @@ snapshot from `GET /api/v1/offline` and queues changes. The apps replay those ch
 | `Api/` | Login/setup endpoints and the REST API |
 | `mobile/android`, `mobile/ios`, `mobile/shared` | The phone apps. Built by GitHub Actions; see [mobile-apps.md](mobile-apps.md) |
 | `Infrastructure/` | Settings (with encrypted `[Secret]` fields), auth, HA ingress middleware, clock and time zone, data paths |
-| `Components/` | Pages, layout, settings tabs and shared components |
-| `wwwroot/` | `app.css`, the scanner script, ZXing, `sw.js` (service worker for push), `js/push.js`, the manifest and icons |
+| `Components/` | Pages, layout, settings tabs, home-screen cards (`Widgets/`) and shared components |
+| `wwwroot/` | `css/theme.css` (design tokens, light/dark), `app.css`, the scanner script, ZXing, `sw.js` (service worker for push), `js/push.js`, the manifest and icons |
 
 ## Key design points
 
@@ -66,8 +77,8 @@ snapshot from `GET /api/v1/offline` and queues changes. The apps replay those ch
   person. Change events are raised with no scope, and `LiveComponent` reloads as its own person,
   so one person's background work can never render another person's data.
 
-  `SettingsService.Current` overlays the person's own settings: phones, calendars, schedule, Bible
-  settings and mailboxes. `UpdateAsync` splits them back into their `UserProfile`.
+  `SettingsService.Current` overlays the person's own settings: phones, calendars, schedule,
+  appearance and mailboxes. `UpdateAsync` splits them back into their `UserProfile`.
 - **Live UI.** Pages derive from `LiveComponent` and `Watch()` repositories, so changes made by
   background jobs, the API or another tab show up straight away.
 - **Settings.** All settings live in one `settings.json`. Properties marked `[Secret]` are
@@ -87,8 +98,8 @@ snapshot from `GET /api/v1/offline` and queues changes. The apps replay those ch
     roll-forward, nightly planning, presence and sensor publishing.
   - `EmailSyncService` polls the mailboxes.
   - `HaListSyncService` syncs the lists with HA's to-do lists.
-- **AI never edits your content.** Bible study insights, breakdowns and OCR text live in their own
-  fields (`ExtractedText`, `Breakdown`, `Insights`) and are shown in purple. Meal suggestions and
+- **AI never edits your content.** What the AI adds (note categories, email summaries, meal ideas)
+  lives in its own fields and is shown in purple. Meal suggestions and
   adapted recipes are stored as pending `MealSuggestion`s, or as new recipe versions, until you
   apply them.
 - **AI pipeline.**
@@ -103,7 +114,8 @@ snapshot from `GET /api/v1/offline` and queues changes. The apps replay those ch
 
 - .NET 8 / ASP.NET Core / Blazor Server
 - [MailKit](https://github.com/jstedfast/MailKit) for IMAP
-- [PdfPig](https://github.com/UglyToad/PdfPig) for PDF text and scanned-page images
+- [Photino.NET](https://github.com/tryphotino/photino.NET) for the desktop window; Inno Setup,
+  `hdiutil` and `dpkg-deb` for the installers
 - [ZXing-js](https://github.com/zxing-js/library) and the native `BarcodeDetector` for scanning
 - [Open Food Facts](https://world.openfoodfacts.org) for product lookup
 - [Ollama](https://ollama.com) for local LLMs
@@ -116,7 +128,8 @@ snapshot from `GET /api/v1/offline` and queues changes. The apps replay those ch
 | Workflow | What it does |
 |---|---|
 | **Build** | Builds the .NET solution, builds and smoke-tests the Docker image, and checks the add-on and app versions match |
-| **Add-on image** | Publishes the ready-made Home Assistant images `ghcr.io/shotgn16/lifehub-{amd64,aarch64}` that the add-on downloads |
+| **Add-on image** | Publishes the ready-made Home Assistant images `ghcr.io/shotgn16/lifehub-{amd64,aarch64}` that the add-on downloads, and the multi-arch Docker image `ghcr.io/shotgn16/lifehub` |
+| **Desktop apps** | Self-contained builds for Windows x64, macOS (Apple Silicon, Intel) and Linux (amd64, arm64), each started once headless as a check, then packaged: Inno Setup `.exe`, `.dmg`, `.deb` and `.tar.gz` |
 | **Android app** | Builds the APK (to install) and AAB (Google Play) |
 | **iPhone app** | Builds an unsigned `.ipa` and the generated Xcode project |
-| **Release** | On a `v*` tag, attaches a portable server zip to the GitHub release |
+| **Release** | On a `v*` tag, runs the desktop and phone builds and attaches every installer, the APK, the IPA and a portable server zip to the GitHub release |

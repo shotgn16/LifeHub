@@ -1,15 +1,71 @@
 # Installation
 
+> **Looking for the easy, step-by-step version?** See the [manual](manual/README.md). This page
+> covers every option in more depth, including servers and building LifeHub yourself.
+
 LifeHub is one ASP.NET Core 8 app, so it runs anywhere .NET 8 or Docker runs. Pick one:
 
-- [Home Assistant OS (add-on)](#home-assistant-os-add-on). This is the recommended option and
-  needs the least setup.
+- [Desktop apps (Windows, macOS, Linux)](#desktop-apps-windows-macos-linux). Installers with
+  everything included and a setup assistant; also the easiest way to run a household server or
+  set up Docker.
+- [Home Assistant OS (add-on)](#home-assistant-os-add-on). The least setup if you already run
+  Home Assistant.
 - [Plesk Obsidian](#plesk-obsidian): Docker, .NET Toolkit or Windows/IIS.
 - [Plain Docker](#plain-docker).
-- [Development](#development).
+- [Portable server build](#portable-server-build) (any OS with .NET 8, no Docker).
+- [Development](#development) and [building the installers](#building-the-installers).
 
 Whichever you choose, LifeHub stores **all** of its data in one folder: database files, settings,
 encryption keys and backups. See [Data, backups & security](security.md).
+
+---
+
+## Desktop apps (Windows, macOS, Linux)
+
+Download from the [Releases page](https://github.com/shotgn16/LifeHub/releases/latest):
+
+| System | File | Notes |
+|---|---|---|
+| Windows 10 (1809+) / 11, x64 | `LifeHub-<v>-Windows-x64-Setup.exe` | Per-user install (no admin). Adds WebView2 if missing. Start-menu entries for LifeHub and the setup assistant. |
+| macOS 12+ Apple Silicon | `LifeHub-<v>-macOS-AppleSilicon.dmg` | Drag to Applications. Unsigned: allow once in Privacy & Security. |
+| macOS 12+ Intel | `LifeHub-<v>-macOS-Intel.dmg` | as above |
+| Debian/Ubuntu family, amd64/arm64 | `LifeHub-<v>-Linux-<arch>.deb` | Installs to `/opt/lifehub`, pulls in WebKitGTK. |
+| Other Linux, amd64/arm64 | `LifeHub-<v>-Linux-<arch>.tar.gz` | `./install.sh` installs for your user. |
+
+Each one contains LifeHub with its own .NET runtime. On first start, the **setup assistant** asks how
+LifeHub should run:
+
+| Mode | What happens | Listens on |
+|---|---|---|
+| This computer only | LifeHub runs inside the app while it's open | `127.0.0.1` (a free port) |
+| This computer + my phone | A background service starts when you sign in (or, unticked, LifeHub runs while the app is open) | `0.0.0.0:<port>` |
+| A server for my household | A background service that starts with the computer (or when you sign in) | `0.0.0.0:<port>` |
+| Docker | Pulls `ghcr.io/shotgn16/lifehub`, runs container `lifehub` with volume `lifehub-data`; the app shows it | Docker's port mapping |
+| Home Assistant / somewhere else | The app is a window onto that address | — |
+
+The background service is the same program started with `--server`:
+
+| | "When I sign in" | "When the computer starts" |
+|---|---|---|
+| Windows | Scheduled task `LifeHub` (at log on) | Windows service `LifeHub` + firewall rule (asks for admin once) |
+| macOS | LaunchAgent `~/Library/LaunchAgents/io.github.shotgn16.lifehub.plist` | LaunchDaemon in `/Library/LaunchDaemons` running as you (asks for your password) |
+| Linux | systemd user service `~/.config/systemd/user/lifehub.service` | the same, plus `loginctl enable-linger` (asks for your password) |
+
+Command line (the installed program is `LifeHub.exe`, `LifeHub.app/Contents/MacOS/LifeHub` or
+`lifehub`):
+
+```
+LifeHub                        open the app (first run: the setup assistant)
+LifeHub --setup                open the setup assistant
+LifeHub --server               run without a window (what the service runs)
+LifeHub --uninstall-service    remove the background service
+  --data <folder>   --port <n>
+```
+
+Data folders: `%LOCALAPPDATA%\LifeHub`, `~/Library/Application Support/LifeHub`,
+`~/.local/share/lifehub` (or `LIFEHUB_DATA` / `--data`). How LifeHub runs is saved in
+`desktop.json` there. The app window signs you in with a secret in `keys/desktop.token` that only
+works from the same computer.
 
 ---
 
@@ -24,7 +80,7 @@ or Hyper-V.
 
 1. In Home Assistant go to **Settings → Add-ons → Add-on store**.
 2. Open the **⋮** menu (top right), then **Repositories**. Add
-   `https://github.com/Shotgn16/LifeHub` and close the dialog.
+   `https://github.com/shotgn16/LifeHub` and close the dialog.
 3. Scroll to **LifeHub add-ons**, open **LifeHub** and press **Install**. HA downloads a ready-made
    image for your machine (`ghcr.io/shotgn16/lifehub-amd64` or `-aarch64`), which takes a minute
    or two. Nothing is compiled on your HA machine.
@@ -63,7 +119,7 @@ also use **Rebuild** on the add-on page.
   [Remote access](remote-access.md).
 - **Ollama.** HA OS isn't a good place to run an LLM. Run Ollama on another VM or PC, then enter
   its address in **Settings → AI**. See [Email & AI](email-and-ai.md). For the photo features
-  (study notes, groceries), also `ollama pull qwen3-vl:4b-instruct` and set it as the vision model.
+  (groceries, handwriting), also `ollama pull qwen3-vl:4b-instruct` and set it as the vision model.
 
 ---
 
@@ -74,7 +130,7 @@ also use **Rebuild** on the add-on page.
 1. Install **Extensions → Docker**.
 2. Build the image on the server over SSH:
    ```bash
-   git clone https://github.com/Shotgn16/LifeHub.git /root/LifeHub
+   git clone https://github.com/shotgn16/LifeHub.git /root/LifeHub
    cd /root/LifeHub && docker build -t lifehub:latest ./lifehub
    ```
 3. In **Docker → Images**, run `lifehub:latest` with these settings:
@@ -134,17 +190,40 @@ works.
 
 ## Plain Docker
 
+The ready-made image (amd64 and arm64):
+
 ```bash
-git clone https://github.com/Shotgn16/LifeHub.git && cd LifeHub
+docker run -d --name lifehub --restart unless-stopped -p 8099:8099 \
+  -v lifehub-data:/data -e TZ=Europe/London ghcr.io/shotgn16/lifehub:latest
+```
+
+Or build it yourself with Compose:
+
+```bash
+git clone https://github.com/shotgn16/LifeHub.git && cd LifeHub
 docker compose up -d --build
 ```
 
-Open `http://<host>:8099`. Data is kept in `./data`. To build the image without Compose:
+Open `http://<host>:8099`. With Compose, data is kept in `./data`. To build the image without Compose:
 
 ```bash
 docker build -t lifehub ./lifehub
 docker run -d --name lifehub -p 8099:8099 -v lifehub-data:/data -e TZ=Europe/London lifehub
 ```
+
+---
+
+## Portable server build
+
+For a server without Docker (any OS with the ASP.NET Core 8 runtime): download
+`LifeHub-<v>-server-portable.zip` from the release, unzip it and run
+
+```bash
+LIFEHUB_DATA=/srv/lifehub ASPNETCORE_URLS=http://0.0.0.0:8099 dotnet LifeHub.dll
+```
+
+Run it as a service with your system's tools (systemd, NSSM, launchd). `dotnet LifeHub.dll --server
+--data <folder> --port 8099` uses the desktop layout instead (data in your user folder by default).
 
 ---
 
@@ -168,3 +247,28 @@ LifeHub looks for its data folder in this order:
 
 To test HA, Ollama and email without the real services, point the settings at your own instances.
 Every integration can be enabled or disabled on its own.
+
+## Building the installers
+
+The **Desktop apps** workflow (`.github/workflows/desktop.yml`) builds everything on GitHub's
+Windows, macOS and Linux machines. To build one yourself:
+
+```bash
+# any OS — the desktop app for one platform (win-x64, osx-arm64, osx-x64, linux-x64, linux-arm64)
+dotnet publish lifehub/src/LifeHub/LifeHub.csproj -c Release -r linux-x64 --self-contained \
+  -p:LifeHubDesktop=true -o out/linux-x64
+
+# then package it
+bash installer/linux/build-deb.sh out/linux-x64 3.0.0 amd64 dist              # Linux .deb + .tar.gz
+bash installer/macos/make-app.sh out/osx-arm64 3.0.0 arm64 dist              # macOS .app + .dmg (on a Mac)
+iscc /DAppVersion=3.0.0 /DSourceDir=%CD%\out\win-x64 installer\windows\LifeHub.iss   # Windows (Inno Setup 6)
+```
+
+`-p:LifeHubDesktop=true` adds the app window (Photino.NET) and Windows-service support; without it
+you get the normal server build. The Windows script expects `MicrosoftEdgeWebview2Setup.exe` next
+to it ([download](https://go.microsoft.com/fwlink/p/?LinkId=2124703)).
+
+**Signing (later).** The installers are unsigned. To sign them: Windows — add `SignTool=` to the
+Inno script with your code-signing certificate; macOS — replace the ad-hoc `codesign --sign -` in
+`make-app.sh` with your *Developer ID Application* identity plus `--options runtime`, then
+`xcrun notarytool submit … --wait` and `xcrun stapler staple` on the `.dmg`.
