@@ -4,9 +4,17 @@ name: Release
 # desktop installers (Windows, macOS, Linux), the Android APK, the unsigned iPhone/iPad app, and a
 # portable build for servers. Release notes come from CHANGELOG.md.
 
+# Or run it from Actions → Release → Run workflow with a version (e.g. 3.0.0): it then creates the
+# v<version> tag on the chosen branch itself.
+
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 3.0.0"
+        required: true
 
 permissions:
   contents: write
@@ -16,7 +24,7 @@ jobs:
   desktop:
     uses: ./.github/workflows/desktop.yml
     with:
-      version: ${{ github.ref_name }}
+      version: ${{ inputs.version || github.ref_name }}
   android:
     uses: ./.github/workflows/mobile-android.yml
     secrets: inherit
@@ -34,7 +42,10 @@ jobs:
           dotnet-version: 8.0.x
       - name: Version
         id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          v="${{ inputs.version }}"; [ -z "$v" ] && v="${GITHUB_REF_NAME#v}"
+          echo "version=${v#v}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${v#v}" >> "$GITHUB_OUTPUT"
       - name: Portable server build (any OS with .NET 8)
         run: |
           dotnet publish lifehub/src/LifeHub/LifeHub.csproj -c Release -o publish /p:UseAppHost=false /p:Version=${{ steps.v.outputs.version }}
@@ -79,8 +90,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" files/* --clobber
+          tag="${{ steps.v.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" files/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" files/* --title "LifeHub ${GITHUB_REF_NAME}" --notes-file notes.md
+            gh release create "$tag" files/* --target "$GITHUB_SHA" --title "LifeHub $tag" --notes-file notes.md
           fi
