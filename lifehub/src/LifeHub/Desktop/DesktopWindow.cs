@@ -66,7 +66,9 @@ internal sealed class DesktopWindow
         else
         {
             _window.LoadRawString(StartingPage("Starting LifeHub…"));
-            _window.RegisterWindowCreatedHandler((_, _) => _ = Task.Run(Navigate));
+            // Start once the web view has shown the first page (it says "ready"). Windows' WebView2 starts up
+            // after the window does, and loading a page before then crashes. Fallback in case no message arrives.
+            _window.RegisterWindowCreatedHandler((_, _) => _ = Task.Run(async () => { await Task.Delay(15000); Begin(); }));
         }
         _window.WaitForClose();
 
@@ -75,9 +77,17 @@ internal sealed class DesktopWindow
         if (already is null) try { File.Delete(UrlFile); } catch { }
     }
 
+    private int _begun;
+
+    private void Begin()
+    {
+        if (Interlocked.Exchange(ref _begun, 1) == 0) _ = Task.Run(Navigate);
+    }
+
     private void OnMessage(string message)
     {
-        if (message == "restart") _ = Task.Run(Navigate);
+        if (message == "ready") Begin();
+        else if (message == "restart") _ = Task.Run(Navigate);
         else if (message.StartsWith("open:") && Uri.TryCreate(message[5..], UriKind.Absolute, out var u) && u.Scheme is "http" or "https")
             DesktopRuntime.OpenInBrowser(u.ToString());
     }
@@ -212,7 +222,8 @@ internal sealed class DesktopWindow
         .m{width:56px;height:56px;border-radius:16px;background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700}
         .s{width:28px;height:28px;border:3px solid #0f766e33;border-top-color:#0f766e;border-radius:50%;animation:r 1s linear infinite}
         @keyframes r{to{transform:rotate(360deg)}}</style></head>
-        <body><div class="c"><div class="m">L</div><div>__TEXT__</div><div class="s"></div></div></body></html>
+        <body><div class="c"><div class="m">L</div><div>__TEXT__</div><div class="s"></div></div>
+        <script>try { window.external.sendMessage("ready"); } catch (e) { }</script></body></html>
         """;
 }
 #endif
