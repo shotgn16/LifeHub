@@ -26,7 +26,7 @@ Section: utils
 Priority: optional
 Architecture: $ARCH
 Installed-Size: $SIZE
-Depends: libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37, libgtk-3-0, libnotify4, libicu76 | libicu74 | libicu72 | libicu70 | libicu67 | libicu-dev, ca-certificates
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0, libnotify4, libicu76 | libicu74 | libicu72 | libicu70 | libicu67 | libicu-dev, ca-certificates
 Recommends: curl
 Maintainer: LifeHub <noreply@github.com>
 Homepage: https://github.com/shotgn16/LifeHub

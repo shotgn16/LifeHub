@@ -26,7 +26,7 @@
     <ApplicationIcon>Desktop/lifehub.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup Condition="'$(LifeHubDesktop)' == 'true'">
-    <PackageReference Include="Photino.NET" Version="3.*" />
+    <PackageReference Include="Photino.NET" Version="4.*" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
   </ItemGroup>
   <ItemGroup>

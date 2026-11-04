@@ -1,7 +1,8 @@
 # Installing LifeHub on Linux
 
 Works on 64-bit PCs (`amd64`) and ARM boards such as the Raspberry Pi 4/5 (`arm64`), with a
-desktop (GNOME, KDE, Xfce, Cinnamon…). For a server **without** a desktop, use
+desktop (GNOME, KDE, Xfce, Cinnamon…) and WebKitGTK 4.1 — Ubuntu 22.04 or later, Debian 12
+or later, Fedora 39 or later, or a current Arch/openSUSE. For a server **without** a desktop, use
 [Docker](docker.md) or the portable server build (see [installation.md](../installation.md)).
 
 Not sure which you have? Open a terminal and type `uname -m`: `x86_64` → **amd64**,
