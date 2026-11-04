@@ -85,6 +85,25 @@ jobs:
           fi
           pkill -f "out/${{ matrix.rid }}/LifeHub" || true
 
+      - name: Check the app window opens (Windows, Mac)
+        if: matrix.name == 'windows' || matrix.name == 'macos-arm64'
+        continue-on-error: true
+        run: |
+          set +e
+          d="$RUNNER_TEMP/lh-window"
+          exe=out/${{ matrix.rid }}/LifeHub; [ "${{ matrix.name }}" = windows ] && exe=out/${{ matrix.rid }}/LifeHub.exe
+          "$exe" --data "$d" > window.log 2>&1 &
+          for i in $(seq 1 90); do [ -s "$d/desktop.url" ] && break; sleep 1; done
+          url=$(cat "$d/desktop.url" 2>/dev/null)
+          base=$(echo "$url" | sed -E 's#(https?://[^/]+).*#\1#')
+          if [ -n "$base" ] && curl -sf "$base/health"; then echo; echo "::notice::App window started LifeHub at $base"
+          else
+            echo "::warning::App window check didn't finish on this runner (it may have no screen)"
+            tail -20 window.log | while read -r l; do echo "::warning::$l"; done
+            [ -f "$d/lifehub.log" ] && tail -10 "$d/lifehub.log" | while read -r l; do echo "::warning::$l"; done
+          fi
+          kill %1 2>/dev/null; taskkill //IM LifeHub.exe //F >/dev/null 2>&1; true
+
       # ---------------------------------------------------------------- Windows
       - name: Windows installer
         if: matrix.name == 'windows'
