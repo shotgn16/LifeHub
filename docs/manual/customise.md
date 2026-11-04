@@ -4,6 +4,9 @@
 
 **Settings → Appearance** — each person chooses their own:
 
+<img src="../images/appearance.png" alt="Settings → Appearance" width="80%">
+
+
 - **Theme**: Automatic (follows your computer or phone), Light or Dark.
 - **Accent colour**: the colour of buttons, links and highlights.
 - **Density**: Comfortable, or Compact to fit more on screen.
@@ -14,6 +17,8 @@ On **Today**, press **Customise**: tick the cards you want, and use the arrows t
 order. Each person has their own layout.
 
 ## Sections (admins)
+
+<img src="../images/modules.png" alt="Settings → Modules" width="60%">
 
 **Settings → Modules** turns whole sections on or off for the household — for example, switch off
 **Kitchen**, **Scan**, **Shopping** and **Meals** if you only want tasks and renewals. They

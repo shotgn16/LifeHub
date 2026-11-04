@@ -69,7 +69,7 @@ jobs:
         if: matrix.name == 'linux-amd64'
         run: |
           set +e
-          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libwebkit2gtk-4.1-0 > /dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libwebkit2gtk-4.1-0 libnotify4 > /dev/null
           d="$RUNNER_TEMP/lh-window"
           xvfb-run -a out/${{ matrix.rid }}/LifeHub --data "$d" > window.log 2>&1 &
           for i in $(seq 1 60); do [ -s "$d/desktop.url" ] && break; sleep 1; done

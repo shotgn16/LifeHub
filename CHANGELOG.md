@@ -9,6 +9,55 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [3.0.0] – 2026-11-04
+
+LifeHub 3 is a clean-up for publishing: Bible features have moved to their own app, the app is
+modular and restyleable, and it installs on Windows, macOS and Linux with a setup assistant.
+
+### Added
+- **Desktop apps with installers**, with everything included (their own .NET runtime; WebView2 on
+  Windows if missing; WebKitGTK pulled in by the Linux package):
+  - Windows 10/11: `LifeHub-<v>-Windows-x64-Setup.exe` (per-user, no admin; Start-menu entries for
+    LifeHub and the setup assistant; uninstaller removes the service and offers to delete data)
+  - macOS 12+: `.dmg` for Apple Silicon and Intel (unsigned, ad-hoc signed)
+  - Linux: `.deb` and `.tar.gz` with `install.sh`, for amd64 and arm64
+- **Setup assistant** on first launch (and `--setup` / Settings → This computer later). Choose:
+  - **This computer only**: LifeHub runs inside the app on `127.0.0.1`
+  - **This computer + my phone**: a background service when you sign in
+  - **A server for my household**: a background service that starts with the computer
+    (Windows service / LaunchDaemon / systemd with lingering) or when you sign in
+  - **Docker**: pulls and runs `ghcr.io/shotgn16/lifehub`, then shows it
+  - **Home Assistant** or **LifeHub somewhere else**: the app becomes a window onto it
+
+  It then creates your account, **checks for Ollama and offers to install it** with a model sized
+  for your computer's memory (or skip and set it up in Settings → AI), and shows your phone's
+  address and API key.
+- **Modules**: every section (menu entry, home-screen card, badge, bottom-bar button) is a module
+  registered in one place. **Settings → Modules** switches sections off for the household.
+  Developers add a section with one registration (see `docs/extending.md`).
+- **Make it yours**: per-person theme (auto/light/dark), accent colour, density and home-screen
+  layout (**Customise** on Today); admins can add **Custom CSS** (or `custom.css` in the data folder)
+  on top of design tokens in `wwwroot/css/theme.css`.
+- **Share page** (`/share`): text shared from the phone becomes a note, a task or shopping items.
+- General multi-arch Docker image `ghcr.io/shotgn16/lifehub:<version>` / `:latest`.
+- Releases now attach every installer, the Android APK, the unsigned iPhone/iPad IPA and a
+  portable server zip, with SHA-256 checksums.
+- **Manual** (`docs/manual/`): easy step-by-step guides for each platform, phones, a household
+  server, customising, the AI and common problems.
+
+### Changed
+- Redesigned home screen built from module cards, and a cleaner menu grouped by section.
+- Phone apps 1.2.0: Bible features removed; the share menu opens the new share page; the Android
+  app no longer asks for Usage access; new **Tasks** home-screen shortcut.
+- MailKit 4.16.0 (security fix for STARTTLS handling).
+
+### Removed
+- **Bible tracking, verse of the day, reading plans, studies, starter notes and Bible insights** —
+  now in their own app. On upgrade, **Settings → Backup → Bible data from LifeHub 2** exports
+  everything to a zip and then deletes it. The `/api/v1/bible/*` endpoints and
+  `sensor.lifehub_bible_streak*` are gone; older phone apps' Bible offline changes are skipped.
+- PdfPig dependency (only used for study notes).
+
 ## [2.2.0] – 2026-11-02
 
 ### Added

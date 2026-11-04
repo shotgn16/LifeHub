@@ -6,7 +6,7 @@
 |---|---|
 | Windows: "Windows protected your PC" | **More info → Run anyway**. LifeHub isn't signed with a paid certificate yet. |
 | Mac: "LifeHub can't be opened" / "Apple could not verify…" | **System Settings → Privacy & Security → Open Anyway** (once). See [Mac](mac.md). |
-| Linux: the window is blank or doesn't open | Install WebKitGTK: `sudo apt install libwebkit2gtk-4.1-0` (Fedora: `sudo dnf install webkit2gtk4.1`). |
+| Linux: the window is blank or doesn't open | Install WebKitGTK: `sudo apt install libwebkit2gtk-4.1-0 libnotify4` (Fedora: `sudo dnf install webkit2gtk4.1 libnotify`). |
 | Windows: the window is blank | Install [Microsoft Edge WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) (the installer normally does this). |
 
 ## Starting

@@ -11,13 +11,14 @@ has_webkit() {
   ldconfig -p 2>/dev/null | grep -q 'libwebkit2gtk-4\.1\.so' && return 0
   ls /usr/lib*/libwebkit2gtk-4.1* /usr/lib/*/libwebkit2gtk-4.1* >/dev/null 2>&1
 }
+has_notify() { ldconfig -p 2>/dev/null | grep -q 'libnotify\.so\.4' || ls /usr/lib*/libnotify.so.4* /usr/lib/*/libnotify.so.4* >/dev/null 2>&1; }
 
-if ! has_webkit; then
-  say "LifeHub needs WebKitGTK (draws the app window). Installing it — you may be asked for your password."
-  if command -v apt-get >/dev/null; then sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0
-  elif command -v dnf >/dev/null; then sudo dnf install -y webkit2gtk4.1
-  elif command -v pacman >/dev/null; then sudo pacman -S --needed --noconfirm webkit2gtk-4.1
-  elif command -v zypper >/dev/null; then sudo zypper install -y libwebkit2gtk-4_1-0
+if ! has_webkit || ! has_notify; then
+  say "LifeHub needs WebKitGTK (draws the app window) and libnotify. Installing them — you may be asked for your password."
+  if command -v apt-get >/dev/null; then sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0 libnotify4
+  elif command -v dnf >/dev/null; then sudo dnf install -y webkit2gtk4.1 libnotify
+  elif command -v pacman >/dev/null; then sudo pacman -S --needed --noconfirm webkit2gtk-4.1 libnotify
+  elif command -v zypper >/dev/null; then sudo zypper install -y libwebkit2gtk-4_1-0 libnotify4
   else echo "Please install WebKitGTK 4.1 with your package manager, then run this again."; exit 1
   fi
 fi

@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.0
+- **Bible features have moved to their own app.** Before anything is deleted, go to
+  **Settings → Backup → Bible data from LifeHub 2** to export it to a zip, then delete it.
+- **Cleaner, modular design**: switch sections on or off in **Settings → Modules**, arrange your
+  home screen with **Customise**, and pick your own theme and accent colour in
+  **Settings → Appearance**.
+- New desktop apps for Windows, macOS and Linux (they can also set LifeHub up in Docker or point
+  at this add-on), and phone apps 1.2.0.
+- Security update for email (MailKit 4.16.0).
+
 ## 2.2.0
 - The phone apps now **work offline**: your tasks, shopping list, notes, meals and Bible reading
   are kept on the phone. Anything you add or tick off is sent to LifeHub automatically when it's
