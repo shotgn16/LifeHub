@@ -135,3 +135,27 @@ jobs:
           name: LifeHub-ios-${{ github.run_number }}
           path: dist/*
           if-no-files-found: error
+
+  android-check:
+    # Installs the APK on an Android emulator, opens it, goes through the first start ("Use LifeHub on this phone")
+    # and checks nothing crashed. Small screenshots are attached to the run as notices (base64 JPEG).
+    needs: android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: LifeHub-android-${{ github.run_number }}
+          path: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          pip install --quiet pillow
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash mobile/maui/check-android.sh apk/app-release.apk
