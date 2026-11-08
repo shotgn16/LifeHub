@@ -28,9 +28,9 @@ Eq("staple grace override", Freshness.Of(Egg(-5), staple, today, 3).State, Fresh
 // unavailable ignored
 // screen on/off twice while app open
 // ongoing
-Eq("salvage cut item", LifeHub.Integrations.Ollama.OllamaClient.Salvage("{\"insights\": [{\"a\": 1}, {\"a\": 2}, {\"a\": \"tru"), "{\"insights\": [{\"a\": 1}, {\"a\": 2}]}");
-Eq("salvage nested", LifeHub.Integrations.Ollama.OllamaClient.Salvage("{\"x\": {\"items\": [\"a, b\", \"c\", \"d"), "{\"x\": {\"items\": [\"a, b\", \"c\"]}}");
-Eq("parse salvaged", LifeHub.Integrations.Ollama.OllamaClient.ParseLenient("```json\n{\"insights\": [{\"t\": \"ok\"}, {\"t\": \"cut").GetProperty("insights").GetArrayLength(), 1);
+Eq("salvage cut item", LifeHub.Integrations.Ollama.AiClient.Salvage("{\"insights\": [{\"a\": 1}, {\"a\": 2}, {\"a\": \"tru"), "{\"insights\": [{\"a\": 1}, {\"a\": 2}]}");
+Eq("salvage nested", LifeHub.Integrations.Ollama.AiClient.Salvage("{\"x\": {\"items\": [\"a, b\", \"c\", \"d"), "{\"x\": {\"items\": [\"a, b\", \"c\"]}}");
+Eq("parse salvaged", LifeHub.Integrations.Ollama.AiClient.ParseLenient("```json\n{\"insights\": [{\"t\": \"ok\"}, {\"t\": \"cut").GetProperty("insights").GetArrayLength(), 1);
 
 // ---- 2.0: visibility between people
 {
@@ -140,7 +140,7 @@ Eq("html text", HtmlText.Extract("<html><body><p>Hello <b>world</b></p><script>x
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 
-sealed class MemStore : IDataKeyStore
+sealed class MemStore : LifeHub.Data.IDataKeyStore
 {
     public byte[]? Key; public byte[]? Recovery;
     public byte[]? Load() => Key;
