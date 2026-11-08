@@ -79,15 +79,35 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: .NET MAUI for iOS
-        run: dotnet workload install maui-ios > workload.log 2>&1 || (tail -30 workload.log; exit 1)
+      - name: .NET MAUI for iOS (matching this Xcode)
+        run: |
+          # The newest .NET for iOS can need a newer Xcode than GitHub's Macs have yet, so pick the newest
+          # .NET for iOS made for this Xcode (or older).
+          xc=$(xcodebuild -version | head -1 | awk '{print $2}')
+          band=$(dotnet --version | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9])[0-9]*.*/\1.\200/')
+          pkg="microsoft.net.sdk.ios.manifest-$band"
+          v=$(curl -fsSL "https://api.nuget.org/v3-flatcontainer/$pkg/index.json" | python3 -c "
+          import json,sys
+          xc=tuple(int(x) for x in '$xc'.split('.')[:2])
+          vs=[v for v in json.load(sys.stdin)['versions'] if '-' not in v and tuple(int(x) for x in v.split('.')[:2])<=xc]
+          vs.sort(key=lambda v: tuple(int(x) for x in v.split('.')))
+          print(vs[-1] if vs else '')")
+          echo "Xcode $xc · SDK band $band · .NET for iOS $v"
+          dotnet workload config --update-mode manifests || true
+          if [ -n "$v" ]; then
+            echo "{\"microsoft.net.sdk.ios\": \"$v/$band\"}" > rollback.json
+            dotnet workload install maui-ios --from-rollback-file rollback.json > workload.log 2>&1 || (tail -40 workload.log; exit 1)
+          else
+            dotnet workload install maui-ios > workload.log 2>&1 || (tail -30 workload.log; exit 1)
+          fi
+          dotnet workload list
       - name: LifeHub's web files
         run: bash mobile/maui/copy-web.sh
       - name: Build (unsigned)
         run: |
           set +e +o pipefail
           dotnet build mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-ios -p:TargetFrameworks=net10.0-ios -c Release -p:RuntimeIdentifier=ios-arm64 \
-            -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" -p:ValidateXcodeVersion=false \
+            -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" \
             -p:ApplicationVersion=${{ github.run_number }} "-p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}" > build.log 2>&1
           code=$?
           grep -E "(: error|error [A-Z]+[0-9]+)" build.log | sed -E 's#(/Users|/home)/runner/work/LifeHub/LifeHub/##g; s# \[[^]]*\]$##' | sort -u | head -40 | while read -r l; do echo "::error::$l"; done
