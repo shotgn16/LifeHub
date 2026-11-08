@@ -18,7 +18,7 @@ public sealed class AndroidLoggerProvider : ILoggerProvider
         {
             if (!IsEnabled(logLevel)) return;
             var text = $"{category}: {formatter(state, exception)}{(exception is null ? "" : "\n" + exception)}";
-            if (logLevel >= LogLevel.Error) Log.Error("LifeHub", text); else Log.Warn("LifeHub", text);
+            if (logLevel >= LogLevel.Error) Android.Util.Log.Error("LifeHub", text); else Android.Util.Log.Warn("LifeHub", text);
         }
     }
 }
