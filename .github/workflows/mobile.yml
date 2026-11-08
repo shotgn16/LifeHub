@@ -55,7 +55,7 @@ jobs:
             -p:ApplicationVersion=${{ github.run_number }} "-p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}" \
             ${{ steps.key.outputs.args }} -o out > build.log 2>&1
           code=$?
-          grep -E "error [A-Z]+[0-9]+" build.log | sed 's#.*/mobile/#mobile/#; s#.*/lifehub/#lifehub/#' | sort -u | head -40 | while read -r l; do echo "::error::$l"; done
+          grep -E "(: error|error [A-Z]+[0-9]+)" build.log | sed 's#.*/mobile/#mobile/#; s#.*/lifehub/#lifehub/#' | sort -u | head -40 | while read -r l; do echo "::error::$l"; done
           [ $code -eq 0 ] || { tail -60 build.log; exit $code; }
           mkdir -p dist
           cp "$(ls out/*-Signed.apk | head -1)" dist/app-release.apk
@@ -90,7 +90,7 @@ jobs:
             -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" \
             -p:ApplicationVersion=${{ github.run_number }} "-p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}" > build.log 2>&1
           code=$?
-          grep -E "error [A-Z]+[0-9]+" build.log | sed 's#.*/mobile/#mobile/#; s#.*/lifehub/#lifehub/#' | sort -u | head -40 | while read -r l; do echo "::error::$l"; done
+          grep -E "(: error|error [A-Z]+[0-9]+)" build.log | sed 's#.*/mobile/#mobile/#; s#.*/lifehub/#lifehub/#' | sort -u | head -40 | while read -r l; do echo "::error::$l"; done
           [ $code -eq 0 ] || { tail -60 build.log; exit $code; }
           app=$(find mobile/maui/LifeHub.Mobile/bin/Release -name "*.app" -type d | head -1)
           echo "App: $app"
