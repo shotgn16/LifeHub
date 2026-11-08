@@ -32,12 +32,12 @@ no_anr
 shot 1-start
 echo "::notice title=screen 1::$(texts)"
 no_anr; tap_text "Use LifeHub on this phone"; sleep 4
-adb shell input text "Alex"; sleep 1
+tap_text "e.g. Alex"; sleep 1; adb shell input text "Alex"; sleep 1; adb shell input keyevent 111; sleep 1
 no_anr; tap_text "Start"; sleep 15
 no_anr
 shot 2-asks
 # Android asks to allow notifications
-tap_text "Allow"; sleep 15
+tap_text 'text="Allow"'; sleep 15
 no_anr
 shot 3-today
 echo "::notice title=screen 2::$(texts)"
