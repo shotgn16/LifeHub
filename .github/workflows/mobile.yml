@@ -79,6 +79,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.1xx   # the first SDK band has .NET for iOS builds for every Xcode 26.x
+      - name: Use the 10.0.1xx SDK
+        run: |
+          v=$(dotnet --list-sdks | awk '{print $1}' | grep '^10\.0\.1' | sort -V | tail -1)
+          echo "{\"sdk\":{\"version\":\"$v\",\"rollForward\":\"latestPatch\"}}" > global.json
+          cat global.json; dotnet --version
       - name: .NET MAUI for iOS (matching this Xcode)
         run: |
           # The newest .NET for iOS can need a newer Xcode than GitHub's Macs have yet, so pick the newest
