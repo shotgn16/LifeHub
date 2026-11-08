@@ -83,6 +83,7 @@ jobs:
         run: |
           # The newest .NET for iOS can need a newer Xcode than GitHub's Macs have yet, so pick the newest
           # .NET for iOS made for this Xcode (or older).
+          set -e
           xc=$(xcodebuild -version | head -1 | awk '{print $2}')
           band=$(dotnet --version | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9])[0-9]*.*/\1.\200/')
           pkg="microsoft.net.sdk.ios.manifest-$band"
@@ -92,14 +93,17 @@ jobs:
           vs=[v for v in json.load(sys.stdin)['versions'] if '-' not in v and tuple(int(x) for x in v.split('.')[:2])<=xc]
           vs.sort(key=lambda v: tuple(int(x) for x in v.split('.')))
           print(vs[-1] if vs else '')")
-          echo "Xcode $xc · SDK band $band · .NET for iOS $v"
+          echo "::notice::Xcode $xc · SDK band $band · .NET for iOS $v"
           dotnet workload config --update-mode manifests || true
+          set +e
           if [ -n "$v" ]; then
             echo "{\"microsoft.net.sdk.ios\": \"$v/$band\"}" > rollback.json
-            dotnet workload install maui-ios --from-rollback-file rollback.json > workload.log 2>&1 || (tail -40 workload.log; exit 1)
+            dotnet workload install maui-ios --from-rollback-file rollback.json > workload.log 2>&1
           else
-            dotnet workload install maui-ios > workload.log 2>&1 || (tail -30 workload.log; exit 1)
+            dotnet workload install maui-ios > workload.log 2>&1
           fi
+          code=$?
+          if [ $code -ne 0 ]; then tail -25 workload.log | while read -r l; do echo "::error::$l"; done; exit $code; fi
           dotnet workload list
       - name: LifeHub's web files
         run: bash mobile/maui/copy-web.sh
