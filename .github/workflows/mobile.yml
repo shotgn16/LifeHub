@@ -84,7 +84,7 @@ jobs:
           # The newest .NET for iOS can need a newer Xcode than GitHub's Macs have yet, so pick the newest
           # .NET for iOS made for this Xcode (or older).
           set -e
-          xc=$(xcodebuild -version | head -1 | awk '{print $2}')
+          xc=$(xcodebuild -version | awk 'NR==1{print $2}')
           band=$(dotnet --version | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9])[0-9]*.*/\1.\200/')
           pkg="microsoft.net.sdk.ios.manifest-$band"
           v=$(curl -fsSL "https://api.nuget.org/v3-flatcontainer/$pkg/index.json" | python3 -c "
