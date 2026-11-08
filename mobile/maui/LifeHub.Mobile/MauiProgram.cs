@@ -23,6 +23,8 @@ public static class MauiProgram
         // ---- LifeHub on this phone: data in the app's private storage, encrypted with a key in the phone's keystore ----
         var paths = new DataPaths(Path.Combine(FileSystem.AppDataDirectory, "lifehub"));
         builder.Services.AddSingleton(paths);
+        // DataProtection would ask the host for ContentRootPath, which MAUI doesn't implement: give it a fixed name.
+        builder.Services.AddSingleton<Microsoft.AspNetCore.DataProtection.Infrastructure.IApplicationDiscriminator>(new FixedDiscriminator());
         builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(paths.Keys)).SetApplicationName("LifeHub");
         builder.Services.AddSingleton<IDataKeyStore, SecureStorageKeyStore>();
         builder.Services.AddSingleton(sp => OpenCipher(paths, sp.GetRequiredService<IDataKeyStore>()));
@@ -77,5 +79,10 @@ public static class MauiProgram
             _ = new DataPaths(paths.Root);    // recreate the empty folders
         }
         return DataCipher.Open(keys, () => AnyEncrypted(paths));
+    }
+
+    private sealed class FixedDiscriminator : Microsoft.AspNetCore.DataProtection.Infrastructure.IApplicationDiscriminator
+    {
+        public string Discriminator => "LifeHub";
     }
 }
