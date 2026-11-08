@@ -32,7 +32,7 @@ jobs:
         run: bash mobile/maui/copy-web.sh
       - name: Android SDK parts
         run: |
-          dotnet build mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android \
+          dotnet build mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:TargetFrameworks=net10.0-android \
             -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=True > deps.log 2>&1 || (tail -40 deps.log; exit 1)
       - name: Signing key (optional)
         id: key
@@ -51,7 +51,7 @@ jobs:
           KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set +e +o pipefail
-          dotnet publish mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-android -c Release \
+          dotnet publish mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-android -p:TargetFrameworks=net10.0-android -c Release \
             -p:ApplicationVersion=${{ github.run_number }} "-p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}" \
             ${{ steps.key.outputs.args }} -o out > build.log 2>&1
           code=$?
@@ -86,7 +86,7 @@ jobs:
       - name: Build (unsigned)
         run: |
           set +e +o pipefail
-          dotnet build mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-ios -c Release -p:RuntimeIdentifier=ios-arm64 \
+          dotnet build mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-ios -p:TargetFrameworks=net10.0-ios -c Release -p:RuntimeIdentifier=ios-arm64 \
             -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" \
             -p:ApplicationVersion=${{ github.run_number }} "-p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}" > build.log 2>&1
           code=$?
