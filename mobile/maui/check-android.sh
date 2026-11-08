@@ -37,5 +37,9 @@ crash=$(adb logcat -d | grep -E "FATAL EXCEPTION|Unhandled Exception|Unhandled m
 running=$(adb shell pidof $PKG)
 if [ -n "$crash" ]; then echo "$crash" | while read -r l; do echo "::warning::$l"; done; fi
 adb logcat -d | grep -iE "lifehub|blazor|chromium.*console" | grep -iE "error|exception|fail" | head -15 | while read -r l; do echo "::warning::$l"; done
-if [ -z "$running" ]; then echo "::error::LifeHub isn't running any more (crashed)"; exit 1; fi
+if [ -z "$running" ]; then
+  echo "----- crash -----"
+  adb logcat -d | grep -E "AndroidRuntime|DOTNET|monodroid|mono-rt" | head -120
+  echo "::error::LifeHub isn't running any more (crashed)"; exit 1
+fi
 echo "::notice::LifeHub opened and is still running"
