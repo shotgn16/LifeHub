@@ -24,7 +24,7 @@
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
     <NoWarn>$(NoWarn);CS1591;CA1416;CA1422;XC0103;NU1608</NoWarn>
     <!-- Blazor + System.Text.Json reflection: keep everything (smaller builds can come later). -->
-    <PublishTrimmed>false</PublishTrimmed>
+    <PublishTrimmed Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">false</PublishTrimmed>
     <MtouchLink Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">None</MtouchLink>
     <UseInterpreter Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">true</UseInterpreter>
     <AndroidPackageFormats Condition="'$(Configuration)' == 'Release'">apk;aab</AndroidPackageFormats>
