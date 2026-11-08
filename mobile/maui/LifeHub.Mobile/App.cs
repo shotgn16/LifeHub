@@ -15,6 +15,7 @@ public sealed class App : Application
     {
         _sp = sp;
         _state = state;
+        MauiProgram.UseThePhonesPerson(sp);
         _state.ModeChanged += () => MainThread.BeginInvokeOnMainThread(ShowMode);
     }
 

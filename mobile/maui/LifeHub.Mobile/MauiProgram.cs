@@ -21,11 +21,11 @@ public static class MauiProgram
 #endif
 
         // ---- LifeHub on this phone: data in the app's private storage, encrypted with a key in the phone's keystore ----
-        var paths = OpenDataFolder();
+        var paths = new DataPaths(Path.Combine(FileSystem.AppDataDirectory, "lifehub"));
         builder.Services.AddSingleton(paths);
         builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(paths.Keys)).SetApplicationName("LifeHub");
         builder.Services.AddSingleton<IDataKeyStore, SecureStorageKeyStore>();
-        builder.Services.AddSingleton(sp => DataCipher.Open(sp.GetRequiredService<IDataKeyStore>(), () => AnyEncrypted(paths)));
+        builder.Services.AddSingleton(sp => OpenCipher(paths, sp.GetRequiredService<IDataKeyStore>()));
         builder.Services.AddLifeHubCore();
 
         // ---- One person, no sign-in ----
@@ -48,29 +48,34 @@ public static class MauiProgram
             Description = "Background checks, notifications, the on-device AI and how this app runs."
         });
 
-        var app = builder.Build();
-        // Everything in the phone app runs as its one person.
-        var settings = app.Services.GetRequiredService<SettingsService>();
-        UserScope.Default = new UserScope.State(settings.PrimaryUserId, false);
-        return app;
+        return builder.Build();
+    }
+
+    /// <summary>Everything in the phone app runs as its one person (called once the app is up, and by background checks).</summary>
+    public static void UseThePhonesPerson(IServiceProvider sp)
+    {
+        if (UserScope.Default is not null) return;
+        UserScope.Default = new UserScope.State(sp.GetRequiredService<SettingsService>().PrimaryUserId, false);
     }
 
     private static bool AnyEncrypted(DataPaths paths) =>
         Directory.GetFiles(paths.Db, "*.json").Append(paths.SettingsFile).Any(DataCipher.IsEncryptedFile);
 
     /// <summary>
-    /// The data folder. If its key was lost (the app's keystore entry is gone, e.g. data restored to a new phone without
-    /// it), the unreadable folder is set aside rather than crashing on every start.
+    /// The encryption for the data folder. If its key was lost (the keystore entry is gone, e.g. data restored to a new
+    /// phone without it), the unreadable data is set aside rather than crashing on every start.
     /// </summary>
-    private static DataPaths OpenDataFolder()
+    private static DataCipher OpenCipher(DataPaths paths, IDataKeyStore keys)
     {
-        var root = Path.Combine(FileSystem.AppDataDirectory, "lifehub");
-        var paths = new DataPaths(root);
         if (AnyEncrypted(paths) && !SecureStorageKeyStore.HasKey() && !File.Exists(Path.Combine(paths.Keys, "recovery.key")))
         {
-            Directory.Move(root, root + "-locked-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
-            paths = new DataPaths(root);
+            var aside = paths.Root + "-locked-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+            Directory.CreateDirectory(aside);
+            foreach (var dir in new[] { paths.Db, paths.Backups, paths.Keys })
+                if (Directory.Exists(dir)) Directory.Move(dir, Path.Combine(aside, Path.GetFileName(dir)));
+            if (File.Exists(paths.SettingsFile)) File.Move(paths.SettingsFile, Path.Combine(aside, "settings.json"));
+            _ = new DataPaths(paths.Root);    // recreate the empty folders
         }
-        return paths;
+        return DataCipher.Open(keys, () => AnyEncrypted(paths));
     }
 }

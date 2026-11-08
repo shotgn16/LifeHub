@@ -57,6 +57,7 @@ public sealed partial class PhoneJobs
     {
         try
         {
+            MauiProgram.UseThePhonesPerson(_sp);
             if (_state.Mode == MobileMode.Device)
             {
                 using var system = UserScope.AsSystem();
