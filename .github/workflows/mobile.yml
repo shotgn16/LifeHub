@@ -83,14 +83,18 @@ jobs:
         run: |
           # The newest .NET for iOS can need a newer Xcode than GitHub's Macs have yet, so pick the newest
           # .NET for iOS made for this Xcode (or older).
-          set -e
+          set +e +o pipefail
           xc=$(xcodebuild -version | awk 'NR==1{print $2}')
           band=$(dotnet --version | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9])[0-9]*.*/\1.\200/')
+          echo "::notice::Xcode $xc, .NET SDK $(dotnet --version), band $band"
           pkg="microsoft.net.sdk.ios.manifest-$band"
-          v=$(curl -fsSL "https://api.nuget.org/v3-flatcontainer/$pkg/index.json" | python3 -c "
-          import json,sys
+          curl -fsSL "https://api.nuget.org/v3-flatcontainer/$pkg/index.json" -o versions.json || echo "::warning::No version list for $pkg"
+          v=$(python3 -c "
+          import json
           xc=tuple(int(x) for x in '$xc'.split('.')[:2])
-          vs=[v for v in json.load(sys.stdin)['versions'] if '-' not in v and tuple(int(x) for x in v.split('.')[:2])<=xc]
+          try: data=json.load(open('versions.json'))['versions']
+          except Exception: data=[]
+          vs=[v for v in data if '-' not in v and tuple(int(x) for x in v.split('.')[:2])<=xc]
           vs.sort(key=lambda v: tuple(int(x) for x in v.split('.')))
           print(vs[-1] if vs else '')")
           echo "::notice::Xcode $xc · SDK band $band · .NET for iOS $v"
