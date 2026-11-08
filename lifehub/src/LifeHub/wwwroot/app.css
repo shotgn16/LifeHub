@@ -173,7 +173,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
   white-space: nowrap; text-decoration: none;
 }
 .btn:hover { border-color: var(--accent); text-decoration: none; }
-.btn:disabled { opacity: .55; cursor: default; }
+.btn:disabled { opacity: .6; cursor: default; filter: saturate(.6); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .btn.primary:hover { filter: brightness(1.06); }
 .btn.danger { color: var(--danger); }
@@ -639,3 +639,23 @@ table.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 14px; font-size: .9rem; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; word-break: break-all; }
+
+/* ---------- Segmented choice (e.g. notification routes) ---------- */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; background: var(--surface-2); flex-shrink: 0; }
+.seg-btn { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: .8rem; padding: 4px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.seg-btn.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / .12); font-weight: 600; }
+.route-list .row { gap: 10px; flex-wrap: wrap; }
+.route-icon { font-size: 1.2rem; width: 28px; text-align: center; }
+@media (max-width: 560px) { .route-list .seg { margin-left: 38px; } }
+.code-box { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.code-big { font-family: var(--mono); font-size: 1.7rem; font-weight: 700; letter-spacing: .14em; padding: 4px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); user-select: all; }
+.bg-list .row { align-items: flex-start; gap: 12px; }
+.bg-list .switch { margin-top: 2px; }
+.bg-opts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 6px; font-size: .85rem; }
+.bg-opts label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.bg-opts input[type=number] { width: 76px; padding: 4px 8px; }
+.provider-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin: 8px 0 12px; }
+.provider { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; padding: 10px; border-radius: 10px;
+  border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.provider:hover { border-color: var(--accent); }
+.provider.on { border-color: var(--accent); background: var(--accent-soft); }

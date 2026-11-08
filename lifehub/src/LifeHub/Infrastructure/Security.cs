@@ -216,7 +216,18 @@ public sealed class UserScopeMiddleware
 public sealed class UserCircuitHandler : Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler
 {
     private readonly Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider _auth;
-    public UserCircuitHandler(Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider auth) => _auth = auth;
+    private readonly IServiceProvider _sp;
+    public UserCircuitHandler(Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider auth, IServiceProvider sp)
+    {
+        _auth = auth; _sp = sp;
+    }
+
+    /// <summary>Someone opened LifeHub: check email if that's switched on (at most every 2 minutes).</summary>
+    public override Task OnCircuitOpenedAsync(Microsoft.AspNetCore.Components.Server.Circuits.Circuit circuit, CancellationToken ct)
+    {
+        _sp.GetService<EmailSyncService>()?.SyncSoon("opened");
+        return Task.CompletedTask;
+    }
 
     public override Func<Microsoft.AspNetCore.Components.Server.Circuits.CircuitInboundActivityContext, Task> CreateInboundActivityHandler(
         Func<Microsoft.AspNetCore.Components.Server.Circuits.CircuitInboundActivityContext, Task> next) => async context =>

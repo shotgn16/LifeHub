@@ -20,7 +20,7 @@ public sealed class DealsService
     private readonly IRepository<DealIdea> _ideas;
     private readonly IRepository<Promotion> _promos;
     private readonly SettingsService _settings;
-    private readonly OllamaClient _ollama;
+    private readonly AiClient _ollama;
     private readonly KitchenService _kitchen;
     private readonly MealService _meals;
     private readonly IHttpClientFactory _http;
@@ -30,7 +30,7 @@ public sealed class DealsService
     private readonly SemaphoreSlim _running = new(1, 1);
 
     public DealsService(IRepository<DealOffer> offers, IRepository<DealIdea> ideas, IRepository<Promotion> promos, SettingsService settings,
-        OllamaClient ollama, KitchenService kitchen, MealService meals, IHttpClientFactory http, Clock clock, NotificationService notify,
+        AiClient ollama, KitchenService kitchen, MealService meals, IHttpClientFactory http, Clock clock, NotificationService notify,
         ILogger<DealsService> log)
     {
         _offers = offers; _ideas = ideas; _promos = promos; _settings = settings; _ollama = ollama; _kitchen = kitchen; _meals = meals;
@@ -72,9 +72,9 @@ public sealed class DealsService
             var lines = fresh.Take(5).Select(o => $"{o.Item} — {PriceText(o)} at {o.Store}");
             var ideas = OpenIdeas().Count(i => i.Kind == "meal");
             using (UserScope.Household.Meals ? UserScope.AsSystem() : UserScope.As(_settings.PrimaryUserId))
-                await _notify.NotifyAsync($"🏷 {fresh.Count} deal{(fresh.Count == 1 ? "" : "s")} that suit you",
+                await _notify.NotifyAsync($"{fresh.Count} deal{(fresh.Count == 1 ? "" : "s")} that suit you",
                     NotificationService.Bullets(lines, 5) + (ideas > 0 ? $"\n\n{ideas} meal idea{(ideas == 1 ? "" : "s")} for this week" : ""),
-                    NoticeLevel.Info, "meals?tab=deals", $"deals:{_clock.Today}:{string.Join(",", fresh.Select(f => f.Id.ToString()[..6]))}", tag: "deals");
+                    NoticeLevel.Info, "meals?tab=deals", $"deals:{_clock.Today}:{string.Join(",", fresh.Select(f => f.Id.ToString()[..6]))}", tag: "deals", category: NoticeCategories.Deals);
         }
     }
 

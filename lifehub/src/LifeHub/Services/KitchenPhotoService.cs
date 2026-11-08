@@ -35,12 +35,12 @@ public sealed class PhotoItem
 /// </summary>
 public sealed class KitchenPhotoService
 {
-    private readonly OllamaClient _ollama;
+    private readonly AiClient _ollama;
     private readonly KitchenService _kitchen;
     private readonly SettingsService _settings;
     private readonly Clock _clock;
 
-    public KitchenPhotoService(OllamaClient ollama, KitchenService kitchen, SettingsService settings, Clock clock)
+    public KitchenPhotoService(AiClient ollama, KitchenService kitchen, SettingsService settings, Clock clock)
     {
         _ollama = ollama; _kitchen = kitchen; _settings = settings; _clock = clock;
     }

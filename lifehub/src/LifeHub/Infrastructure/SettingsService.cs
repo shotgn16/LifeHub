@@ -20,8 +20,11 @@ public sealed class SettingsService
 
     public event Action? Changed;
 
-    public SettingsService(DataPaths paths, IDataProtectionProvider dp, ILogger<SettingsService> log)
+    private readonly DataCipher _cipher;
+
+    public SettingsService(DataPaths paths, IDataProtectionProvider dp, DataCipher cipher, ILogger<SettingsService> log)
     {
+        _cipher = cipher;
         _paths = paths;
         _log = log;
         _protector = dp.CreateProtector("LifeHub.Settings.v1");
@@ -78,6 +81,8 @@ public sealed class SettingsService
         n.ExpiryReminders = u.ExpiryReminders;
         n.DailyDigest = u.DailyDigest;
         n.DailyDigestTime = u.DailyDigestTime;
+        n.Routes = new(u.NoticeRoutes);
+        n.QuietHours = u.QuietHours; n.QuietFrom = u.QuietFrom; n.QuietTo = u.QuietTo;
         view.Schedule = Json.Clone(u.Schedule);
         view.Email.Accounts = view.Email.Accounts.Where(a => OwnedBy(a, userId, primary)).ToList();
     }
@@ -99,6 +104,8 @@ public sealed class SettingsService
         u.ExpiryReminders = working.Notifications.ExpiryReminders;
         u.DailyDigest = working.Notifications.DailyDigest;
         u.DailyDigestTime = working.Notifications.DailyDigestTime;
+        u.NoticeRoutes = new(working.Notifications.Routes);
+        u.QuietHours = working.Notifications.QuietHours; u.QuietFrom = working.Notifications.QuietFrom; u.QuietTo = working.Notifications.QuietTo;
         u.Schedule = Json.Clone(working.Schedule);
 
         result.HomeAssistant.NotifyServices = new(before.HomeAssistant.NotifyServices);
@@ -112,6 +119,10 @@ public sealed class SettingsService
         result.Notifications.ExpiryReminders = before.Notifications.ExpiryReminders;
         result.Notifications.DailyDigest = before.Notifications.DailyDigest;
         result.Notifications.DailyDigestTime = before.Notifications.DailyDigestTime;
+        result.Notifications.Routes = new(before.Notifications.Routes);
+        result.Notifications.QuietHours = before.Notifications.QuietHours;
+        result.Notifications.QuietFrom = before.Notifications.QuietFrom;
+        result.Notifications.QuietTo = before.Notifications.QuietTo;
         result.Schedule = Json.Clone(before.Schedule);
 
         foreach (var a in working.Email.Accounts) if (a.OwnerId == Guid.Empty) a.OwnerId = userId;
@@ -165,9 +176,7 @@ public sealed class SettingsService
         var toDisk = Json.Clone(s);
         WalkSecrets(toDisk, decrypt: false);
         Directory.CreateDirectory(Path.GetDirectoryName(_paths.SettingsFile)!);
-        var tmp = _paths.SettingsFile + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(toDisk, Json.Options));
-        File.Move(tmp, _paths.SettingsFile, true);
+        _cipher.WriteFile(_paths.SettingsFile, JsonSerializer.SerializeToUtf8Bytes(toDisk, Json.Options));
     }
 
     private AppSettings Load()
@@ -175,7 +184,7 @@ public sealed class SettingsService
         if (!File.Exists(_paths.SettingsFile)) return new AppSettings();
         try
         {
-            var s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_paths.SettingsFile), Json.Options) ?? new();
+            var s = JsonSerializer.Deserialize<AppSettings>(_cipher.ReadFile(_paths.SettingsFile), Json.Options) ?? new();
             WalkSecrets(s, decrypt: true);
             // 1.2 upgrade: promotions are harmless, so file them automatically by default.
             if (!s.Ollama.PromotionAutoApplyMigrated)
@@ -222,9 +231,7 @@ public sealed class SettingsService
             EnsureUsers(working);
             var toDisk = Json.Clone(working);
             WalkSecrets(toDisk, decrypt: false);
-            var tmp = _paths.SettingsFile + ".tmp";
-            await File.WriteAllTextAsync(tmp, JsonSerializer.Serialize(toDisk, Json.Options));
-            File.Move(tmp, _paths.SettingsFile, true);
+            await _cipher.WriteFileAsync(_paths.SettingsFile, JsonSerializer.SerializeToUtf8Bytes(toDisk, Json.Options));
             _current = working;
             Publish(working);
         }

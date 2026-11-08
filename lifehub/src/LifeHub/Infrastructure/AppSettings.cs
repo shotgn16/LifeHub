@@ -19,6 +19,37 @@ public sealed class AppSettings
     /// <summary>The people using LifeHub. The first admin is the "main person" who keeps household data when sharing is off.</summary>
     public List<UserProfile> Users { get; set; } = new();
     public HouseholdSettings Household { get; set; } = new();
+    public BackgroundSettings Background { get; set; } = new();
+}
+
+/// <summary>Names of LifeHub's background jobs (Settings → Background tasks).</summary>
+public static class BackgroundJobs
+{
+    public const string Email = "email";
+    public const string Reminders = "reminders";
+    public const string AutoPlan = "autoplan";
+    public const string HaSensors = "ha-sensors";
+    public const string HaLists = "ha-lists";
+    public const string Presence = "presence";
+    public const string Deals = "deals";
+    public const string Backup = "backup";
+    public const string Tidy = "tidy";
+}
+
+/// <summary>Which background jobs run, and how often (Settings → Background tasks).</summary>
+public sealed class BackgroundSettings
+{
+    /// <summary>Jobs switched off.</summary>
+    public HashSet<string> Disabled { get; set; } = new();
+    /// <summary>Publish sensor.lifehub_* to Home Assistant every N minutes.</summary>
+    public int SensorMinutes { get; set; } = 5;
+    /// <summary>Sync the Home Assistant shopping/tasks lists at least every N seconds (and straight after changes).</summary>
+    public int HaListSeconds { get; set; } = 60;
+    /// <summary>The nightly backup runs from this hour (local time).</summary>
+    public int BackupHour { get; set; } = 3;
+    public int KeepBackups { get; set; } = 14;
+
+    public bool IsOn(string job) => !Disabled.Contains(job);
 }
 
 /// <summary>What the household shares. Tasks, email and notes are always each person's own.</summary>
@@ -60,6 +91,10 @@ public sealed class UserProfile
     public bool ExpiryReminders { get; set; } = true;
     public bool DailyDigest { get; set; } = true;
     public TimeOnly DailyDigestTime { get; set; } = new(8, 0);
+    public Dictionary<string, NoticeRoute> NoticeRoutes { get; set; } = new();
+    public bool QuietHours { get; set; }
+    public TimeOnly QuietFrom { get; set; } = new(22, 0);
+    public TimeOnly QuietTo { get; set; } = new(7, 0);
     public ScheduleSettings Schedule { get; set; } = new();
 
     // ---- Appearance (Settings → Appearance) ----
@@ -151,9 +186,32 @@ public sealed class EnergySensor
     public string Label { get; set; } = "";
 }
 
+/// <summary>Who runs the AI.</summary>
+public enum AiProvider
+{
+    /// <summary>Ollama on this computer or your network (private, free).</summary>
+    Ollama,
+    /// <summary>OpenAI's ChatGPT models (needs an API key; your text goes to OpenAI).</summary>
+    OpenAI,
+    /// <summary>Google Gemini (needs an API key; your text goes to Google).</summary>
+    Gemini,
+    /// <summary>Anthropic's Claude (needs an API key; your text goes to Anthropic).</summary>
+    Claude,
+    /// <summary>Any server that speaks the OpenAI API: LM Studio, llama.cpp, vLLM, OpenRouter, Groq…</summary>
+    OpenAICompatible,
+    /// <summary>A model running inside the phone app itself (no server, works offline).</summary>
+    OnDevice
+}
+
+/// <summary>AI settings (kept under "ollama" in settings.json for compatibility with earlier versions).</summary>
 public sealed class OllamaSettings
 {
     public bool Enabled { get; set; }
+    public AiProvider Provider { get; set; } = AiProvider.Ollama;
+    /// <summary>API key for ChatGPT, Gemini, Claude or an OpenAI-compatible service.</summary>
+    [Secret] public string ApiKey { get; set; } = "";
+    /// <summary>Address of an OpenAI-compatible server, e.g. http://localhost:1234/v1.</summary>
+    public string BaseUrl { get; set; } = "";
     public string Url { get; set; } = "http://localhost:11434";
     public string Model { get; set; } = "qwen2.5:7b";
     public int TimeoutSeconds { get; set; } = 180;
@@ -192,6 +250,10 @@ public sealed class EmailSettings
     public bool DeleteEmailWithTask { get; set; } = true;
     /// <summary>When a linked email is deleted (in LifeHub or your mail app), its open tasks are deleted too.</summary>
     public bool DeleteTasksWithEmail { get; set; } = true;
+    /// <summary>The Microsoft app (client) ID for "Sign in with Microsoft" (empty = the one built into LifeHub, if any).</summary>
+    public string MicrosoftClientId { get; set; } = "";
+    /// <summary>Check every mailbox when someone opens LifeHub (or the phone app), at most every 2 minutes.</summary>
+    public bool SyncOnOpen { get; set; } = true;
 }
 
 public enum EmailAccountKind { Imap, MicrosoftGraph, ExchangeEws }
@@ -287,6 +349,15 @@ public sealed class NotificationSettings
     public bool ExpiryReminders { get; set; } = true;
     public bool DailyDigest { get; set; } = true;
     public TimeOnly DailyDigestTime { get; set; } = new(8, 0);
+    /// <summary>Per kind of notification: on the phone (and in LifeHub), only in LifeHub, or off. Missing = the default.</summary>
+    public Dictionary<string, NoticeRoute> Routes { get; set; } = new();
+    /// <summary>No phone notifications between these times (they still appear in LifeHub). Equal times = off.</summary>
+    public TimeOnly QuietFrom { get; set; } = new(22, 0);
+    public TimeOnly QuietTo { get; set; } = new(7, 0);
+    public bool QuietHours { get; set; }
+
+    public NoticeRoute RouteOf(string category) =>
+        Routes.TryGetValue(category, out var r) ? r : NoticeCategories.All.FirstOrDefault(c => c.Key == category).Default;
     /// <summary>Where push notifications go: Home Assistant's Companion app, LifeHub's own (web push), or both.</summary>
     public NotifyChannel Channel { get; set; } = NotifyChannel.HomeAssistant;
     /// <summary>VAPID key pair for LifeHub's own web push (generated on first use).</summary>

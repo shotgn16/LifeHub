@@ -30,6 +30,7 @@
     case "security": <SettingsSecurity /> break;
     case "backup" when User.IsAdmin: <SettingsBackup /> break;
     case "general" when User.IsAdmin: <SettingsGeneral /> break;
+    case "background" when User.IsAdmin: <SettingsBackground /> break;
     case "computer" when User.IsAdmin && LifeHub.Desktop.DesktopRuntime.Active: <SettingsComputer /> break;
     default:
         if (User.IsAdmin) { <SettingsGeneral /> } else { <SettingsEmail /> }
@@ -45,6 +46,6 @@
     private static readonly (string, string)[] Tabs =
     {
         ("general", "General"), ("appearance", "Appearance"), ("modules", "Modules"), ("people", "People"), ("ha", "Home Assistant"), ("ai", "AI"), ("email", "Email"),
-        ("notifications", "Notifications"), ("security", "Security & API"), ("backup", "Backup"), ("computer", "This computer")
+        ("notifications", "Notifications"), ("security", "Security & API"), ("backup", "Backup"), ("background", "Background tasks"), ("computer", "This computer")
     };
 }

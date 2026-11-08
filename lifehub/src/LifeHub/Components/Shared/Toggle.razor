@@ -1,0 +1,8 @@
+@* An on/off switch. *@
+<label class="switch" title="@Title"><input type="checkbox" checked="@Value" aria-label="@Title" @onchange="e => ValueChanged.InvokeAsync((bool)e.Value!)" /></label>
+
+@code {
+    [Parameter] public bool Value { get; set; }
+    [Parameter] public EventCallback<bool> ValueChanged { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+}

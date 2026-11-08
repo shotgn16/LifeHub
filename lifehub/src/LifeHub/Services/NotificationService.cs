@@ -12,10 +12,11 @@ public sealed class NotificationService
     private readonly HomeAssistantClient _ha;
     private readonly WebPushService _push;
     private readonly SettingsService _settings;
+    private readonly Clock _clock;
 
-    public NotificationService(IRepository<Notice> repo, HomeAssistantClient ha, WebPushService push, SettingsService settings)
+    public NotificationService(IRepository<Notice> repo, HomeAssistantClient ha, WebPushService push, SettingsService settings, Clock clock)
     {
-        _repo = repo; _ha = ha; _push = push; _settings = settings;
+        _repo = repo; _ha = ha; _push = push; _settings = settings; _clock = clock;
     }
 
     /// <summary>The channel actually used: falls back to LifeHub's own push when HA has no phones set up.</summary>
@@ -36,9 +37,13 @@ public sealed class NotificationService
 
     public int UnreadCount => _repo.Where(n => !n.Read).Count;
 
-    /// <summary>Sends a notice unless one with the same dedupe key already exists. Returns true if sent.</summary>
+    /// <summary>
+    /// Sends a notice unless one with the same dedupe key already exists. Returns true if sent.
+    /// The person's choice for the <paramref name="category"/> (Settings → Notifications) decides whether it reaches
+    /// their phone, only appears in LifeHub, or is dropped; quiet hours keep it off the phone.
+    /// </summary>
     public async Task<bool> NotifyAsync(string title, string message, NoticeLevel level = NoticeLevel.Info, string link = "", string dedupeKey = "",
-        bool push = true, string? tag = null, IEnumerable<string>? onlyTo = null, string? person = null)
+        bool push = true, string? tag = null, IEnumerable<string>? onlyTo = null, string? person = null, string category = NoticeCategories.System)
     {
         // Household-level messages (backups, upgrades, a job running for nobody in particular) go to everyone.
         if (UserScope.UserId is null)
@@ -46,18 +51,29 @@ public sealed class NotificationService
             var sent = false;
             foreach (var user in _settings.Users)
                 using (UserScope.As(user.Id))
-                    sent |= await NotifyAsync(title, message, level, link, dedupeKey, push, tag, onlyTo, person);
+                    sent |= await NotifyAsync(title, message, level, link, dedupeKey, push, tag, onlyTo, person, category);
             return sent;
         }
         if (!string.IsNullOrEmpty(dedupeKey) && _repo.Where(n => n.DedupeKey == dedupeKey).Count > 0) return false;
-        await _repo.UpsertAsync(new Notice { Title = title, Message = message, Level = level, Link = link, DedupeKey = dedupeKey });
-        if (!push) return true;
+        var prefs = _settings.Current.Notifications;
+        var route = prefs.RouteOf(category);
+        if (route == NoticeRoute.Off) return false;
+        var phone = push && route == NoticeRoute.Phone && !InQuietHours(prefs);
+        await _repo.UpsertAsync(new Notice { Title = title, Message = message, Level = level, Link = link, DedupeKey = dedupeKey, Category = category, Phone = phone });
+        if (!phone) return true;
         var channel = EffectiveChannel;
         if (channel is NotifyChannel.HomeAssistant or NotifyChannel.Both)
             await _ha.NotifyAsync(title, message, string.IsNullOrEmpty(link) ? null : link, tag, onlyTo);
         if (channel is NotifyChannel.LifeHub or NotifyChannel.Both)
             await _push.SendAsync(title, message, link, tag, person);
         return true;
+    }
+
+    private bool InQuietHours(NotificationSettings n)
+    {
+        if (!n.QuietHours || n.QuietFrom == n.QuietTo) return false;
+        var now = TimeOnly.FromDateTime(_clock.Now);
+        return n.QuietFrom < n.QuietTo ? now >= n.QuietFrom && now < n.QuietTo : now >= n.QuietFrom || now < n.QuietTo;
     }
 
     /// <summary>"• a\n• b\n+3 more" — readable on a phone lock screen.</summary>

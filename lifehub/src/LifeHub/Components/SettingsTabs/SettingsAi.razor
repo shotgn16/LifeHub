@@ -1,18 +1,50 @@
 @using System.Text.Json
 @inject SettingsService Settings
-@inject OllamaClient Ollama
+@inject AiClient Ollama
 @inject AiService Ai
 @inject UiState Ui
 
 <div class="grid cols-2">
     <div class="card">
-        <h2 style="margin-bottom:12px">Ollama</h2>
-        <label class="check"><input type="checkbox" @bind="o.Enabled" /> Enabled</label>
+        <h2 style="margin-bottom:12px">Which AI</h2>
+        <label class="check"><input type="checkbox" @bind="o.Enabled" /> Use AI in LifeHub</label>
+        <div class="provider-grid">
+            @foreach (var p in Providers)
+            {
+                var prov = p;
+                <button type="button" class="provider @(o.Provider == prov ? "on" : "")" @onclick="() => Pick(prov)">
+                    <strong>@AiProviders.Label(prov)</strong>
+                    <span class="tiny muted">@ProviderNote(prov)</span>
+                </button>
+            }
+        </div>
+        @if (AiProviders.IsCloud(o.Provider))
+        {
+            <div class="alert warn small">With @AiProviders.Label(o.Provider), the emails, notes and lists LifeHub asks about are sent to that company to be answered. Ollama or the on-device AI keep everything at home.</div>
+            <div class="field">
+                <label>API key</label>
+                <input type="password" @bind="o.ApiKey" autocomplete="off" placeholder="Paste your API key" />
+                <div class="help"><a href="@AiProviders.KeyUrl(o.Provider)" target="_blank" rel="noopener">Get an API key</a> (pay-as-you-go; LifeHub uses very little). It's stored encrypted.</div>
+            </div>
+        }
+        else if (o.Provider == AiProvider.OpenAICompatible)
+        {
+            <div class="field"><label>Server address</label><input type="url" @bind="o.BaseUrl" placeholder="http://localhost:1234/v1" /><div class="help">LM Studio, llama.cpp server, vLLM, Jan, OpenRouter (https://openrouter.ai/api/v1), Groq…</div></div>
+            <div class="field"><label>API key <span class="muted">(if the server needs one)</span></label><input type="password" @bind="o.ApiKey" autocomplete="off" /></div>
+        }
+        else if (o.Provider == AiProvider.OnDevice)
+        {
+            <p class="small muted">The model runs inside the LifeHub phone app — private and offline. It downloads once (1–2.5 GB) and needs a recent phone.
+                Emails that arrive while the app is closed are read the next time you open it.</p>
+        }
+        @if (o.Provider == AiProvider.Ollama)
+        {
         <div class="field">
             <label>Ollama URL</label>
             <input type="url" @bind="o.Url" placeholder="http://192.168.1.50:11434" />
             <div class="help">Where Ollama runs. If it's on another machine, start it with <code>OLLAMA_HOST=0.0.0.0</code>. From the HA add-on, <code>localhost</code> is the container itself — use the machine's IP.</div>
         </div>
+        }
         <div class="field">
             <label>Model</label>
             <div style="display:flex;gap:6px">
@@ -20,13 +52,20 @@
                 <button class="btn" @onclick="LoadModels" disabled="@busy">List</button>
             </div>
             <datalist id="ollama-models">@foreach (var m in models) { <option value="@m"></option> }</datalist>
-            <div class="help">Good choices: <code>qwen2.5:7b</code>, <code>llama3.1:8b</code>, <code>mistral-nemo</code> (structured output needs Ollama 0.5+). Bigger = better at dates, slower on CPU.</div>
+            @if (o.Provider == AiProvider.Ollama)
+            {
+                <div class="help">Good choices: <code>qwen2.5:7b</code>, <code>llama3.1:8b</code>, <code>mistral-nemo</code> (structured output needs Ollama 0.5+). Bigger = better at dates, slower on CPU.</div>
+            }
+            else { <div class="help">Press <strong>List</strong> to see every model you can use. Suggested: <code>@AiProviders.Defaults(o.Provider).Model</code>.</div> }
         </div>
+        @if (o.Provider == AiProvider.Ollama)
+        {
         <div class="field">
             <label>Vision model <span class="muted">(optional — reads photos)</span></label>
             <input type="text" @bind="o.VisionModel" list="ollama-models" placeholder="e.g. qwen3-vl:4b-instruct" />
             <div class="help">Used to find groceries and dates in photos, and to read deal leaflets. Good choices: <code>qwen3-vl:4b-instruct</code> (fine on 8 GB, and good enough to be your main model too), <code>qwen3-vl:8b-instruct</code>, <code>gemma3:4b</code> (<code>ollama pull qwen3-vl:4b-instruct</code>).</div>
         </div>
+        }
         <label class="check"><input type="checkbox" @bind="o.Thinking" /> <span>Let "thinking" models reason first <span class="muted small">(qwen3, qwen3-vl, deepseek-r1 — better on big machines, but can take minutes; leave off on small ones. Tip: plain <code>qwen3-vl:4b</code> is a thinking model — use <code>qwen3-vl:4b-instruct</code>)</span></span></label>
         <div class="form-grid">
             <div class="field"><label>Timeout (seconds)</label><input type="number" min="10" @bind="o.TimeoutSeconds" /></div>
@@ -37,7 +76,7 @@
         </div>
         @if (models.Count > 0 || modelsError is not null)
         {
-            <div class="alert @(modelsError is null ? "ok" : "danger") small">@(modelsError ?? $"Connected — {models.Count} model(s) installed.")</div>
+            <div class="alert @(modelsError is null ? "ok" : "danger") small">@(modelsError ?? $"Connected to {AiProviders.Label(o.Provider)} — {models.Count} model{(models.Count == 1 ? "" : "s")} available.")</div>
         }
     </div>
 
@@ -85,7 +124,29 @@
     private int elapsed;
     private string sample = "Hi, your annual renewal for example.co.uk is due on 3 November 2026 at £12.99 (was £9.99). Also, can you send me the Q3 report by Friday? Thanks";
 
-    protected override void OnInitialized() => o = Settings.Current.Ollama;
+    protected override void OnInitialized() => o = Json.Clone(Settings.Current.Ollama);
+
+    private IEnumerable<AiProvider> Providers => Enum.GetValues<AiProvider>().Where(p => p != AiProvider.OnDevice || Ollama.OnDeviceSupported || o.Provider == AiProvider.OnDevice);
+
+    private static string ProviderNote(AiProvider p) => p switch
+    {
+        AiProvider.Ollama => "Private · free · on your computer or network",
+        AiProvider.OnDevice => "Private · offline · inside the phone app",
+        AiProvider.OpenAICompatible => "LM Studio, llama.cpp, OpenRouter…",
+        _ => "Cloud · needs an API key"
+    };
+
+    private void Pick(AiProvider p)
+    {
+        if (o.Provider == p) return;
+        o.Provider = p;
+        models.Clear(); modelsError = null;
+        // Models differ per provider: start from a good default (List shows the rest).
+        var d = AiProviders.Defaults(p);
+        o.Model = d.Model;
+        o.VisionModel = d.Vision;
+        if (AiProviders.IsCloud(p) && o.ContextTokens < 32768) o.ContextTokens = 32768;
+    }
 
     private void ToggleAuto(string type, bool on)
     {

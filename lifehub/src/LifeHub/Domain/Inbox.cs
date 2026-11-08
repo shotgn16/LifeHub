@@ -114,4 +114,41 @@ public sealed class Notice : Entity
     public bool Read { get; set; }
     /// <summary>Prevents the same reminder being sent twice.</summary>
     public string DedupeKey { get; set; } = "";
+    /// <summary>What kind of notice it is (see <see cref="NoticeCategories"/>); decides where it goes.</summary>
+    public string Category { get; set; } = NoticeCategories.System;
+    /// <summary>Whether phones should show it as a notification (otherwise it's only listed in LifeHub).</summary>
+    public bool Phone { get; set; }
 }
+
+/// <summary>The kinds of notification, each with its own setting in Settings → Notifications.</summary>
+public static class NoticeCategories
+{
+    public const string Reminders = "reminders";
+    public const string Renewals = "renewals";
+    public const string Food = "food";
+    public const string Email = "email";
+    public const string Digest = "digest";
+    public const string Deals = "deals";
+    public const string Shopping = "shopping";
+    public const string System = "system";
+
+    public static readonly (string Key, string Title, string Help, NoticeRoute Default)[] All =
+    {
+        (Reminders, "Task reminders", "When a task is due or planned to start", NoticeRoute.Phone),
+        (Renewals, "Renewals", "Before something renews or expires", NoticeRoute.Phone),
+        (Food, "Food to use up", "Food in the kitchen nearing its date", NoticeRoute.Phone),
+        (Email, "From your email", "What the AI added from your email (offers are never notified)", NoticeRoute.Phone),
+        (Digest, "Morning summary", "Your day at a glance, at the time you choose", NoticeRoute.Phone),
+        (Deals, "Deals", "Offers that suit your meal plan and list", NoticeRoute.InApp),
+        (Shopping, "Shopping list", "When LifeHub tidies the shopping list", NoticeRoute.InApp),
+        (System, "LifeHub itself", "Backups, updates and problems that need you", NoticeRoute.InApp),
+    };
+
+    public static string Icon(string category) => category switch
+    {
+        Reminders => "⏰", Renewals => "🔁", Food => "🥛", Email => "📬", Digest => "☀️", Deals => "🏷", Shopping => "🛒", _ => "ℹ️"
+    };
+}
+
+/// <summary>Where a kind of notification goes.</summary>
+public enum NoticeRoute { Phone, InApp, Off }

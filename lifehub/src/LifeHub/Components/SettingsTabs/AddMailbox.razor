@@ -1,0 +1,275 @@
+@using LifeHub.Integrations.Email
+@implements IDisposable
+@inject SettingsService Settings
+@inject IEnumerable<IEmailProvider> Providers
+@inject MicrosoftGraphClient Graph
+@inject IHttpClientFactory Http
+@inject IJSRuntime JS
+@inject UiState Ui
+
+@* "Add a mailbox": pick your provider, sign in, done. Several mailboxes of each kind are fine. *@
+
+<Modal Open="Open" OpenChanged="OpenChanged" Title="@Title" Wide="true">
+    <ChildContent>
+        @switch (step)
+        {
+            case Step.Pick:
+                <p class="small muted" style="margin-top:0">Choose where your email is. You can add as many mailboxes as you like, including several of the same kind.</p>
+                <div class="mode-grid">
+                    <button type="button" class="mode-card" @onclick="StartMicrosoft">
+                        <Icon Name="mail" Size="22" />
+                        <strong>Outlook, Hotmail or Microsoft 365</strong>
+                        <span class="small muted">Sign in with Microsoft — nothing else to set up</span>
+                    </button>
+                    @foreach (var s in MailServices.AppPassword)
+                    {
+                        var svc = s;
+                        <button type="button" class="mode-card" @onclick="() => StartAppPassword(svc)">
+                            <Icon Name="@svc.Icon" Size="22" />
+                            <strong>@svc.Name</strong>
+                            <span class="small muted">Sign in with an app password</span>
+                        </button>
+                    }
+                    <button type="button" class="mode-card" @onclick="StartOther">
+                        <Icon Name="search" Size="22" />
+                        <strong>Another provider</strong>
+                        <span class="small muted">Your email and password — LifeHub finds the settings</span>
+                    </button>
+                </div>
+                <p class="tiny muted" style="margin-top:12px">Exchange at work (on-premises)? Add it, then choose <em>Exchange (EWS)</em> in its settings.</p>
+                break;
+
+            case Step.Microsoft:
+                @if (string.IsNullOrEmpty(clientId))
+                {
+                    <div class="alert warn small">
+                        "Sign in with Microsoft" isn't set up for this LifeHub yet. An admin registers LifeHub with Microsoft once (free, about 5 minutes) and
+                        enters the app ID in Settings → Email → <em>Microsoft sign-in</em>. See the manual: <em>Email → Setting up Microsoft sign-in</em>.
+                    </div>
+                }
+                else if (device is null)
+                {
+                    <p class="muted"><span class="spinner"></span> Contacting Microsoft…</p>
+                }
+                else
+                {
+                    <ol class="welcome-list">
+                        <li>Press <strong>Open Microsoft sign-in</strong> (it opens in your browser).</li>
+                        <li>Enter this code:
+                            <div class="code-box">
+                                <span class="code-big">@device.UserCode</span>
+                                <button class="btn sm" @onclick="CopyCode"><Icon Name="copy" Size="14" /> @(copied ? "Copied" : "Copy")</button>
+                            </div>
+                        </li>
+                        <li>Sign in with the account whose email LifeHub should read, and press <strong>Accept</strong>.</li>
+                    </ol>
+                    <button class="btn primary" @onclick="OpenMicrosoft"><Icon Name="link" Size="15" /> Open Microsoft sign-in</button>
+                    <p class="small muted" style="margin-top:12px">
+                        @if (Graph.LoginStatus.TryGetValue(accountId, out var st) && !st.StartsWith("Waiting")) { @st }
+                        else { <span><span class="spinner"></span> Waiting for you to sign in — this page carries on by itself.</span> }
+                    </p>
+                }
+                break;
+
+            case Step.AppPassword:
+                @if (service is not null)
+                {
+                    <ol class="welcome-list">
+                        <li>Make an app password for LifeHub. @service.AppPasswordSteps
+                            <div style="margin-top:6px"><a class="btn sm" href="@service.AppPasswordUrl" target="_blank" rel="noopener" @onclick="() => OpenExternal(service.AppPasswordUrl)" @onclick:preventDefault="true"><Icon Name="link" Size="14" /> Open @service.Name settings</a></div>
+                        </li>
+                        <li>Enter your email address and paste the app password:</li>
+                    </ol>
+                }
+                else
+                {
+                    <p class="small muted" style="margin-top:0">Enter your email address and password. If your provider offers <strong>app passwords</strong>, use one of those instead of your normal password.</p>
+                }
+                <div class="form-grid">
+                    <div class="field"><label>Email address</label><input type="email" @bind="address" @bind:event="oninput" autocomplete="email" /></div>
+                    <div class="field"><label>@(service is null ? "Password" : "App password")</label><input type="password" @bind="password" autocomplete="new-password" /></div>
+                    @if (showServer)
+                    {
+                        <div class="field"><label>IMAP server</label><input type="text" @bind="host" /></div>
+                        <div class="field"><label>Port</label><input type="number" @bind="port" /></div>
+                        <div class="field"><label>Username (if not your address)</label><input type="text" @bind="username" /></div>
+                    }
+                </div>
+                @if (!string.IsNullOrEmpty(error))
+                {
+                    <div class="alert danger small">@error</div>
+                    @if (!showServer) { <button class="btn sm" @onclick="() => showServer = true">Enter the server details myself</button> }
+                }
+                break;
+
+            case Step.Done:
+                <div class="alert ok"><Icon Name="check" Size="16" /> <strong>@doneName</strong> is connected. LifeHub checks it now and then every few minutes.</div>
+                break;
+        }
+    </ChildContent>
+    <Footer>
+        @if (step is Step.Microsoft or Step.AppPassword)
+        {
+            <button class="btn left" @onclick="Back" disabled="@busy">Back</button>
+        }
+        @if (step == Step.AppPassword)
+        {
+            <button class="btn primary" @onclick="ConnectImap" disabled="@(busy || string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(password))">
+                @if (busy) { <span class="spinner"></span> } Connect
+            </button>
+        }
+        @if (step == Step.Done) { <button class="btn primary" @onclick="() => OpenChanged.InvokeAsync(false)">Done</button> }
+        else { <button class="btn" @onclick="() => OpenChanged.InvokeAsync(false)">Cancel</button> }
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    private enum Step { Pick, Microsoft, AppPassword, Done }
+    private Step step;
+    private MailService? service;
+    private string address = "", password = "", host = "", username = "", error = "", clientId = "", doneName = "";
+    private int port = 993;
+    private bool busy, showServer, copied;
+    private Guid accountId;
+    private DeviceCodeInfo? device;
+    private Timer? poll;
+    private UserScope.State? me;
+
+    private string Title => step switch
+    {
+        Step.Microsoft => "Sign in with Microsoft",
+        Step.AppPassword => service?.Name ?? "Another provider",
+        Step.Done => "Mailbox added",
+        _ => "Add a mailbox"
+    };
+
+    protected override void OnInitialized() => me = UserScope.Current;
+
+    protected override void OnParametersSet()
+    {
+        if (!Open) { Reset(); return; }
+    }
+
+    private void Reset()
+    {
+        // A Microsoft sign-in that was never finished leaves nothing behind.
+        if (step == Step.Microsoft && accountId != Guid.Empty)
+        {
+            var id = accountId;
+            if (Settings.Current.Email.Accounts.FirstOrDefault(a => a.Id == id) is { GraphRefreshToken: "" })
+                _ = Settings.UpdateAsync(s => s.Email.Accounts.RemoveAll(a => a.Id == id));
+        }
+        accountId = Guid.Empty;
+        step = Step.Pick; service = null; address = password = host = username = error = ""; port = 993;
+        busy = showServer = copied = false; device = null;
+        poll?.Dispose(); poll = null;
+    }
+
+    private void Back() { var keep = address; Reset(); address = keep; }
+
+    private async Task StartMicrosoft()
+    {
+        step = Step.Microsoft;
+        clientId = MailServices.MicrosoftClientId(Settings.Current.Email);
+        if (string.IsNullOrEmpty(clientId)) return;
+        var account = new EmailAccount { Name = "Outlook", Kind = EmailAccountKind.MicrosoftGraph, GraphClientId = clientId, GraphTenant = "common", UseForCalendar = true };
+        accountId = account.Id;
+        try
+        {
+            device = await Graph.StartDeviceLoginAsync(account);
+            await Settings.UpdateAsync(s => s.Email.Accounts.Add(account));
+            var info = device;
+            _ = Task.Run(async () =>
+            {
+                using var scope = UserScope.Use(me);
+                try { await Graph.CompleteDeviceLoginAsync(accountId, info); }
+                catch (Exception ex) { Graph.LoginStatus[accountId] = "Sign-in failed: " + ex.Message; }
+                var acc = Settings.Current.Email.Accounts.FirstOrDefault(a => a.Id == accountId);
+                if (acc is not null && !string.IsNullOrEmpty(acc.GraphRefreshToken))
+                {
+                    var name = MailServices.MicrosoftDomains.Contains(MailServices.DomainOf(acc.Address)) ? "Outlook" : "Microsoft 365";
+                    await Settings.UpdateAsync(s => { var a = s.Email.Accounts.First(x => x.Id == accountId); a.Name = Unique(s, name); });
+                    doneName = $"{name} ({acc.Address})";
+                    await InvokeAsync(() => { step = Step.Done; StateHasChanged(); });
+                    _ = Kick();
+                }
+                else await InvokeAsync(StateHasChanged);
+            });
+            poll = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        }
+        catch (Exception ex) { Graph.LoginStatus[accountId] = "Couldn't start the sign-in: " + ex.Message; device = new("", "—", "https://microsoft.com/devicelogin", "", 5, DateTime.UtcNow); }
+    }
+
+    private void StartAppPassword(MailService s) { service = s; host = s.ImapHost; port = s.ImapPort; step = Step.AppPassword; }
+    private void StartOther() { service = null; step = Step.AppPassword; }
+
+    private async Task CopyCode()
+    {
+        if (device is null) return;
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", device.UserCode); copied = true; } catch { }
+    }
+
+    private Task OpenMicrosoft() => OpenExternal(device?.VerificationUri ?? "https://microsoft.com/devicelogin");
+
+    /// <summary>Opens a page in the computer's browser (from the desktop app window too).</summary>
+    private async Task OpenExternal(string url)
+    {
+        if (LifeHub.Desktop.DesktopRuntime.Active && !LifeHub.Desktop.DesktopRuntime.IsService) { LifeHub.Desktop.DesktopRuntime.OpenInBrowser(url); return; }
+        try { await JS.InvokeVoidAsync("open", url, "_blank", "noopener"); } catch { }
+    }
+
+    private async Task ConnectImap()
+    {
+        busy = true; error = "";
+        try
+        {
+            var addr = address.Trim();
+            var known = service ?? MailServices.ForAddress(addr);
+            if (MailServices.MicrosoftDomains.Contains(MailServices.DomainOf(addr)) && !showServer)
+            {
+                error = "That's a Microsoft address — go Back and choose Outlook, Hotmail or Microsoft 365 to sign in with Microsoft.";
+                return;
+            }
+            if (!showServer)
+            {
+                if (known is not null) { host = known.ImapHost; port = known.ImapPort; }
+                else if (await MailServices.DiscoverImapAsync(Http.CreateClient(), addr) is { } found) { host = found.Host; port = found.Port; }
+            }
+            var account = new EmailAccount
+            {
+                Kind = EmailAccountKind.Imap, Address = addr, Username = string.IsNullOrWhiteSpace(username) ? addr : username.Trim(),
+                Password = password.Replace(" ", "").Length == 16 && known?.Key == "gmail" ? password.Replace(" ", "") : password,
+                ImapHost = host.Trim(), ImapPort = port, ImapSsl = port != 143, Folder = "INBOX",
+                Name = known?.Name ?? MailServices.DomainOf(addr)
+            };
+            await Providers.First(p => p.Kind == EmailAccountKind.Imap).TestAsync(account, CancellationToken.None);
+            await Settings.UpdateAsync(s => { account.Name = Unique(s, account.Name); s.Email.Accounts.Add(account); });
+            doneName = $"{account.Name} ({addr})";
+            step = Step.Done;
+            _ = Kick();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message.Contains("Authentication", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("AUTHENTICATE", StringComparison.Ordinal)
+                ? "The email address or " + (service is null ? "password" : "app password") + " wasn't accepted. Check them and try again."
+                : $"Couldn't connect to {host}: {ex.Message}";
+        }
+        finally { busy = false; }
+    }
+
+    /// <summary>"Gmail", "Gmail 2", … so several mailboxes of the same kind are easy to tell apart.</summary>
+    private static string Unique(AppSettings s, string name)
+    {
+        var names = s.Email.Accounts.Select(a => a.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!names.Contains(name)) return name;
+        for (var i = 2; ; i++) if (!names.Contains($"{name} {i}")) return $"{name} {i}";
+    }
+
+    [Inject] private EmailSyncService Sync { get; set; } = default!;
+    private Task Kick() => Task.Run(async () => { try { await Sync.SyncAllAsync(); } catch { } });
+
+    public void Dispose() => poll?.Dispose();
+}

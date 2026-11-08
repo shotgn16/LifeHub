@@ -61,8 +61,9 @@ public sealed class HaListSyncService : BackgroundService
         await Task.Delay(TimeSpan.FromSeconds(15), ct);
         while (!ct.IsCancellationRequested)
         {
-            await SyncNowAsync(ct);
-            await _signal.WaitAsync(TimeSpan.FromSeconds(60), ct);
+            var bg = _settings.Household.Background;
+            if (bg.IsOn(BackgroundJobs.HaLists)) await SyncNowAsync(ct);
+            await _signal.WaitAsync(TimeSpan.FromSeconds(Math.Clamp(bg.HaListSeconds, 15, 3600)), ct);
             await Task.Delay(TimeSpan.FromSeconds(3), ct); // let a burst of edits settle
         }
     }

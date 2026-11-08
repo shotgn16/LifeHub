@@ -15,7 +15,7 @@ public sealed record AnalysisResult(string Summary, string Importance, List<AiSu
 /// </summary>
 public sealed class AiService
 {
-    private readonly OllamaClient _ollama;
+    private readonly AiClient _ollama;
     private readonly IEnumerable<IAiActionHandler> _handlers;
     private readonly IRepository<AiSuggestion> _suggestions;
     private readonly SettingsService _settings;
@@ -23,7 +23,7 @@ public sealed class AiService
     private readonly IServiceProvider _sp;
     private readonly ILogger<AiService> _log;
 
-    public AiService(OllamaClient ollama, IEnumerable<IAiActionHandler> handlers, IRepository<AiSuggestion> suggestions,
+    public AiService(AiClient ollama, IEnumerable<IAiActionHandler> handlers, IRepository<AiSuggestion> suggestions,
         SettingsService settings, Clock clock, IServiceProvider sp, ILogger<AiService> log)
     {
         _ollama = ollama; _handlers = handlers; _suggestions = suggestions; _settings = settings; _clock = clock; _sp = sp; _log = log;
@@ -231,14 +231,38 @@ public sealed class AiService
                 if (r?.Status == SuggestionStatus.Applied) applied.Add(r);
             }
         }
-        // Let you know what was done on your behalf from email (in-app only, with undo in the AI Inbox).
+        // What the AI did from email is gathered up and told in one notification per sync (see FlushEmailNoticeAsync).
         if (applied.Count > 0 && applied[0].Origin == "email")
-        {
-            var what = string.Join(", ", applied.Select(a => $"{a.Type} \"{a.Title}\""));
-            await _sp.GetRequiredService<NotificationService>().NotifyAsync(
-                $"Added from email: {applied.Count} item(s)", $"{what} — from {applied[0].OriginText}. Undo in AI Inbox → History.",
-                NoticeLevel.Info, "inbox", $"auto:{applied[0].Id}", push: false);
-        }
+            _emailApplied.AddOrUpdate(UserScope.UserId ?? Guid.Empty, _ => new List<AiSuggestion>(applied), (_, l) => { lock (l) l.AddRange(applied); return l; });
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, List<AiSuggestion>> _emailApplied = new();
+
+    private static string Noun(string type, int n) => (type, n == 1) switch
+    {
+        ("task", true) => "task", ("task", false) => "tasks",
+        ("event", true) => "event", ("event", false) => "events",
+        ("renewal", true) => "renewal", ("renewal", false) => "renewals",
+        ("shopping", _) => n == 1 ? "thing to buy" : "things to buy",
+        ("pantry", _) => n == 1 ? "kitchen item" : "kitchen items",
+        _ => n == 1 ? "item" : "items"
+    };
+
+    /// <summary>
+    /// One tidy notification for everything the AI added from the current person's email since the last call,
+    /// e.g. "From your email: 2 tasks, 1 renewal". Offers saved to Promotions are never notified.
+    /// </summary>
+    public async Task FlushEmailNoticeAsync()
+    {
+        if (!_emailApplied.TryRemove(UserScope.UserId ?? Guid.Empty, out var all)) return;
+        List<AiSuggestion> items;
+        lock (all) items = all.Where(a => a.Type != "promotion").ToList();
+        if (items.Count == 0) return;
+        var summary = string.Join(", ", items.GroupBy(i => i.Type).Select(g => $"{g.Count()} {Noun(g.Key, g.Count())}"));
+        var lines = items.Select(i => i.Type == "task" || i.Type == "event" || i.Type == "renewal" ? i.Title : $"{i.Title} ({Noun(i.Type, 1)})");
+        await _sp.GetRequiredService<NotificationService>().NotifyAsync(
+            $"From your email: {summary}", NotificationService.Bullets(lines, 5) + "\nTap to review or undo.",
+            NoticeLevel.Info, "inbox?tab=history", $"email:{items[0].Id}", tag: "email", category: NoticeCategories.Email);
     }
 
     /// <summary>True when an applied suggestion can be reversed (including renewals created before 1.2).</summary>

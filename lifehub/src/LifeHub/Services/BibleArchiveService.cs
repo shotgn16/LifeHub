@@ -15,9 +15,11 @@ public sealed class BibleArchiveService
     private readonly SettingsService _settings;
     private readonly Clock _clock;
 
-    public BibleArchiveService(DataPaths paths, SettingsService settings, Clock clock)
+    private readonly DataCipher _cipher;
+
+    public BibleArchiveService(DataPaths paths, SettingsService settings, Clock clock, DataCipher cipher)
     {
-        _paths = paths; _settings = settings; _clock = clock;
+        _paths = paths; _settings = settings; _clock = clock; _cipher = cipher;
     }
 
     private string BibleDir => Path.Combine(_paths.Root, "bible");
@@ -33,14 +35,19 @@ public sealed class BibleArchiveService
         var file = Path.Combine(_paths.Backups, $"bible-export-{_clock.Now:yyyyMMdd-HHmmss}.zip");
         using (var zip = ZipFile.Open(file, ZipArchiveMode.Create))
         {
-            foreach (var f in DbFiles) zip.CreateEntryFromFile(f, "db/" + Path.GetFileName(f));
+            foreach (var f in DbFiles)
+            {
+                var e = zip.CreateEntry("db/" + Path.GetFileName(f));
+                using var s = e.Open();
+                s.Write(_cipher.ReadFile(f));     // the export is plain JSON, for the new app to import
+            }
             if (Directory.Exists(BibleDir))
                 foreach (var f in Directory.GetFiles(BibleDir, "*", SearchOption.AllDirectories))
                     zip.CreateEntryFromFile(f, "bible/" + Path.GetRelativePath(BibleDir, f).Replace('\\', '/'));
             // The Bible part of the old settings (household + each person's), without anything else.
             if (File.Exists(_paths.SettingsFile))
             {
-                var root = JsonNode.Parse(File.ReadAllText(_paths.SettingsFile)) as JsonObject;
+                var root = JsonNode.Parse(_cipher.ReadText(_paths.SettingsFile)) as JsonObject;
                 var keep = new JsonObject();
                 if (root?["bible"] is JsonNode household) keep["household"] = household.DeepClone();
                 var people = new JsonArray();

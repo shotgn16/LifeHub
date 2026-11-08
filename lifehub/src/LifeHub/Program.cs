@@ -42,7 +42,17 @@ static WebApplication CreateLifeHub(string[] args, string? urls, bool windowsSer
     // ---------- Core infrastructure ----------
     builder.Services.AddSingleton<DataPaths>();
     var keysDir = new DataPaths(builder.Configuration, builder.Environment).Keys;
-    builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(keysDir)).SetApplicationName("LifeHub");
+    var protection = builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(keysDir)).SetApplicationName("LifeHub");
+    if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi(protectToLocalMachine: true);
+    FileDataKeyStore.LockDown(keysDir);
+    // Everything stored is encrypted (AES-256-GCM); the key lives in keys/ (or LIFEHUB_DATA_KEY).
+    builder.Services.AddSingleton<IDataKeyStore, FileDataKeyStore>();
+    builder.Services.AddSingleton(sp =>
+    {
+        var paths = sp.GetRequiredService<DataPaths>();
+        return DataCipher.Open(sp.GetRequiredService<IDataKeyStore>(),
+            () => Directory.GetFiles(paths.Db, "*.json").Append(paths.SettingsFile).Any(DataCipher.IsEncryptedFile));
+    });
     builder.Services.AddSingleton<SettingsService>();
     builder.Services.AddSingleton<Clock>();
     builder.Services.AddSingleton(typeof(IRepository<>), typeof(JsonRepository<>));
@@ -61,6 +71,7 @@ static WebApplication CreateLifeHub(string[] args, string? urls, bool windowsSer
     builder.Services.AddSingleton<PlannerService>();
     builder.Services.AddSingleton<NotificationService>();
     builder.Services.AddSingleton<BackupService>();
+    builder.Services.AddSingleton<BackgroundStatus>();
     builder.Services.AddSingleton<WebPushService>();
     builder.Services.AddSingleton<KitchenPhotoService>();
     builder.Services.AddSingleton<MealService>();
@@ -79,7 +90,7 @@ static WebApplication CreateLifeHub(string[] args, string? urls, bool windowsSer
     builder.Services.AddSingleton<HomeAssistantSetup>();
     builder.Services.AddSingleton<HaListSyncService>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<HaListSyncService>());
-    builder.Services.AddSingleton<OllamaClient>();
+    builder.Services.AddSingleton<AiClient>();
     builder.Services.AddSingleton<MicrosoftGraphClient>();
     builder.Services.AddSingleton<IEmailProvider, ImapEmailProvider>();
     builder.Services.AddSingleton<IEmailProvider, GraphEmailProvider>();
@@ -140,6 +151,14 @@ static WebApplication CreateLifeHub(string[] args, string? urls, bool windowsSer
     builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, UserCircuitHandler>();
 
     var app = builder.Build();
+
+    // 3.1 upgrade: encrypt data files written by earlier versions (each is also encrypted the next time it's saved).
+    {
+        var paths = app.Services.GetRequiredService<DataPaths>();
+        var encrypted = app.Services.GetRequiredService<DataCipher>()
+            .EncryptExisting(Directory.GetFiles(paths.Db, "*.json").Append(paths.SettingsFile));
+        if (encrypted > 0) app.Logger.LogInformation("Encrypted {Count} data files", encrypted);
+    }
 
     app.UseMiddleware<IngressMiddleware>();       // first: needs the real proxy IP, and sets PathBase before routing
     app.UseForwardedHeaders();

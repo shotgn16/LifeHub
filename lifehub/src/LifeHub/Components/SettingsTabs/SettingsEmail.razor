@@ -4,12 +4,17 @@
 @inject MicrosoftGraphClient Graph
 @inject EmailSyncService Sync
 @inject UiState Ui
+@inject UserContext User
+@using LifeHub.Integrations.Email
 
 <div class="grid cols-3" style="margin-bottom:16px">
     <div class="card span-2">
         <div class="card-head">
             <h2>Mailboxes</h2>
-            <div class="right"><button class="btn sm primary" @onclick="Add"><Icon Name="plus" Size="14" /> Add mailbox</button></div>
+            <div class="right" style="display:flex;gap:6px">
+                <button class="btn sm" @onclick="Add" title="Enter every setting yourself">Add manually</button>
+                <button class="btn sm primary" @onclick="() => adding = true"><Icon Name="plus" Size="14" /> Add mailbox</button>
+            </div>
         </div>
         <ul class="list">
             @if (accounts.Count == 0) { <li class="empty small">No mailboxes yet.</li> }
@@ -33,7 +38,8 @@
     </div>
     <div class="card">
         <h2 style="margin-bottom:12px">Polling</h2>
-        <div class="field"><label>Check every (minutes)</label><input type="number" min="2" @bind="pollMinutes" /></div>
+        <label class="check"><input type="checkbox" @bind="syncOnOpen" /> Check whenever LifeHub or the phone app is opened</label>
+        <div class="field"><label>And every (minutes)</label><input type="number" min="2" @bind="pollMinutes" /></div>
         <div class="field"><label>Max emails per check, per mailbox</label><input type="number" min="1" max="100" @bind="maxPerPoll" /></div>
         <div class="field"><label>First sync looks back (days)</label><input type="number" min="0" max="30" @bind="lookback" /></div>
         <hr />
@@ -41,10 +47,23 @@
         <label class="check"><input type="checkbox" @bind="deleteEmailWithTask" /> Deleting a task from an email moves the email to the bin</label>
         <label class="check"><input type="checkbox" @bind="deleteTasksWithEmail" /> Deleting an email (here or in my mail app) removes its open tasks</label>
         <p class="tiny muted">Emails are only ever moved to Bin / Deleted Items, never permanently deleted. Archived emails don't affect tasks.</p>
+        @if (User.IsAdmin)
+        {
+            <details style="margin:8px 0">
+                <summary class="small">Microsoft sign-in (admin)</summary>
+                <div class="field" style="margin-top:6px">
+                    <label>Microsoft app (client) ID</label>
+                    <input type="text" @bind="msClientId" placeholder="@(string.IsNullOrEmpty(MailServices.BuiltInMicrosoftClientId) ? "00000000-0000-0000-0000-000000000000" : "Built in: " + MailServices.BuiltInMicrosoftClientId)" />
+                    <div class="help">Only needed if this LifeHub wasn't built with one. Register LifeHub once in the Entra admin centre — see the manual's Email page.</div>
+                </div>
+            </details>
+        }
         <button class="btn primary" @onclick="SavePolling">Save</button>
         <p class="small muted" style="margin-top:10px">Last run: @(Sync.LastRunUtc is { } r ? Fmt.Ago(r) : "not yet") — @Sync.LastRunSummary</p>
     </div>
 </div>
+
+<AddMailbox @bind-Open="adding" />
 
 <Modal Open="editing is not null" OpenChanged="v => { if (!v) editing = null; }" Title="@(isNew ? "Add mailbox" : editing?.Name ?? "")" Wide="true">
     <ChildContent>
@@ -146,7 +165,8 @@
 @code {
     private List<EmailAccount> accounts = new();
     private int pollMinutes, maxPerPoll, lookback;
-    private bool keepPromotions, deleteEmailWithTask, deleteTasksWithEmail;
+    private bool keepPromotions, deleteEmailWithTask, deleteTasksWithEmail, syncOnOpen, adding;
+    private string msClientId = "";
     private EmailAccount? editing;
     private bool isNew, busy, testOk;
     private string ignore = "";
@@ -173,6 +193,8 @@
         keepPromotions = e.KeepPromotions;
         deleteEmailWithTask = e.DeleteEmailWithTask;
         deleteTasksWithEmail = e.DeleteTasksWithEmail;
+        syncOnOpen = e.SyncOnOpen;
+        msClientId = e.MicrosoftClientId;
     }
 
     private UserScope.State? me;
@@ -193,6 +215,8 @@
         s.Email.KeepPromotions = keepPromotions;
         s.Email.DeleteEmailWithTask = deleteEmailWithTask;
         s.Email.DeleteTasksWithEmail = deleteTasksWithEmail;
+        s.Email.SyncOnOpen = syncOnOpen;
+        if (User.IsAdmin) s.Email.MicrosoftClientId = msClientId.Trim();
     }), "Saved");
 
     private void Add()

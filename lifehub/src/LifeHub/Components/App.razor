@@ -14,7 +14,10 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <meta name="theme-color" content="#0f766e" />
+    @* The phone's status bar follows the page colour in light and dark mode. *@
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f2" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121514" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>

@@ -15,13 +15,13 @@ public sealed class NotesService
 {
     public const string Unsorted = "Unsorted";
     private readonly IRepository<Note> _repo;
-    private readonly OllamaClient _ollama;
+    private readonly AiClient _ollama;
     private readonly SettingsService _settings;
     private readonly ILogger<NotesService> _log;
     private readonly ConcurrentDictionary<Guid, bool> _sorting = new();
     private readonly SemaphoreSlim _one = new(1, 1);
 
-    public NotesService(IRepository<Note> repo, OllamaClient ollama, SettingsService settings, ILogger<NotesService> log)
+    public NotesService(IRepository<Note> repo, AiClient ollama, SettingsService settings, ILogger<NotesService> log)
     {
         _repo = repo; _ollama = ollama; _settings = settings; _log = log;
     }

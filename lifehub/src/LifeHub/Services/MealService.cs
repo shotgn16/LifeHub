@@ -39,7 +39,7 @@ public sealed class MealService
     private readonly KitchenService _kitchen;
     private readonly ScheduleService _schedule;
     private readonly CalendarService _calendar;
-    private readonly OllamaClient _ollama;
+    private readonly AiClient _ollama;
     private readonly SettingsService _settings;
     private readonly Clock _clock;
     private readonly ILogger<MealService> _log;
@@ -49,7 +49,7 @@ public sealed class MealService
 
     public MealService(IRepository<Recipe> recipes, IRepository<MealPlanEntry> entries, IRepository<MealDayNote> notes,
         IRepository<MealSuggestion> suggestions, KitchenService kitchen, ScheduleService schedule, CalendarService calendar,
-        OllamaClient ollama, SettingsService settings, Clock clock, ILogger<MealService> log, IRepository<DealOffer> deals)
+        AiClient ollama, SettingsService settings, Clock clock, ILogger<MealService> log, IRepository<DealOffer> deals)
     {
         _deals = deals;
         _recipes = recipes; _entries = entries; _notes = notes; _suggestions = suggestions; _kitchen = kitchen;

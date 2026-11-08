@@ -251,7 +251,9 @@ public static class Endpoints
         });
 
         // Offline support for the phone apps: what to keep on the phone, and replaying changes made offline.
-        api.MapGet("/offline", (SyncService sync) => Results.Ok(sync.Snapshot()));
+        api.MapGet("/offline", (SyncService sync, EmailSyncService email) => { email.SyncSoon("app"); return Results.Ok(sync.Snapshot()); });
+        // The phone apps call this when they open (and on their background schedule).
+        api.MapPost("/email/check", (EmailSyncService email) => { email.SyncSoon("app"); return Results.Ok(new { status = "started", last = email.LastRunUtc, summary = email.LastRunSummary }); });
         api.MapPost("/sync", async (SyncRequest req, SyncService sync) =>
         {
             var results = await sync.ApplyAsync(req.Changes ?? new());
@@ -262,7 +264,7 @@ public static class Endpoints
         api.MapGet("/notices", (NotificationService notices, DateTime? since) =>
             Results.Ok(notices.Recent(30).Where(n => since is null || n.CreatedUtc > since.Value.ToUniversalTime())
                 .OrderBy(n => n.CreatedUtc)
-                .Select(n => new { n.Id, n.Title, n.Message, n.Link, level = n.Level.ToString(), n.CreatedUtc, n.Read })));
+                .Select(n => new { n.Id, n.Title, n.Message, n.Link, level = n.Level.ToString(), n.CreatedUtc, n.Read, n.Category, n.Phone })));
 
 
         // ---- Notes ----

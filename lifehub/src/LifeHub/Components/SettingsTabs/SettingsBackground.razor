@@ -1,0 +1,154 @@
+@using LifeHub.Integrations.HomeAssistant
+@inject SettingsService Settings
+@inject BackgroundStatus Status
+@inject EmailSyncService Email
+@inject HaListSyncService HaLists
+@inject AutomationService Automation
+@inject BackupService Backups
+@inject DealsService Deals
+@inject UiState Ui
+
+@* What LifeHub does by itself, and how often. The phone apps have their own settings for what they do on the phone. *@
+
+<div class="card" style="max-width:820px">
+    <h2 style="margin-bottom:4px">Background tasks</h2>
+    <p class="small muted" style="margin-top:0">What LifeHub does by itself while it's running. Switch any of them off, or change how often they run.
+        The phone apps have their own choices (in the app: Settings → On this phone).</p>
+    <ul class="list bg-list">
+        <li class="row">
+            <Toggle Value="@On(BackgroundJobs.Email)" ValueChanged="v => Set(BackgroundJobs.Email, v)" />
+            <div class="grow">
+                <div class="title">Check email</div>
+                <div class="meta">Reads new emails in every mailbox and turns them into tasks, events and renewals. @LastRun(BackgroundJobs.Email)</div>
+                <div class="bg-opts">
+                    <label class="inline">every <input type="number" min="2" max="1440" @bind="emailMinutes" /> minutes</label>
+                    <label class="check inline"><input type="checkbox" @bind="syncOnOpen" /> and whenever LifeHub is opened</label>
+                </div>
+            </div>
+            <button class="btn sm" disabled="@busy" @onclick="() => RunNow(BackgroundJobs.Email)">Run now</button>
+        </li>
+        <li class="row">
+            <Toggle Value="@On(BackgroundJobs.Reminders)" ValueChanged="v => Set(BackgroundJobs.Reminders, v)" />
+            <div class="grow">
+                <div class="title">Reminders</div>
+                <div class="meta">Checks every minute for tasks, renewals and food that need a notification, and sends the morning summary. @LastRun(BackgroundJobs.Reminders)</div>
+            </div>
+        </li>
+        <li class="row">
+            <Toggle Value="@On(BackgroundJobs.AutoPlan)" ValueChanged="v => Set(BackgroundJobs.AutoPlan, v)" />
+            <div class="grow">
+                <div class="title">Plan my day automatically</div>
+                <div class="meta">Fits new tasks into free time (when switched on in Schedule). @LastRun(BackgroundJobs.AutoPlan)</div>
+            </div>
+        </li>
+        <li class="row">
+            <Toggle Value="@On(BackgroundJobs.Deals)" ValueChanged="v => Set(BackgroundJobs.Deals, v)" />
+            <div class="grow">
+                <div class="title">Look for deals</div>
+                <div class="meta">Checks nearby stores' offers (when Deals is switched on in Meals). @LastRun(BackgroundJobs.Deals)</div>
+                <div class="bg-opts"><label class="inline">every <input type="number" min="6" max="168" @bind="dealHours" /> hours</label></div>
+            </div>
+            <button class="btn sm" disabled="@busy" @onclick="() => RunNow(BackgroundJobs.Deals)">Run now</button>
+        </li>
+        <li class="row">
+            <Toggle Value="@On(BackgroundJobs.Backup)" ValueChanged="v => Set(BackgroundJobs.Backup, v)" />
+            <div class="grow">
+                <div class="title">Nightly backup</div>
+                <div class="meta">An encrypted copy of everything in the backups folder. @LastRun(BackgroundJobs.Backup)</div>
+                <div class="bg-opts">
+                    <label class="inline">from <input type="number" min="0" max="23" @bind="backupHour" />:00</label>
+                    <label class="inline">keep the latest <input type="number" min="1" max="365" @bind="keepBackups" /></label>
+                </div>
+            </div>
+            <button class="btn sm" disabled="@busy" @onclick="() => RunNow(BackgroundJobs.Backup)">Run now</button>
+        </li>
+        <li class="row">
+            <Toggle Value="@On(BackgroundJobs.HaLists)" ValueChanged="v => Set(BackgroundJobs.HaLists, v)" />
+            <div class="grow">
+                <div class="title">Home Assistant lists</div>
+                <div class="meta">Keeps the shopping and task lists in step with Home Assistant (straight after changes too). @LastRun(BackgroundJobs.HaLists)</div>
+                <div class="bg-opts"><label class="inline">every <input type="number" min="15" max="3600" @bind="haSeconds" /> seconds</label></div>
+            </div>
+            <button class="btn sm" disabled="@busy" @onclick="() => RunNow(BackgroundJobs.HaLists)">Run now</button>
+        </li>
+        <li class="row">
+            <Toggle Value="@On(BackgroundJobs.HaSensors)" ValueChanged="v => Set(BackgroundJobs.HaSensors, v)" />
+            <div class="grow">
+                <div class="title">Home Assistant sensors</div>
+                <div class="meta">Publishes <code>sensor.lifehub_*</code> (tasks due, renewals, food…). @LastRun(BackgroundJobs.HaSensors)</div>
+                <div class="bg-opts"><label class="inline">every <input type="number" min="1" max="60" @bind="sensorMinutes" /> minutes</label></div>
+            </div>
+            <button class="btn sm" disabled="@busy" @onclick="() => RunNow(BackgroundJobs.HaSensors)">Run now</button>
+        </li>
+        <li class="row">
+            <Toggle Value="@On(BackgroundJobs.Presence)" ValueChanged="v => Set(BackgroundJobs.Presence, v)" />
+            <div class="grow">
+                <div class="title">“While you're out” shopping reminder</div>
+                <div class="meta">Watches who's home in Home Assistant and sends the shopping list to whoever leaves. @LastRun(BackgroundJobs.Presence)</div>
+            </div>
+        </li>
+    </ul>
+    <p class="tiny muted">Tidying (old notifications, finished tasks, expired offers) runs hourly and can't be switched off. @LastRun(BackgroundJobs.Tidy)</p>
+    <button class="btn primary" @onclick="Save">Save</button>
+</div>
+
+@code {
+    private HashSet<string> disabled = new();
+    private int emailMinutes, dealHours, backupHour, keepBackups, haSeconds, sensorMinutes;
+    private bool syncOnOpen, busy;
+
+    protected override void OnInitialized()
+    {
+        var s = Settings.Household;
+        disabled = new(s.Background.Disabled);
+        emailMinutes = s.Email.PollMinutes;
+        syncOnOpen = s.Email.SyncOnOpen;
+        dealHours = s.Deals.CheckEveryHours;
+        backupHour = s.Background.BackupHour;
+        keepBackups = s.Background.KeepBackups;
+        haSeconds = s.Background.HaListSeconds;
+        sensorMinutes = s.Background.SensorMinutes;
+    }
+
+    private bool On(string job) => !disabled.Contains(job);
+    private void Set(string job, bool on) { if (on) disabled.Remove(job); else disabled.Add(job); }
+
+    private string LastRun(string job) => Status.Last(job) is { } r
+        ? $"Last ran {Fmt.Ago(r.Utc)}{(r.Ok ? "" : " — failed" + (string.IsNullOrEmpty(r.Message) ? "" : ": " + r.Message))}."
+        : "";
+
+    private async Task Save() => await Ui.Try(() => Settings.UpdateAsync(s =>
+    {
+        s.Background.Disabled = new(disabled);
+        s.Email.PollMinutes = Math.Clamp(emailMinutes, 2, 1440);
+        s.Email.SyncOnOpen = syncOnOpen;
+        s.Deals.CheckEveryHours = Math.Clamp(dealHours, 6, 168);
+        s.Background.BackupHour = Math.Clamp(backupHour, 0, 23);
+        s.Background.KeepBackups = Math.Clamp(keepBackups, 1, 365);
+        s.Background.HaListSeconds = Math.Clamp(haSeconds, 15, 3600);
+        s.Background.SensorMinutes = Math.Clamp(sensorMinutes, 1, 60);
+    }), "Saved");
+
+    private async Task RunNow(string job)
+    {
+        busy = true;
+        try
+        {
+            using var system = UserScope.AsSystem();
+            var result = job switch
+            {
+                BackgroundJobs.Email => await Email.SyncAllAsync(),
+                BackgroundJobs.Deals => await Deals.CheckAsync(),
+                BackgroundJobs.HaLists => await HaLists.SyncNowAsync(),
+                BackgroundJobs.Backup => "Backed up: " + Path.GetFileName(Backups.Create()),
+                _ => await Sensors()
+            };
+            Status.Record(job, true, result);
+            Ui.Show(result);
+        }
+        catch (Exception ex) { Status.Record(job, false, ex.Message); Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task<string> Sensors() { await Automation.PublishSensorsAsync(force: true); return "Sensors published"; }
+}

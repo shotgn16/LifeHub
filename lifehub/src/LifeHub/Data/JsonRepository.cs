@@ -38,9 +38,12 @@ public sealed class JsonRepository<T> : IRepository<T>, IOwnedRepository where T
 
     public event Action? Changed;
 
-    public JsonRepository(DataPaths paths, ILogger<JsonRepository<T>> log)
+    private readonly DataCipher _cipher;
+
+    public JsonRepository(DataPaths paths, DataCipher cipher, ILogger<JsonRepository<T>> log)
     {
         _log = log;
+        _cipher = cipher;
         _path = Path.Combine(paths.Db, typeof(T).Name + ".json");
         _items = Load();
     }
@@ -50,8 +53,7 @@ public sealed class JsonRepository<T> : IRepository<T>, IOwnedRepository where T
         try
         {
             if (!File.Exists(_path)) return new();
-            using var fs = File.OpenRead(_path);
-            var list = JsonSerializer.Deserialize<List<T>>(fs, Json.Options) ?? new();
+            var list = JsonSerializer.Deserialize<List<T>>(_cipher.ReadFile(_path), Json.Options) ?? new();
             return list.ToDictionary(x => x.Id);
         }
         catch (Exception ex)
@@ -131,10 +133,7 @@ public sealed class JsonRepository<T> : IRepository<T>, IOwnedRepository where T
         {
             List<T> snapshot;
             lock (_sync) snapshot = _items.Values.OrderBy(x => x.CreatedUtc).ToList();
-            var tmp = _path + ".tmp";
-            await using (var fs = File.Create(tmp))
-                await JsonSerializer.SerializeAsync(fs, snapshot, Json.Options);
-            File.Move(tmp, _path, overwrite: true);
+            await _cipher.WriteFileAsync(_path, JsonSerializer.SerializeToUtf8Bytes(snapshot, Json.Options));
         }
         finally
         {

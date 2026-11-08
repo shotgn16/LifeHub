@@ -29,12 +29,35 @@ public sealed class EmailSyncService : BackgroundService
         await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await SyncAllAsync(stoppingToken); }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-            catch (Exception ex) { _log.LogError(ex, "Email sync failed"); }
+            var status = _sp.GetRequiredService<BackgroundStatus>();
+            if (_settings.Current.Background.IsOn(BackgroundJobs.Email))
+            {
+                try { status.Record(BackgroundJobs.Email, true, await SyncAllAsync(stoppingToken)); }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+                catch (Exception ex) { _log.LogError(ex, "Email sync failed"); status.Record(BackgroundJobs.Email, false, ex.Message); }
+            }
             var minutes = Math.Max(2, _settings.Current.Email.PollMinutes);
             await Task.Delay(TimeSpan.FromMinutes(minutes), stoppingToken);
         }
+    }
+
+    private DateTime _lastOpenSync = DateTime.MinValue;
+
+    /// <summary>
+    /// Checks email in the background when someone opens LifeHub or the phone app (Settings → Email → "Check whenever
+    /// LifeHub is opened"), at most every 2 minutes and never while a check is already running.
+    /// </summary>
+    public void SyncSoon(string why)
+    {
+        if (!_settings.Current.Email.SyncOnOpen || !_settings.Current.Background.IsOn(BackgroundJobs.Email)) return;
+        if (DateTime.UtcNow - _lastOpenSync < TimeSpan.FromMinutes(2) || DateTime.UtcNow - LastRunUtc.GetValueOrDefault() < TimeSpan.FromMinutes(2)) return;
+        _lastOpenSync = DateTime.UtcNow;
+        _ = Task.Run(async () =>
+        {
+            using var system = UserScope.AsSystem();
+            try { await SyncAllAsync(); }
+            catch (Exception ex) { _log.LogWarning(ex, "Email check on {Why} failed", why); }
+        });
     }
 
     /// <summary>Runs a sync now (also used by the "Check now" button). Skips if one is already running.</summary>
@@ -62,6 +85,7 @@ public sealed class EmailSyncService : BackgroundService
                     fetched += messages.Count;
                     foreach (var m in messages) suggested += await ProcessAsync(working, m, ct);
                     working.LastError = "";
+                    await _ai.FlushEmailNoticeAsync();
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {

@@ -36,26 +36,31 @@ public sealed class AutomationService : BackgroundService
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
         do
         {
-            await Step("hourly", HourlyAsync);
-            await EachPerson("reminders", RemindersAsync);
-            await Step("presence", PresenceAsync);
-            await EachPerson("autoplan", AutoPlanAsync);
-            await Step("sensors", () => PublishSensorsAsync(force: false));
+            var bg = S<SettingsService>().Current.Background;
+            await Step(BackgroundJobs.Tidy, HourlyAsync);
+            if (bg.IsOn(BackgroundJobs.Reminders)) await EachPerson(BackgroundJobs.Reminders, RemindersAsync);
+            if (bg.IsOn(BackgroundJobs.Presence)) await Step(BackgroundJobs.Presence, PresenceAsync);
+            if (bg.IsOn(BackgroundJobs.AutoPlan)) await EachPerson(BackgroundJobs.AutoPlan, AutoPlanAsync);
+            if (bg.IsOn(BackgroundJobs.HaSensors)) await Step(BackgroundJobs.HaSensors, () => PublishSensorsAsync(force: false));
         } while (await timer.WaitForNextTickAsync(ct));
     }
 
     /// <summary>Runs a step once for each person, as that person (their tasks, their phones, their schedule).</summary>
     private async Task EachPerson(string name, Func<Task> f)
     {
+        var ok = true;
         foreach (var user in S<SettingsService>().Users)
             using (UserScope.As(user.Id))
-                await Step($"{name} ({user.FirstName})", f);
+                ok &= await Run($"{name} ({user.FirstName})", f);
+        S<BackgroundStatus>().Record(name, ok);
     }
 
-    private async Task Step(string name, Func<Task> f)
+    private async Task Step(string name, Func<Task> f) => S<BackgroundStatus>().Record(name, await Run(name, f));
+
+    private async Task<bool> Run(string name, Func<Task> f)
     {
-        try { await f(); }
-        catch (Exception ex) { _log.LogWarning(ex, "Automation step {Step} failed", name); }
+        try { await f(); return true; }
+        catch (Exception ex) { _log.LogWarning(ex, "Automation step {Step} failed", name); return false; }
     }
 
     private async Task HourlyAsync()
@@ -72,8 +77,12 @@ public sealed class AutomationService : BackgroundService
             catch (Exception ex) { _log.LogInformation("HA auto-setup postponed: {Message}", ex.Message); }
         }
         await CleanUpAutoShoppingOnceAsync();
-        try { await S<DealsService>().RunIfDueAsync(); }
-        catch (Exception ex) { _log.LogInformation("Deals check failed: {Message}", ex.Message); }
+        var bg = S<SettingsService>().Current.Background;
+        if (bg.IsOn(BackgroundJobs.Deals))
+        {
+            try { await S<DealsService>().RunIfDueAsync(); S<BackgroundStatus>().Record(BackgroundJobs.Deals, true); }
+            catch (Exception ex) { _log.LogInformation("Deals check failed: {Message}", ex.Message); S<BackgroundStatus>().Record(BackgroundJobs.Deals, false, ex.Message); }
+        }
         await S<NotificationService>().PruneAsync();
         await S<AiService>().PruneAsync();
         await S<TaskService>().PurgeCompletedAsync(180);
@@ -84,7 +93,11 @@ public sealed class AutomationService : BackgroundService
             (p.Dismissed || (p.EndsOn is { } e && e < today) || p.CreatedUtc < DateTime.UtcNow.AddDays(-30))).Select(p => p.Id));
         var backup = S<BackupService>();
         var clock = S<Clock>();
-        if (clock.Now.Hour >= 3 && !backup.HasBackupToday()) backup.Create();
+        if (bg.IsOn(BackgroundJobs.Backup) && clock.Now.Hour >= bg.BackupHour && !backup.HasBackupToday())
+        {
+            backup.Create();
+            S<BackgroundStatus>().Record(BackgroundJobs.Backup, true);
+        }
     }
 
     /// <summary>
@@ -100,10 +113,10 @@ public sealed class AutomationService : BackgroundService
         if (auto.Count > 0)
         {
             await kitchen.Shopping.DeleteManyAsync(auto.Select(x => x.Id));
-            await S<NotificationService>().NotifyAsync($"🛒 Shopping list tidied: {auto.Count} removed",
+            await S<NotificationService>().NotifyAsync($"Shopping list tidied: {auto.Count} removed",
                 "Items LifeHub had added by itself (low stock, predictions, emails) were removed. From now on only you add items — " +
                 "staples that are running low appear as suggestions on the Shopping page.",
-                NoticeLevel.Info, "shopping", "shopping-cleanup-1.3", push: false);
+                NoticeLevel.Info, "shopping", "shopping-cleanup-1.3", push: false, category: NoticeCategories.Shopping);
         }
         var ai = S<AiService>();
         foreach (var s in ai.Suggestions.Where(x => x.Status == SuggestionStatus.Pending && x.Type == "shopping" && x.Origin == "email"))
@@ -130,9 +143,9 @@ public sealed class AutomationService : BackgroundService
                 if (stage is null || days < -1) continue;
                 var when = days <= 0 ? "today" : days == 1 ? "tomorrow" : $"in {days} days ({r.NextRenewal.ToString("d MMM", culture)})";
                 var verb = r.Status == RenewalStatus.Trial ? "trial ends" : r.AutoRenew ? "renews" : "expires";
-                await notify.NotifyAsync($"🔁 {r.Name} {verb} {when}",
+                await notify.NotifyAsync($"{r.Name} {verb} {when}",
                     $"{Components.Shared.Fmt.Money(r.Cost, r.Currency)} {r.CycleLabel}{(r.AutoRenew ? "" : "\nManual renewal needed")}",
-                    days <= 1 ? NoticeLevel.Alert : NoticeLevel.Warning, "renewals", $"renewal:{r.Id}:{r.NextRenewal}:{stage}", tag: $"renewal-{r.Id}");
+                    days <= 1 ? NoticeLevel.Alert : NoticeLevel.Warning, "renewals", $"renewal:{r.Id}:{r.NextRenewal}:{stage}", tag: $"renewal-{r.Id}", category: NoticeCategories.Renewals);
             }
         }
 
@@ -143,8 +156,8 @@ public sealed class AutomationService : BackgroundService
                 // 15 minutes before a timed deadline or a scheduled slot.
                 var at = t.ScheduledStart ?? (t.DueTime is not null ? t.DueAt : null);
                 if (at is { } a && a > now && a - now <= TimeSpan.FromMinutes(15))
-                    await notify.NotifyAsync($"⏰ {t.Title}", $"{(t.ScheduledStart is not null ? "Planned" : "Due")} at {a:HH:mm} · {t.Category}",
-                        NoticeLevel.Info, "tasks", $"task:{t.Id}:{a:yyyyMMddHHmm}", tag: $"task-{t.Id}");
+                    await notify.NotifyAsync(t.Title, $"{(t.ScheduledStart is not null ? "Planned" : "Due")} at {a:HH:mm} · {t.Category}",
+                        NoticeLevel.Info, "tasks", $"task:{t.Id}:{a:yyyyMMddHHmm}", tag: $"task-{t.Id}", category: NoticeCategories.Reminders);
             }
         }
 
@@ -159,7 +172,7 @@ public sealed class AutomationService : BackgroundService
                 // Once a day, and again if the set of items changes.
                 var key = $"food:{today}:{string.Join(",", expiring.Select(e => e.Id.ToString()[..8]).OrderBy(x => x))}";
                 if (now.Hour >= 9)
-                    await notify.NotifyAsync($"🥛 Use up soon ({expiring.Count})", list, NoticeLevel.Warning, "kitchen", key, tag: "food");
+                    await notify.NotifyAsync($"Use up soon: {expiring.Count} item{(expiring.Count == 1 ? "" : "s")}", list, NoticeLevel.Warning, "kitchen", key, tag: "food", category: NoticeCategories.Food);
             }
         }
 
@@ -189,8 +202,8 @@ public sealed class AutomationService : BackgroundService
                 if (food.Count > 0) extras.Add($"🥛 {food.Count} to use up");
                 if (shopping > 0) extras.Add($"🛒 {shopping} to buy");
                 if (extras.Count > 0) sections.Add(string.Join("   ", extras));
-                await notify.NotifyAsync($"☀️ Good morning — {now.ToString("dddd d MMM", culture)}",
-                    sections.Count == 0 ? "Nothing urgent today. Enjoy it!" : string.Join("\n\n", sections), NoticeLevel.Info, "", key, tag: "digest");
+                await notify.NotifyAsync($"Good morning — {now.ToString("dddd d MMM", culture)}",
+                    sections.Count == 0 ? "Nothing urgent today. Enjoy it!" : string.Join("\n\n", sections), NoticeLevel.Info, "", key, tag: "digest", category: NoticeCategories.Digest);
             }
         }
     }
@@ -236,9 +249,9 @@ public sealed class AutomationService : BackgroundService
         var msg = NotificationService.Bullets(plan.Planned.Select(p => $"{p.Start:HH:mm} · {p.Title}"), 6);
         if (plan.Unplanned.Count > 0)
             msg += (msg.Length > 0 ? "\n\n" : "") + "Didn't fit:\n" + NotificationService.Bullets(plan.Unplanned.Select(t => t.Title), 3);
-        var title = applied > 0 ? $"🗓 {label} planned: {applied} task{(applied == 1 ? "" : "s")}" : $"🗓 {label}: some tasks didn't fit";
+        var title = applied > 0 ? $"{label} planned: {applied} task{(applied == 1 ? "" : "s")}" : $"{label}: some tasks didn't fit";
         await S<NotificationService>().NotifyAsync(title, msg, plan.Unplanned.Count > 0 ? NoticeLevel.Warning : NoticeLevel.Info,
-            "schedule", $"autoplan:{date}:{label}:{applied}:{plan.Unplanned.Count}", tag: "plan-" + label.ToLowerInvariant());
+            "schedule", $"autoplan:{date}:{label}:{applied}:{plan.Unplanned.Count}", tag: "plan-" + label.ToLowerInvariant(), category: NoticeCategories.Reminders);
         return LastAutoPlan = $"{title}. {msg.Replace("\n", " ")}";
     }
 
@@ -275,9 +288,9 @@ public sealed class AutomationService : BackgroundService
                     var lines = items.OrderBy(i => i.Category).ThenBy(i => i.Name)
                         .Select(i => i.Quantity == 1 && string.IsNullOrEmpty(i.Unit) ? i.Name : $"{i.Name} ×{Components.Shared.Fmt.Qty(i.Quantity, i.Unit)}");
                     await S<NotificationService>().NotifyAsync(
-                        $"🛒 {NotificationService.FirstName(st.Name)}, while you're out — {items.Count} to buy",
+                        $"{NotificationService.FirstName(st.Name)}, while you're out: {items.Count} to buy",
                         NotificationService.Bullets(lines, 8), NoticeLevel.Info, "shopping",
-                        $"leave:{id}:{DateTime.UtcNow:yyyyMMddHHmm}", tag: "shopping", onlyTo: phones, person: id);
+                        $"leave:{id}:{DateTime.UtcNow:yyyyMMddHHmm}", tag: "shopping", onlyTo: phones, person: id, category: NoticeCategories.Reminders);
                 }
             }
             _lastPresence[id] = st.State;
@@ -291,7 +304,7 @@ public sealed class AutomationService : BackgroundService
         var settingsService = S<SettingsService>();
         var settings = settingsService.Household;
         if (!ha.IsConfigured || !settings.HomeAssistant.PublishSensors) return;
-        if (!force && DateTime.UtcNow - _lastSensorsUtc < TimeSpan.FromMinutes(5)) return;
+        if (!force && DateTime.UtcNow - _lastSensorsUtc < TimeSpan.FromMinutes(Math.Max(1, S<SettingsService>().Current.Background.SensorMinutes))) return;
         _lastSensorsUtc = DateTime.UtcNow;
 
         // The household sensors show the main person's tasks and schedule; everyone else gets their own tasks sensor.

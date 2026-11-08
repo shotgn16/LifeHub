@@ -232,7 +232,7 @@
                         @if (progressPct is { } pct) { <div class="progress"><span style="width:@(pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture))%"></span></div> }
                     }
                     @if (!string.IsNullOrEmpty(error)) { <div class="alert danger">@error</div> }
-                    <p class="tiny muted">Skipped it? Set it up any time in Settings → AI (Ollama can also run on another computer).</p>
+                    <p class="tiny muted">Rather use ChatGPT, Gemini or Claude? Skip this and choose them in Settings → AI (they need an API key, and your text goes to that company). Ollama can also run on another computer.</p>
                 </div>
                 <div class="welcome-actions">
                     <button class="btn" disabled="@busy" @onclick="SkipAi">@(aiDone ? "Next" : "Skip for now")</button>

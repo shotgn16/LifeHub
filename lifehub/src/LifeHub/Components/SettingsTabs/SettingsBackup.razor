@@ -2,10 +2,11 @@
 @inject DataPaths Paths
 @inject UiState Ui
 @inject BibleArchiveService BibleArchive
+@inject DataCipher Cipher
 
 <div class="card" style="max-width:760px">
     <h2 style="margin-bottom:8px">Backups</h2>
-    <p class="small muted">A backup is made automatically every night (the latest 14 are kept) in <code>@Paths.Backups</code>. It contains all data, settings and the encryption keys that protect saved passwords — keep downloaded copies somewhere safe.
+    <p class="small muted">A backup is made automatically every night (the latest 14 are kept) in <code>@Paths.Backups</code>. Everything LifeHub stores is encrypted, and so are its backups: they can only be opened with this LifeHub's key.
         @if (Paths.IsHomeAssistantAddon) { <span>The add-on's data is also included in Home Assistant's own backups.</span> }
     </p>
     <button class="btn primary" @onclick="Create"><Icon Name="download" Size="15" /> Back up now</button>
@@ -21,7 +22,25 @@
     </ul>
     <hr />
     <h3 style="margin-bottom:6px">Restore</h3>
-    <p class="small muted">Stop LifeHub, unzip a backup into the data folder (replacing <code>db/</code>, <code>settings.json</code> and <code>keys/</code>), then start it again.</p>
+    <p class="small muted">Stop LifeHub, unzip a backup into the data folder (replacing <code>db/</code> and <code>settings.json</code>), then start it again.
+        On a <strong>different computer</strong>, first save your recovery key (below) as <code>keys/recovery.key</code> in the new data folder.</p>
+</div>
+
+<div class="card" style="max-width:760px;margin-top:16px">
+    <h2 style="margin-bottom:8px"><Icon Name="lock" Size="18" /> Encryption &amp; recovery key</h2>
+    <p class="small muted" style="margin-top:0">Your tasks, notes, email results, settings and everything else are stored encrypted (AES-256). The key is kept in
+        <code>@Path.Combine(Paths.Keys, "data.key")</code>@(OperatingSystem.IsWindows() ? ", protected by Windows" : ", readable only by LifeHub's own user").
+        Keep a copy of the <strong>recovery key</strong> somewhere safe (a password manager): without it, backups can't be opened on another computer.</p>
+    @if (showKey)
+    {
+        <div><code class="big-code">@Cipher.RecoveryKey</code></div>
+        <p class="tiny muted">Anyone with this key and a copy of your data can read it. Don't share it.</p>
+        <button class="btn sm" @onclick="() => showKey = false">Hide</button>
+    }
+    else
+    {
+        <button class="btn" @onclick="() => showKey = true"><Icon Name="eye" Size="15" /> Show recovery key</button>
+    }
 </div>
 
 @if (BibleArchive.Exists)
@@ -44,7 +63,7 @@
 }
 
 @code {
-    private bool confirmBible;
+    private bool confirmBible, showKey;
 
     private void ExportBible()
     {

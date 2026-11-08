@@ -155,9 +155,9 @@ public sealed class EmailLinkService
                     var removed = await RemoveTasksAsync(email);
                     removedTotal += removed;
                     if (removed > 0)
-                        await _notices.NotifyAsync($"Removed {removed} task(s) — email deleted",
-                            $"\"{email.Subject}\" was deleted in your mailbox, so I removed: {string.Join(", ", titles)}",
-                            NoticeLevel.Info, "tasks", $"emaildel:{email.Id}", push: false);
+                        await _notices.NotifyAsync($"Removed {removed} task{(removed == 1 ? "" : "s")} for a deleted email",
+                            NotificationService.Bullets(titles, 4),
+                            NoticeLevel.Info, "tasks", $"emaildel:{email.Id}", push: false, category: NoticeCategories.Email);
                 }
                 await _emails.UpsertAsync(email);
             }

@@ -5,18 +5,34 @@ using System.Text.Json.Nodes;
 
 namespace LifeHub.Integrations.Ollama;
 
-/// <summary>Talks to a local Ollama server (https://ollama.com) — nothing leaves your network.</summary>
-public sealed class OllamaClient
+/// <summary>
+/// LifeHub's AI: Ollama on your own computer or network (private), ChatGPT, Gemini, Claude, any OpenAI-compatible
+/// server, or a model inside the phone app (Settings → AI). Everything else in LifeHub just calls
+/// <see cref="ChatJsonAsync"/> / <see cref="ChatTextAsync"/> and doesn't care which one answers.
+/// </summary>
+public sealed class AiClient
 {
     private readonly IHttpClientFactory _http;
     private readonly SettingsService _settings;
+    private readonly IOnDeviceAi? _onDevice;
 
-    public OllamaClient(IHttpClientFactory http, SettingsService settings)
+    public AiClient(IHttpClientFactory http, SettingsService settings, IEnumerable<IOnDeviceAi> onDevice)
     {
-        _http = http; _settings = settings;
+        _http = http; _settings = settings; _onDevice = onDevice.FirstOrDefault();
     }
 
-    public bool IsConfigured => _settings.Current.Ollama is { Enabled: true } o && !string.IsNullOrWhiteSpace(o.Url) && !string.IsNullOrWhiteSpace(o.Model);
+    public AiProvider Provider => _settings.Current.Ollama.Provider;
+    public string ProviderLabel => AiProviders.Label(Provider);
+    /// <summary>A model that runs inside this app is possible here (the phone app).</summary>
+    public bool OnDeviceSupported => _onDevice is not null;
+
+    public bool IsConfigured => _settings.Current.Ollama is { Enabled: true } o && !string.IsNullOrWhiteSpace(o.Model) && o.Provider switch
+    {
+        AiProvider.Ollama => !string.IsNullOrWhiteSpace(o.Url),
+        AiProvider.OpenAICompatible => !string.IsNullOrWhiteSpace(o.BaseUrl),
+        AiProvider.OnDevice => _onDevice?.Available == true,
+        _ => !string.IsNullOrWhiteSpace(o.ApiKey)
+    };
 
     private HttpClient Client()
     {
@@ -29,6 +45,15 @@ public sealed class OllamaClient
 
     public async Task<List<string>> ListModelsAsync(CancellationToken ct = default)
     {
+        var o = _settings.Current.Ollama;
+        if (o.Provider == AiProvider.OnDevice) return _onDevice?.Models.ToList() ?? new();
+        if (o.Provider != AiProvider.Ollama)
+        {
+            using var lr = await Cloud().SendAsync(AiProviders.ListModels(o.Provider, o.ApiKey, o.BaseUrl), ct);
+            var lb = await lr.Content.ReadAsStringAsync(ct);
+            if (!lr.IsSuccessStatusCode) throw new InvalidOperationException($"{ProviderLabel} returned {(int)lr.StatusCode}: {Short(lb)}");
+            return AiProviders.ParseModels(o.Provider, JsonDocument.Parse(lb).RootElement);
+        }
         using var r = await Client().GetAsync("api/tags", ct);
         r.EnsureSuccessStatusCode();
         var j = await r.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
@@ -51,7 +76,8 @@ public sealed class OllamaClient
         IReadOnlyList<byte[]>? images = null, string? model = null) =>
         ChatAsync(system, user, null, images, model, ct);
 
-    public bool HasVision => IsConfigured && !string.IsNullOrWhiteSpace(_settings.Current.Ollama.VisionModel);
+    /// <summary>Photos can be read: a vision model is set for Ollama, and the cloud services' models see images anyway.</summary>
+    public bool HasVision => IsConfigured && (AiProviders.IsCloud(Provider) || !string.IsNullOrWhiteSpace(_settings.Current.Ollama.VisionModel));
 
     /// <summary>The model to use with images: the vision model if set, otherwise the main model.</summary>
     public string VisionModel
@@ -59,9 +85,61 @@ public sealed class OllamaClient
         get { var o = _settings.Current.Ollama; return string.IsNullOrWhiteSpace(o.VisionModel) ? o.Model : o.VisionModel; }
     }
 
+    private HttpClient Cloud()
+    {
+        var c = _http.CreateClient("ai");
+        c.Timeout = TimeSpan.FromSeconds(Math.Max(10, _settings.Current.Ollama.TimeoutSeconds));
+        return c;
+    }
+
+    private static string Short(string body) => body[..Math.Min(300, body.Length)];
+
     private async Task<string> ChatAsync(string system, string user, JsonObject? schema, IReadOnlyList<byte[]>? images, string? model, CancellationToken ct)
     {
         var o = _settings.Current.Ollama;
+        if (o.Provider != AiProvider.Ollama)
+        {
+            var m = model ?? (images is { Count: > 0 } ? VisionModel : o.Model);
+            var temp = o.Temperature;
+            var max = Math.Clamp(o.MaxAnswerTokens, 256, 16384);
+            if (o.Provider == AiProvider.OnDevice)
+            {
+                if (_onDevice is not { Available: true }) throw new InvalidOperationException("The on-device AI isn't available here. Choose another AI in Settings → AI.");
+                var text = await _onDevice.ChatAsync(m, system + (schema is null ? "" : AiProviders.SchemaHint(schema)), user, schema is not null, ct);
+                return Regex.Replace(text, @"<think>[\s\S]*?</think>", "").Trim();
+            }
+            using var req = o.Provider switch
+            {
+                AiProvider.OpenAI => AiProviders.OpenAI("https://api.openai.com/v1", o.ApiKey, m, system, user, schema, images, temp, max, strictSchema: true),
+                AiProvider.OpenAICompatible => AiProviders.OpenAI(o.BaseUrl, o.ApiKey, m, system, user, schema, images, temp, max, strictSchema: false),
+                AiProvider.Gemini => AiProviders.Gemini(o.ApiKey, m, system, user, schema, images, temp, max),
+                _ => AiProviders.Claude(o.ApiKey, m, system, user, schema, images, temp, max)
+            };
+            string cbody;
+            int cstatus;
+            try
+            {
+                using var res = await Cloud().SendAsync(req, ct);
+                cstatus = (int)res.StatusCode;
+                cbody = await res.Content.ReadAsStringAsync(ct);
+            }
+            catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new TimeoutException($"{ProviderLabel} didn't answer within {o.TimeoutSeconds} seconds.");
+            }
+            catch (HttpRequestException ex) { throw new InvalidOperationException($"Can't reach {ProviderLabel}: {ex.Message}"); }
+            if (cstatus == 401 || cstatus == 403) throw new InvalidOperationException($"{ProviderLabel} didn't accept the API key (Settings → AI).");
+            if (cstatus == 429) throw new InvalidOperationException($"{ProviderLabel} says you've reached your limit for now (rate limit or out of credit).");
+            if (cstatus is < 200 or >= 300) throw new InvalidOperationException($"{ProviderLabel} returned {cstatus}: {Short(cbody)}");
+            var j = JsonDocument.Parse(cbody).RootElement;
+            var answer = o.Provider switch
+            {
+                AiProvider.Gemini => AiProviders.GeminiText(j),
+                AiProvider.Claude => AiProviders.ClaudeText(j),
+                _ => AiProviders.OpenAIText(j)
+            };
+            return Regex.Replace(answer, @"<think>[\s\S]*?</think>", "").Trim();
+        }
         JsonObject Build(bool sendThink)
         {
             var userMsg = new JsonObject { ["role"] = "user", ["content"] = user };
