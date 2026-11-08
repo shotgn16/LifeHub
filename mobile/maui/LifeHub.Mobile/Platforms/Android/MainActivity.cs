@@ -16,16 +16,16 @@ public class MainActivity : MauiAppCompatActivity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
-        Handle(Intent);
+        HandleIntent(Intent);
     }
 
     protected override void OnNewIntent(Intent? intent)
     {
         base.OnNewIntent(intent);
-        Handle(intent);
+        HandleIntent(intent);
     }
 
-    private static void Handle(Intent? intent)
+    private static void HandleIntent(Intent? intent)
     {
         if (intent is null) return;
         if (intent.Action == Intent.ActionSend && intent.GetStringExtra(Intent.ExtraText) is { Length: > 0 } text)
