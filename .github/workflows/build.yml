@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   dotnet:
@@ -17,6 +18,8 @@ jobs:
         run: dotnet restore LifeHub.sln
       - name: Build
         run: dotnet build LifeHub.sln -c Release --no-restore
+      - name: Unit tests
+        run: dotnet run --project lifehub/tests/LifeHub.Tests -c Release
 
   docker:
     runs-on: ubuntu-latest

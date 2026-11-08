@@ -64,9 +64,11 @@ stored as JSON files in one folder.
 | **Promotions** | Adverts and newsletters go into their own list instead of becoming tasks or shopping items, and clear themselves when they expire. |
 | **Email ↔ task link** | Delete a task and its email moves to the Bin. Delete the email and its task goes. |
 | **Notifications** | In-app bell plus phone push through **Home Assistant or LifeHub's own web push** (or both): a morning digest, renewal and task reminders, food expiry, and a "you've left home" shopping list. |
-| **Phone apps** | Android and iPhone apps (`mobile/`): LifeHub signed in as you, notifications, share menu, home-screen shortcuts and Siri & Shortcuts. **They work offline**: tasks, shopping, notes and meals are kept on the phone, and anything you add or tick off is sent when LifeHub is reachable again. Built by GitHub Actions; install them yourself or publish them to the stores. |
+| **Phone apps** | One app for Android, iPhone and iPad (`mobile/maui`). **Use it on its own** — LifeHub on the phone for one person, encrypted, with email checked in the background and an AI on the phone — or **connect it to your LifeHub** with an offline copy. Tidy notifications, share menu, barcode scanner. Install it yourself or publish it to the stores. |
 | **Make it yours** | Themes (light/dark/auto), accent colour, density, a home screen you arrange, sections you switch on or off, and your own CSS on top of a small set of design tokens. |
 | **Desktop apps** | Installers for Windows, macOS and Linux with everything included. A setup assistant runs LifeHub on this computer only, on this computer + your phone, as a household server, in Docker or in Home Assistant, and can install the local AI (Ollama). |
+| **Private by design** | Everything LifeHub stores is encrypted (AES-256), with the key in Windows' DPAPI, the phone's keystore or a locked-down key file. Backups are encrypted too. |
+| **Any AI** | Ollama on your own computer (private, free), a model on the phone itself, or ChatGPT, Gemini, Claude or any OpenAI-compatible server. |
 | **REST API** | API-key endpoints for HA automations, Assist, iOS Shortcuts and USB barcode scanners. |
 
 ## Quick start
@@ -121,7 +123,7 @@ everything up. New here? Start with the **[manual](docs/manual/README.md)**.
 │   ├── Dockerfile
 │   ├── DOCS.md, CHANGELOG.md, icon.png, logo.png
 │   └── src/LifeHub/         # the ASP.NET Core / Blazor app
-├── mobile/                  # Android (Kotlin) and iPhone/iPad (SwiftUI) apps
+├── mobile/                  # the phone app for Android, iPhone and iPad (.NET MAUI)
 ├── installer/               # Windows (Inno Setup), macOS (.app/.dmg) and Linux (.deb/.tar.gz) packaging
 ├── docs/                    # documentation
 ├── tools/                   # publish scripts for Plesk/IIS/Linux

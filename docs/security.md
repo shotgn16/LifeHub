@@ -11,27 +11,45 @@ Everything is in one folder:
 
 | Path | Contents |
 |---|---|
-| `db/*.json` | One file per entity type: tasks, renewals, pantry, shopping, emails (metadata only), suggestions, … |
-| `settings.json` | All settings. Secrets are encrypted. |
-| `keys/` | Data Protection key ring, which decrypts the secrets in `settings.json` |
+| `db/*.json` | One file per entity type: tasks, renewals, pantry, shopping, emails (metadata only), suggestions, … **Encrypted.** |
+| `settings.json` | All settings. **Encrypted**, and passwords, tokens and API keys inside it are encrypted again. |
+| `keys/data.key` | The data key (AES-256), itself protected by the Data Protection key ring |
+| `keys/key-*.xml` | Data Protection key ring (protected by DPAPI on Windows) |
 | `desktop.json` | Desktop app only: how LifeHub runs on this computer (mode, port) |
 | `custom.css` | Optional: your own styles (see [customise](manual/customise.md)) |
 | `backups/` | Nightly zip backups (the latest 14 are kept) |
 
+## Encryption at rest
+
+Since 3.1, **everything LifeHub stores is encrypted** with AES-256-GCM: every `db/*.json` file and
+`settings.json` (format: `LHE1` + 12-byte nonce + 16-byte tag + ciphertext; see `Data/DataCipher.cs`). Files from
+earlier versions are encrypted on the first start.
+
+| Where | The key is kept |
+|---|---|
+| Windows (desktop app, service) | `keys/data.key`, wrapped by Data Protection, whose keys are protected by **Windows DPAPI** (machine scope) |
+| macOS, Linux, Docker, Home Assistant | `keys/data.key`, wrapped by Data Protection; the `keys` folder is readable only by LifeHub's user |
+| Phone app (on its own) | the phone's secure storage (**Android Keystore**, **iOS Keychain**); never in a file |
+| Anywhere, optionally | the `LIFEHUB_DATA_KEY` environment variable (your recovery key), e.g. to keep the key out of a Docker volume |
+
+**Recovery key.** **Settings → Backup → Show recovery key** shows the key as text. Keep it in a password manager:
+it's what opens your backups on another computer. To move LifeHub, copy the data folder and save the recovery key as
+`keys/recovery.key` there (or set `LIFEHUB_DATA_KEY`); LifeHub adopts it on start. If the key is missing while the
+data is encrypted, LifeHub refuses to start rather than starting empty.
+
 ## Backups
 
-- LifeHub zips `db/`, `settings.json` and `keys/` every night. **Settings → Backup** can create
-  and download a backup on demand.
-- The HA add-on's `/data` is also included in **Home Assistant backups**, which are hot backups.
-- **Always back up `keys/` together with `settings.json`.** Without the keys, saved passwords and
-  tokens can't be decrypted after a restore. You would have to enter them again; nothing else is
-  lost.
+- LifeHub zips `db/` and `settings.json` every night — already encrypted — and keeps the latest 14 (both
+  adjustable in **Settings → Background tasks**). **Settings → Backup** can create and download one on demand.
+- **Backups don't contain the key**, so a copied backup can't be read on its own. The same LifeHub opens its own
+  backups; elsewhere you need the recovery key.
+- The HA add-on's `/data` is also included in **Home Assistant backups** (with its key).
 
 ## What's stored about email
 
 LifeHub stores the sender, subject, date, a short snippet, the category, the AI summary and a
-link back to the message. **It doesn't store email bodies.** They're only sent to your own Ollama
-server while the email is being processed.
+link back to the message (all encrypted). **It doesn't store email bodies.** They're only sent to the AI you
+chose while the email is being processed.
 
 ## What leaves your network
 
@@ -44,8 +62,12 @@ LifeHub only connects to outside services you've set up:
 | Supermarket offers pages | when Deals is on, every 24 hours by default | an ordinary page request (no personal data) |
 | Web push services (Google, Apple, Mozilla) | when LifeHub's own notifications are on | the encrypted message, which only your device can read |
 | Microsoft Graph / your mail servers | email sync | your sign-in |
+| OpenAI, Google (Gemini) or Anthropic (Claude) | only if you choose one in Settings → AI | the emails, notes, photos and lists LifeHub asks the AI about, with your API key |
+| Hugging Face (model files) | phone app, when you download the on-device AI | a normal download |
+| Thunderbird's provider database / your mail domain | adding a mailbox with "Another provider" | the domain part of the address |
 
-Your notes, photos and emails are only ever sent to **your own** Ollama server.
+With **Ollama** or the **on-device AI** (the defaults), your notes, photos and emails never leave your network or
+phone.
 
 ## Authentication
 

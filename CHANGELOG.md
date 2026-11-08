@@ -9,6 +9,54 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [3.1.0] – Unreleased
+
+Easier email set-up, a phone app that runs on its own, any AI, tidier notifications, and
+everything stored encrypted.
+
+### Added
+- **Add mailbox wizard** (Settings → Email): **Sign in with Microsoft** (Outlook.com, Hotmail,
+  Microsoft 365) with a one-time code, and guided app-password steps for Gmail, iCloud, Yahoo,
+  AOL and Fastmail. Other providers' servers are found automatically. Add as many mailboxes of
+  each kind as you like ("Gmail 2"); manual set-up is still there.
+- **Email is checked whenever LifeHub is opened** (at most every 2 minutes), as well as on its
+  schedule. `POST /api/v1/email/check` lets the phone app ask for a check.
+- **Any AI**: Ollama, ChatGPT (OpenAI), Google Gemini, Claude, any OpenAI-compatible server
+  (LM Studio, OpenRouter…) and, in the phone app, an AI that runs on the phone itself (WebLLM).
+  API keys are stored encrypted, and a warning explains what cloud providers see.
+- **Settings → Background tasks**: switch each job (email, reminders, auto-plan, deals, backup,
+  Home Assistant lists and sensors, presence) on or off, change how often it runs, see when it
+  last ran, and run it now.
+- **Encryption at rest**: every data file and the settings file are encrypted with AES-256-GCM.
+  The key is created and stored automatically (`keys/`, protected by the operating system where
+  possible, or the `LIFEHUB_DATA_KEY` environment variable). Existing data is encrypted on first
+  start. A **recovery key** is shown in Settings → Backup; backups don't contain the key.
+- **Phone app 2.0.0** (one .NET MAUI app for Android, iPhone and iPad), replacing the separate
+  Android and iOS apps:
+  - **On its own**: runs LifeHub's own code on the phone for one person, encrypted with a key
+    kept in the phone's secure storage. Checks email, sends reminders and runs the AI without a
+    server.
+  - **Connected**: LifeHub full screen with your API key, an encrypted offline copy, and
+    notifications fetched from the server.
+  - Background checks every 15 minutes by default (adjustable; Android JobScheduler, iOS
+    Background App Refresh when iOS allows) and whenever the app opens.
+  - Android notification channels per kind, grouped; iOS notification threads.
+
+### Changed
+- **Notifications cleaned up**: emails turned into items now give one short notification per
+  check ("From your email: 2 tasks, 1 renewal") instead of one per email, and promotions never
+  notify. Each kind (reminders, renewals, food, email, daily summary, deals, shopping, system) can
+  go to your phone, stay in LifeHub only, or be switched off, with quiet hours. Titles no longer
+  start with emojis.
+- Dark mode: the browser's address bar and form controls follow the theme; disabled buttons are
+  easier to tell apart.
+- The AI client (`OllamaClient`) is now `AiClient`, with provider request formats in
+  `AiProviders`. Core services are registered with `AddLifeHubCore()`, shared with the phone app.
+
+### Removed
+- `mobile/android` and `mobile/ios` (replaced by `mobile/maui`), and their workflows (replaced by
+  `mobile.yml`).
+
 ## [3.0.0] – 2026-11-04
 
 LifeHub 3 is a clean-up for publishing: Bible features have moved to their own app, the app is

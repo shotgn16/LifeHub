@@ -19,9 +19,10 @@ cd LifeHub/lifehub/src/LifeHub
 dotnet run          # http://localhost:5080
 ```
 
-You need the .NET 8 SDK. The phone apps are in `mobile/`. Open `mobile/android` in Android Studio,
-and run `xcodegen` in `mobile/ios`, then open the project in Xcode. GitHub Actions builds both
-on every push. See [docs/architecture.md](docs/architecture.md) for how the code is laid
+You need the .NET 8 SDK. The phone app is in `mobile/maui` (.NET MAUI, .NET 10 SDK): run
+`bash mobile/maui/copy-web.sh`, then build it as described in
+[docs/mobile-apps.md](docs/mobile-apps.md#how-its-built). GitHub Actions builds Android and iOS
+on every push. Run the unit checks with `dotnet run --project lifehub/tests/LifeHub.Tests`. See [docs/architecture.md](docs/architecture.md) for how the code is laid
 out, and [docs/extending.md](docs/extending.md) for the main extension points.
 
 ## Pull requests

@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.1.0
+- **Easier email set-up**: Settings → Email → **Add mailbox**. Sign in with Microsoft, or follow
+  the steps for a Gmail, iCloud, Yahoo, AOL or Fastmail app password. Add as many mailboxes as
+  you like. Email is also checked whenever you open LifeHub.
+- **Tidier notifications**: one notification per email check instead of one per email, no
+  notifications for promotions, and a choice per kind (phone, LifeHub only, off) with quiet hours.
+- **Use any AI**: Ollama, ChatGPT, Gemini, Claude or an OpenAI-compatible server.
+- **Everything is stored encrypted.** Write down the recovery key in **Settings → Backup**.
+- **Settings → Background tasks** lets you switch off or reschedule anything LifeHub does by
+  itself.
+- New phone app 2.0.0, which can also run on its own without LifeHub.
+
 ## 3.0.0
 - **Bible features have moved to their own app.** Before anything is deleted, go to
   **Settings → Backup → Bible data from LifeHub 2** to export it to a zip, then delete it.

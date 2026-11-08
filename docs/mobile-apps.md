@@ -2,97 +2,61 @@
 
 > Just want to install them? The short, easy version is in the manual: [Phone apps](manual/phone-apps.md).
 
-The LifeHub apps are companions to **your own LifeHub server**. They show LifeHub full screen,
-signed in as you, and add things a browser can't do.
+LifeHub 3.1 has **one app** for Android, iPhone and iPad (`mobile/maui`, .NET MAUI). It runs two ways:
 
-| | Android (`mobile/android`) | iPhone & iPad (`mobile/ios`) |
+- **On this phone, on its own** — the app runs LifeHub's own code (the same services and pages as the server, compiled
+  into the app), for one person, with everything stored encrypted on the phone. Email is checked by the phone; the AI
+  runs on the phone (WebLLM on the GPU) or is Ollama, ChatGPT, Gemini or Claude.
+- **Connected to your LifeHub** — LifeHub full screen, signed in with your API key, with an encrypted offline copy
+  (tasks, shopping, notes, meals) and notifications fetched from the server.
+
+| | On its own | Connected |
 |---|---|---|
-| LifeHub signed in as you (with your API key, no password) | ✓ | ✓ |
-| Barcode scanner, photos and uploads | ✓ (camera needs an https address) | ✓ (camera needs an https address) |
-| Notifications from LifeHub | ✓ checks every 15 minutes | ✓ when you open the app, and when iOS allows a background refresh |
-| Share text or links to LifeHub (save as a note, task or shopping item) | ✓ share menu | Shortcuts actions |
-| Siri and Shortcuts: add a note, task or shopping item, open a page | — | ✓ |
-| Home-screen shortcuts (long-press the icon): Scan, Shopping, Notes, Tasks | ✓ | ✓ (Open LifeHub → page) |
-| **Phone app settings** link in LifeHub's menu | ✓ | ✓ |
-| **Works offline**, then syncs when LifeHub is back | ✓ | ✓ |
+| Sign-in | none (one person) | your API key (no password) |
+| Notifications | shown by the phone, one channel per kind | the server's, fetched when you open the app and in the background |
+| Background | email + reminders every 15/30/60/180 min (Android JobScheduler; iOS Background App Refresh when iOS allows) | the same schedule, for the server's news |
+| Offline | completely | saved copy + changes sent later |
+| Barcode scanner, photos, uploads, share menu | ✓ | ✓ (camera needs an https address) |
 
-> **Your phone must be able to reach LifeHub.**
+> **Connected: your phone must be able to reach LifeHub.**
 > - At home, use the direct port, for example `http://192.168.1.10:8099`. On the desktop app,
 >   choose **This computer + my phone** or **A server for my household**; the address is shown in
 >   **Settings → This computer**. In Home Assistant, map the add-on's port under the add-on's
 >   **Configuration → Network**.
 > - When you're out, use an https address, for example a Cloudflare Tunnel (see
 >   [remote-access.md](remote-access.md)).
-> - The camera scanner only works over **https**. Over http, use **Take photo** instead.
-> - The Home Assistant ingress URL doesn't work in the apps, because it needs a Home Assistant
->   sign-in.
+> - The Home Assistant ingress URL doesn't work in the app, because it needs a Home Assistant sign-in.
 
-## Getting the apps
+## Getting the app
 
-**Ready-made:** every [release](https://github.com/shotgn16/LifeHub/releases/latest) includes
-`LifeHub-<version>-Android.apk` and `LifeHub-<version>-iPhone-iPad-unsigned.ipa`.
+Every [release](https://github.com/shotgn16/LifeHub/releases/latest) includes `LifeHub-<version>-Android.apk` and
+`LifeHub-<version>-iPhone-iPad-unsigned.ipa`. Newer builds come from **Actions → Phone apps** (artifacts
+`LifeHub-android-N` and `LifeHub-ios-N`); each Android build is also opened on an emulator as a check.
 
-**Latest build:** the apps are also built by GitHub Actions whenever `mobile/` changes:
+## How it's built
 
-1. Go to **github.com/shotgn16/LifeHub → Actions**.
-2. Open **Android app** or **iPhone app**, then the latest green run.
-3. Download it from **Artifacts** at the bottom:
-   - **LifeHub-android-N**: `app-release.apk` (to install) and `app-release.aab` (for Google Play)
-   - **LifeHub-ios-N**: `LifeHub-unsigned.ipa` (to sideload) and `LifeHub-ios-project.zip` (the
-     Xcode project)
-4. To build again, press **Run workflow** on either workflow.
+```
+mobile/maui/
+  LifeHubShared.props        compiles lifehub/src/LifeHub (services, AI, email, Razor pages) into the app, minus the
+                             web-server parts; differences are marked #if MOBILE / AppHost.IsPhoneApp
+  copy-web.sh                copies LifeHub's CSS, scripts and the offline screen into the app before a build
+  LifeHub.Mobile/
+    MauiProgram.cs           the same AddLifeHubCore() as the server, plus the phone's key store, sign-in, notifier
+    Mobile/                  first-start choice, This phone page, server mode, background jobs, on-device AI
+    Platforms/Android|iOS/   notifications, background scheduling, camera permission, app entry points
+    wwwroot/                 host page, phone styles, ondevice.js and WebLLM (vendor/web-llm, Apache-2.0)
+```
 
-## First run (both apps)
+Build it yourself (needs the .NET 10 SDK; Android Studio's SDK for Android, Xcode on a Mac for iOS):
 
-1. In LifeHub in a browser, go to **Settings → Security & API → Your API key → Show**, and copy
-   the key. Each person has their own key, so the app is signed in as **you**.
-2. Open the app, enter your **LifeHub address** and paste the **API key**, then press **Check &
-   save**. It should say "Signed in as …".
-3. Allow notifications when asked.
-4. To change these later, open LifeHub's menu → **Phone app settings**.
+```bash
+bash mobile/maui/copy-web.sh
+dotnet workload install maui-android            # or maui-ios on a Mac
+dotnet publish mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-android -p:TargetFrameworks=net10.0-android -c Release
+```
 
-## Offline mode
-
-LifeHub's screens are drawn live by your server, so the apps keep their own copy for when it
-can't be reached. Examples: no signal, away from home without an https address, or LifeHub
-restarting for an update.
-
-**What's kept on the phone.** The copy is refreshed whenever the app is online (Android also
-every 15 minutes in the background):
-
-- your open tasks
-- the shopping list
-- your recent notes
-- this week's meals
-
-**When the app switches.** If the app can't reach LifeHub, or LifeHub's live connection stays
-down for 12 seconds, it shows the **offline screen**. It has Today, Tasks, Shopping, Notes and
-Meals tabs. On that screen you can:
-
-- add tasks (with a due date), shopping items and notes
-- tick tasks done and tick items off the shopping list
-
-**Waiting changes.** Each change is marked **waiting to send** and kept on the phone, even if you
-close the app or restart the phone. They're sent automatically and in order:
-
-- as soon as LifeHub can be reached
-- when you open the app, or press **Try again**
-- in the background: Android checks every 15 minutes once there's a connection; iPhone when iOS
-  allows a background refresh
-
-**What happens on the server.** Each change carries its own id, so a change is never applied
-twice, even if the connection drops mid-send.
-
-- A task added offline gets filed and planned as usual.
-- A note is sorted into a category once it arrives.
-- If something changed meanwhile, the change is skipped rather than causing an error. For
-  example, someone else already ticked that shopping item, or the task was deleted.
-
-**Getting back.** When LifeHub is reachable again, the banner turns green. Press **Open LifeHub**
-to go back to the full app. Features that need the server stay online-only: the AI, the scanner,
-deals and settings.
-
----
+Add `-p:MicrosoftClientId=<your Entra app ID>` for the "Sign in with Microsoft" button
+(see [manual/email.md](manual/email.md#setting-up-microsoft-sign-in-once-for-whoever-publishes-lifehub)).
 
 ## Installing on Android (without the Play Store)
 
@@ -135,6 +99,7 @@ If your phone refuses with a message about an **unverified developer**, either:
 
 ### Turning on the extras
 
+- **Background checks:** in the app, **This phone → In the background**.
 - **Battery.** If notifications arrive late, go to **Settings → Apps → LifeHub → App battery
   usage** and choose **Unrestricted**.
 
@@ -162,8 +127,7 @@ future update, including on Google Play if you don't use Play App Signing.
 
 ### Building it yourself
 
-Open `mobile/android` in **Android Studio** (Ladybug or later), then press **Run** with the phone
-connected.
+See [How it's built](#how-its-built) above.
 
 ---
 
@@ -176,35 +140,32 @@ alternative app marketplaces, so these are your options:
 
 | Way | Needs | Lasts |
 |---|---|---|
-| **Xcode with a free Apple ID** | a Mac | 7 days, then re-install from Xcode; max 3 apps |
+| **Your Mac with a free Apple ID** | a Mac with Xcode | 7 days, then build again; max 3 apps |
 | **Sideloadly or AltStore/SideStore** with a free Apple ID | a Mac or a Windows PC | 7 days; AltStore/SideStore can refresh it automatically over Wi-Fi |
 | **Apple Developer Program** (£79/US$99 a year) | a Mac (or a cloud Mac) | 1 year; installs from Xcode, or **TestFlight** for you and your family |
 
-### With Xcode (Mac)
+### From a Mac with your Apple ID
 
-1. Install **Xcode** from the Mac App Store, and XcodeGen with `brew install xcodegen`.
-2. Get the project: either clone the repo, or download `LifeHub-ios-project.zip` from the
-   **iPhone app** workflow's artifacts.
-3. In `mobile/ios`, run `xcodegen`, then open `LifeHub.xcodeproj`.
-4. Go to **Xcode → Settings → Accounts** and add your Apple ID.
-5. Select the **LifeHub** target → **Signing & Capabilities** and choose your **Team** (your name,
-   "Personal Team").
-   - If Xcode says the bundle ID is taken, change it to something unique, for example
-     `uk.yourname.lifehub`.
-6. Connect the iPhone by cable and choose it as the run destination. Then:
-   1. On the iPhone, turn on **Settings → Privacy & Security → Developer Mode** and restart.
-   2. In Xcode, press **Run**.
-   3. The first time, go to **Settings → General → VPN & Device Management** on the iPhone and
-      **trust** your developer certificate.
-7. With a free Apple ID the app stops opening after 7 days. Press **Run** in Xcode again to renew
-   it. Your settings are kept.
+1. Install **Xcode** from the Mac App Store and the .NET 10 SDK, then `dotnet workload install maui-ios`.
+2. Clone the repository and run `bash mobile/maui/copy-web.sh`.
+3. Connect the iPhone/iPad, turn on **Developer Mode** on it, and run:
+
+   ```bash
+   dotnet build mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-ios -p:TargetFrameworks=net10.0-ios \
+     -t:Run -p:RuntimeIdentifier=ios-arm64 -p:CodesignKey="Apple Development: you@example.com"
+   ```
+
+   With a free Apple ID, Xcode first needs to create your "Personal Team" signing certificate: open Xcode →
+   Settings → Accounts → add your Apple ID → **Manage Certificates → + → Apple Development**. If the bundle ID
+   `io.github.shotgn16.lifehub` is taken, add `-p:ApplicationId=uk.yourname.lifehub`.
+4. Trust the certificate on the device: **Settings → General → VPN & Device Management**.
 
 ### With Sideloadly (Windows or Mac)
 
 1. Install [Sideloadly](https://sideloadly.io) and, on Windows, iTunes and iCloud from Apple's
    website (not the Microsoft Store).
 2. Download `LifeHub-<version>-iPhone-iPad-unsigned.ipa` from the latest release (or
-   `LifeHub-unsigned.ipa` from the **iPhone app** workflow's artifacts).
+   `LifeHub-unsigned.ipa` from the **Phone apps** workflow's artifacts).
 3. Connect the iPhone, drag the `.ipa` into Sideloadly, enter your Apple ID and press **Start**.
 4. On the iPhone, turn on **Developer Mode**, then trust the certificate under **Settings →
    General → VPN & Device Management**.
@@ -216,12 +177,10 @@ spare Apple ID with them.
 
 ### Turning on the extras
 
-- **Notifications**: allow them on first run. iOS decides how often apps refresh in the
-  background, so for instant reminders keep LifeHub's Home Assistant notifications on as well
-  (Settings → Notifications → **Both**).
-- **Siri**: say "Add a note in LifeHub", "Add to my LifeHub shopping list", "Add a task in
-  LifeHub" or "Open LifeHub". All the actions are also in the Shortcuts app; for example, add
-  "Add a note" to a share-sheet shortcut.
+- **Notifications**: allow them on first start. iOS decides how often apps refresh in the
+  background, so for instant reminders when connected to a server, keep LifeHub's Home Assistant
+  notifications on as well (Settings → Notifications → **Both**).
+- **Background App Refresh**: keep it on for LifeHub (iOS Settings → General → Background App Refresh).
 
 ---
 

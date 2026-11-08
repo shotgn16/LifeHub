@@ -7,6 +7,7 @@ need to be technical — every step says exactly what to click.
 
 | I want… | Choose | Guide |
 |---|---|---|
+| LifeHub just on my phone, nothing else | **Use LifeHub on this phone** (in the app) | [Phone apps](phone-apps.md) |
 | LifeHub on my computer, just for me | **This computer only** | your computer's guide below |
 | LifeHub on my computer **and** in the app on my phone | **This computer + my phone** | your computer's guide, then [Phone apps](phone-apps.md) |
 | One LifeHub for the whole household, on a computer that stays on | **A server for my household** | your computer's guide, then [Household](household.md) |
@@ -32,6 +33,8 @@ Each installer contains everything LifeHub needs, so there's nothing else to ins
 ## 3. Get going
 
 - [Getting started](getting-started.md): a five-minute tour of LifeHub once it's running.
+- [Your email](email.md): add mailboxes with a few taps, and how LifeHub checks them.
+- [Notifications](notifications.md): choose what reaches your phone, and quiet hours.
 - [Make it yours](customise.md): colours, the home screen, turning sections on or off, and your
   own styles.
 - [The AI assistant](ai.md): what it does and how to set it up (optional, and it stays on your

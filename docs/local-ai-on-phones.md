@@ -1,6 +1,11 @@
 # Running AI models on your phones
 
-There are two separate things you might want:
+> **New in LifeHub 3.1:** the LifeHub app has its **own on-device AI**. Use it on its own ("Use LifeHub on this
+> phone"), then **This phone → AI on this phone → Download and use**. It runs a small model (Qwen3 1.7B/4B, Llama
+> 3.2 3B or Gemma 2 2B) on the phone's GPU through WebLLM, offline, and reads your email whenever the app is open.
+> See [manual/ai.md](manual/ai.md). The rest of this page is about other apps and using a phone as an AI server.
+
+There are two other things you might want:
 
 1. **A private AI chat on the phone itself**, offline and with nothing leaving the phone. This is
    easy on both phones.
@@ -40,16 +45,8 @@ Tips:
 
 ### Using phone AI with LifeHub, without a server
 
-The iPhone app's Shortcuts actions combine well with on-device models. For example, make a
-Shortcut that:
-
-1. receives text from the **share sheet** (a recipe web page, an email)
-2. uses **Use Model → On-Device** with the prompt "Make a shopping list from this, one item per
-   line"
-3. repeats with each line → **Add to the shopping list (LifeHub)**
-
-Or: **Dictate text** → **Use Model** ("Tidy this into a short note") → **Add a note (LifeHub)**.
-Everything stays on the phone and your LifeHub.
+The simplest way is the LifeHub app's own on-device AI (above). The app also accepts text from the **share sheet**:
+share a recipe page or an email to LifeHub to save it as a note, a task or shopping items.
 
 ## 2. A phone as LifeHub's AI server (experimental)
 

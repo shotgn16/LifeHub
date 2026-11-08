@@ -6,25 +6,26 @@ anyone else running LifeHub.
 
 ## Before either store
 
-- **Change the app ID to one you own.** Both apps use `io.github.shotgn16.lifehub`. Keep it if
+- **Change the app ID to one you own.** The app uses `io.github.shotgn16.lifehub`. Keep it if
   this is your GitHub account; otherwise use a reverse domain you control, for example
-  `uk.yourname.lifehub`. It **can't be changed after publishing**. Set it in:
-  - `mobile/android/app/build.gradle.kts` (`applicationId`)
-  - `mobile/ios/project.yml` (`PRODUCT_BUNDLE_IDENTIFIER`)
+  `uk.yourname.lifehub`. It **can't be changed after publishing**. Set `ApplicationId` in
+  `mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj`.
 - **Privacy policy URL.** Both stores require one. A short page is enough, for example a
   `PRIVACY.md` in this repository. Say that:
-  - the app connects only to the LifeHub server you enter
-  - it stores your server address and API key on the phone
+  - on its own, everything stays on the phone (encrypted); connected, the app talks only to the LifeHub server you enter
+  - email is read from the mailboxes you add, and only by the AI you choose (on the phone, your own Ollama, or — if
+    you pick them — OpenAI, Google or Anthropic with your own API key)
   - the developer collects no data
 - **Store listing assets**:
-  - the icon: `mobile/store-icon-512.png` for Play; the 1024 px icon is already in the iOS project
+  - the icon: `mobile/store-icon-512.png` for Play; the iOS icons are generated from
+    `mobile/maui/LifeHub.Mobile/Resources/AppIcon`
   - screenshots from your phones
   - a short and a long description
-- **Reviewers need a server.** LifeHub is self-hosted, so both stores' reviewers need something to
-  sign in to. Run a **demo LifeHub** reachable over https, for example a second Docker container
-  behind your Cloudflare Tunnel, with made-up data. Give the reviewers its address and an API
-  key, and say clearly in the review notes that the app is a client for a self-hosted server.
-- **Versions.** Bump `versionName` / `MARKETING_VERSION` for each release. The build number is
+- **Reviewers can use it without a server.** "Use LifeHub on this phone" works straight away, so reviewers
+  can try everything except email and server mode. For those, run a **demo LifeHub** reachable over https (for
+  example a second Docker container behind your Cloudflare Tunnel, with made-up data) and give them its address and
+  an API key.
+- **Versions.** Bump `ApplicationDisplayVersion` in the `.csproj` for each release. The build number is
   set automatically from the GitHub run number.
 
 ## Google Play (Android)
@@ -36,7 +37,7 @@ anyone else running LifeHub.
    Android device.
 2. **Create a signing key** and add the four GitHub secrets (see
    [mobile-apps.md](mobile-apps.md#updates-keep-the-same-signature-only-with-your-own-key)).
-   Then run the **Android app** workflow and download `app-release.aab`. Keep the key safe: with
+   Then run the **Phone apps** workflow and download `app-release.aab`. Keep the key safe: with
    **Play App Signing** (recommended, on by default), it is your *upload key*, and Google can
    reset it if you lose it.
 3. **Create app** in Play Console:
@@ -47,15 +48,16 @@ anyone else running LifeHub.
    - accept the declarations
 4. **Set up your app** (the dashboard checklist):
    - **Privacy policy**: your URL.
-   - **App access**: "All or some functionality is restricted". Add the demo server address and
-     API key, and explain how to sign in.
+   - **App access**: "All functionality is available without special access" (on this phone needs no
+     account). Mention the demo server address and API key for server mode.
    - **Ads**: no.
    - **Content rating**: complete the questionnaire (a utility app, no user-generated content
      shared with others).
    - **Target audience**: 18+, which avoids the Families policy.
    - **Data safety**:
      - the app collects no data for the developer
-     - data is sent only to the user's own server
+     - data stays on the phone (encrypted) or goes only to the user's own server and the services the user chooses
+       (their mailboxes; OpenAI/Google/Anthropic only if they pick them, with their own key)
      - data in transit is encrypted when the server uses https
    - **Sensitive permissions**: none. The app asks only for the camera (barcode scanning) and
      notifications.
@@ -87,11 +89,17 @@ Mac.
 3. **Create the app** in [App Store Connect](https://appstoreconnect.apple.com): **Apps → + → New
    App**. Choose iOS, the name LifeHub, your bundle ID and an SKU (any text, for example
    `lifehub1`).
-4. **Build and upload** from the Mac:
-   1. `brew install xcodegen`, then run `xcodegen` in `mobile/ios`, and open `LifeHub.xcodeproj`.
-   2. Under **Signing & Capabilities**, choose your paid **Team**.
-   3. Set the destination to **Any iOS Device**, then go to **Product → Archive**.
-   4. In the Organizer, choose **Distribute App → App Store Connect → Upload**.
+4. **Build and upload** from the Mac (Xcode, .NET 10 SDK, `dotnet workload install maui-ios`):
+   1. In Xcode → Settings → Accounts, add your Apple ID and create an **Apple Distribution** certificate; in the
+      developer portal create an **App Store** provisioning profile for the bundle ID and download it (double-click).
+   2. `bash mobile/maui/copy-web.sh`, then:
+
+      ```bash
+      dotnet publish mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-ios -p:TargetFrameworks=net10.0-ios -c Release \
+        -p:RuntimeIdentifier=ios-arm64 -p:ArchiveOnBuild=true \
+        -p:CodesignKey="Apple Distribution: Your Name (TEAMID)" -p:CodesignProvision="LifeHub App Store"
+      ```
+   3. Upload the `.ipa` with Apple's **Transporter** app (or `xcrun altool --upload-app`).
 5. **TestFlight** (optional, recommended). Once the build has processed, add yourself and your
    family under **Internal Testing** (up to 100 people, no review). They install it with the
    **TestFlight** app. Builds expire after 90 days; upload a new one to continue.
@@ -106,15 +114,14 @@ Mac.
    - **Sign-in required**: give the demo server address and API key. The reviewer enters these
      on the first screen.
    - **Notes**: explain that LifeHub is a self-hosted household organiser and the app is its
-     client. List what the app adds beyond the website:
-     - Siri and Shortcuts actions
-     - background notifications
-     - an offline mode that keeps working without a connection
-     - camera scanning
-     - Keychain storage of the key
+     client, but that it also works fully on its own. List what the app does natively:
+     - runs LifeHub on the phone with encrypted storage (key in the Keychain)
+     - an on-device AI model
+     - background refresh and local notifications
+     - camera scanning and the share sheet
 
-     Apple's guideline 4.2 (minimum functionality) rejects apps that are "just a website", so the
-     native features matter.
+     Apple's guideline 4.2 (minimum functionality) rejects apps that are "just a website"; the standalone mode
+     answers that.
 8. **Submit for review.** It usually takes 1–3 days. If it's rejected under 4.2, reply in
    Resolution Center with the list of native features, or add more (for example widgets) and
    resubmit.
@@ -126,8 +133,8 @@ is already set to **NO** in Info.plist, and you won't be asked each upload.
 
 - To release an update:
   1. Bump the version.
-  2. Run the workflows, or archive in Xcode.
+  2. Run the workflows, or `dotnet publish` as above.
   3. Upload to the same app, with release notes.
 - Keep the demo server running; reviewers check it on every update.
 - Play and Apple both email policy updates, such as new target-SDK requirements. Google requires
-  a recent `targetSdk` each year; change `targetSdk`/`compileSdk` in `app/build.gradle.kts`.
+  a recent `targetSdk` each year; a newer .NET MAUI release brings it (update the SDK in the workflow).

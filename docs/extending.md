@@ -171,8 +171,8 @@ Add to `AutomationService.PublishSensorsAsync`. Each `SetStateAsync` call create
      Package settings.
 2. Bump `<Version>` in `lifehub/src/LifeHub/LifeHub.csproj` and `version:` in
    `lifehub/config.yaml`.
-3. For the phone apps (only when `mobile/` changed): bump `versionName` in
-   `mobile/android/app/build.gradle.kts` and `MARKETING_VERSION` in `mobile/ios/project.yml`.
+3. For the phone app (only when `mobile/` changed): bump `ApplicationDisplayVersion` (and
+   `ApplicationVersion`) in `mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj`.
    New offline change types need adding in three places: `SyncService.ApplyOneAsync`, the
    `view()`/`queue()` code in `mobile/shared/offline.html`, and the docs. Older apps skip types they
    don't know.
