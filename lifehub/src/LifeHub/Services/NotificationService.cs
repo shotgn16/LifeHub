@@ -2,6 +2,12 @@ using LifeHub.Integrations.HomeAssistant;
 
 namespace LifeHub.Services;
 
+/// <summary>Shows a notification on this device (registered by the phone app; the server has none).</summary>
+public interface IDeviceNotifier
+{
+    Task ShowAsync(Notice notice, string? tag);
+}
+
 /// <summary>
 /// Stores in-app notices and pushes them to phones — through Home Assistant's Companion app, LifeHub's own
 /// web push, or both (Settings → Notifications).
@@ -13,10 +19,12 @@ public sealed class NotificationService
     private readonly WebPushService _push;
     private readonly SettingsService _settings;
     private readonly Clock _clock;
+    private readonly IDeviceNotifier? _device;
 
-    public NotificationService(IRepository<Notice> repo, HomeAssistantClient ha, WebPushService push, SettingsService settings, Clock clock)
+    public NotificationService(IRepository<Notice> repo, HomeAssistantClient ha, WebPushService push, SettingsService settings, Clock clock,
+        IEnumerable<IDeviceNotifier> device)
     {
-        _repo = repo; _ha = ha; _push = push; _settings = settings; _clock = clock;
+        _repo = repo; _ha = ha; _push = push; _settings = settings; _clock = clock; _device = device.FirstOrDefault();
     }
 
     /// <summary>The channel actually used: falls back to LifeHub's own push when HA has no phones set up.</summary>
@@ -59,8 +67,17 @@ public sealed class NotificationService
         var route = prefs.RouteOf(category);
         if (route == NoticeRoute.Off) return false;
         var phone = push && route == NoticeRoute.Phone && !InQuietHours(prefs);
-        await _repo.UpsertAsync(new Notice { Title = title, Message = message, Level = level, Link = link, DedupeKey = dedupeKey, Category = category, Phone = phone });
+        var notice = new Notice { Title = title, Message = message, Level = level, Link = link, DedupeKey = dedupeKey, Category = category, Phone = phone };
+        await _repo.UpsertAsync(notice);
         if (!phone) return true;
+        // In the phone app the notification is shown right here; Home Assistant can still get a copy.
+        if (_device is not null)
+        {
+            await _device.ShowAsync(notice, tag);
+            if (_ha.IsConfigured && _settings.Current.Notifications.Channel is NotifyChannel.HomeAssistant or NotifyChannel.Both)
+                await _ha.NotifyAsync(title, message, string.IsNullOrEmpty(link) ? null : link, tag, onlyTo);
+            return true;
+        }
         var channel = EffectiveChannel;
         if (channel is NotifyChannel.HomeAssistant or NotifyChannel.Both)
             await _ha.NotifyAsync(title, message, string.IsNullOrEmpty(link) ? null : link, tag, onlyTo);

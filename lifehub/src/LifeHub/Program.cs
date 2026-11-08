@@ -53,62 +53,10 @@ static WebApplication CreateLifeHub(string[] args, string? urls, bool windowsSer
         return DataCipher.Open(sp.GetRequiredService<IDataKeyStore>(),
             () => Directory.GetFiles(paths.Db, "*.json").Append(paths.SettingsFile).Any(DataCipher.IsEncryptedFile));
     });
-    builder.Services.AddSingleton<SettingsService>();
-    builder.Services.AddSingleton<Clock>();
-    builder.Services.AddSingleton(typeof(IRepository<>), typeof(JsonRepository<>));
     builder.Services.AddSingleton<LoginThrottle>();
-    builder.Services.AddMemoryCache();
-    builder.Services.AddHttpClient();
-
-    // ---------- Domain services ----------
-    builder.Services.AddSingleton<TaskService>();
-    builder.Services.AddSingleton<RenewalService>();
-    builder.Services.AddSingleton<KitchenService>();
-    builder.Services.AddSingleton<BarcodeService>();
-    builder.Services.AddSingleton<EmailLinkService>();
-    builder.Services.AddSingleton<CalendarService>();
-    builder.Services.AddSingleton<ScheduleService>();
-    builder.Services.AddSingleton<PlannerService>();
-    builder.Services.AddSingleton<NotificationService>();
-    builder.Services.AddSingleton<BackupService>();
-    builder.Services.AddSingleton<BackgroundStatus>();
-    builder.Services.AddSingleton<WebPushService>();
-    builder.Services.AddSingleton<KitchenPhotoService>();
-    builder.Services.AddSingleton<MealService>();
-    builder.Services.AddSingleton<PeopleService>();
-    builder.Services.AddSingleton<NotesService>();
-    builder.Services.AddSingleton<DealsService>();
-    builder.Services.AddSingleton<SyncService>();
-    builder.Services.AddSingleton<BibleArchiveService>();
-
-    // ---------- Modules (menu, home screen cards; add your own here — see docs/extending.md) ----------
-    builder.Services.AddLifeHubModules();
-
-    // ---------- Integrations ----------
-    builder.Services.AddSingleton<HomeAssistantClient>();
-    builder.Services.AddSingleton<HomeAssistantCatalog>();
-    builder.Services.AddSingleton<HomeAssistantSetup>();
-    builder.Services.AddSingleton<HaListSyncService>();
+    builder.Services.AddLifeHubCore();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<HaListSyncService>());
-    builder.Services.AddSingleton<AiClient>();
-    builder.Services.AddSingleton<MicrosoftGraphClient>();
-    builder.Services.AddSingleton<IEmailProvider, ImapEmailProvider>();
-    builder.Services.AddSingleton<IEmailProvider, GraphEmailProvider>();
-    builder.Services.AddSingleton<IEmailProvider, EwsEmailProvider>();
-
-    // ---------- AI actions (add your own IAiActionHandler here to extend what the AI can do) ----------
-    builder.Services.AddSingleton<IAiActionHandler, TaskActionHandler>();
-    builder.Services.AddSingleton<IAiActionHandler, EventActionHandler>();
-    builder.Services.AddSingleton<IAiActionHandler, RenewalActionHandler>();
-    builder.Services.AddSingleton<IAiActionHandler, ShoppingActionHandler>();
-    builder.Services.AddSingleton<IAiActionHandler, PantryActionHandler>();
-    builder.Services.AddSingleton<IAiActionHandler, PromotionActionHandler>();
-    builder.Services.AddSingleton<AiService>();
-
-    // ---------- Background jobs ----------
-    builder.Services.AddSingleton<EmailSyncService>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailSyncService>());
-    builder.Services.AddSingleton<AutomationService>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationService>());
 
     // ---------- Auth ----------

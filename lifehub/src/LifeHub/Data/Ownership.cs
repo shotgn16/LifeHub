@@ -64,10 +64,16 @@ public static class UserScope
 
     public static HouseholdView Household { get; set; } = new(Guid.Empty, true, true, true, Array.Empty<Guid>());
 
-    public static State? Current => _current.Value;
+    /// <summary>
+    /// The person to use when nothing else says (the phone app on its own is one person's LifeHub, so everything runs
+    /// as them). Null on the server, where every request and job says who it is for.
+    /// </summary>
+    public static State? Default { get; set; }
+
+    public static State? Current => _current.Value ?? Default;
     /// <summary>The signed-in person, or null in background/system work.</summary>
-    public static Guid? UserId => _current.Value is { System: false } s ? s.User : null;
-    public static bool IsSystem => _current.Value?.System == true;
+    public static Guid? UserId => Current is { System: false } s ? s.User : null;
+    public static bool IsSystem => Current?.System == true;
 
     public static IDisposable Use(State? state)
     {
@@ -107,7 +113,7 @@ public static class UserScope
     public static bool CanSee(Entity e, OwnScope scope)
     {
         if (scope == OwnScope.Global) return true;
-        var s = _current.Value;
+        var s = Current;
         if (s is null) return false;
         if (s.System) return true;
         var h = Household;
@@ -124,7 +130,7 @@ public static class UserScope
     public static void Stamp(Entity e, OwnScope scope)
     {
         if (scope == OwnScope.Global || e.OwnerId != Guid.Empty) return;
-        if (_current.Value is not { System: false } s) return;
+        if (Current is not { System: false } s) return;
         if (scope != OwnScope.Personal && Household.Shares(scope)) return;
         e.OwnerId = s.User;
     }

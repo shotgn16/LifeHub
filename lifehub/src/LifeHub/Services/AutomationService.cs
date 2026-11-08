@@ -34,7 +34,13 @@ public sealed class AutomationService : BackgroundService
         using var system = UserScope.AsSystem();
         await Task.Delay(TimeSpan.FromSeconds(10), ct);
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
-        do
+        do await RunOnceAsync(ct);
+        while (await timer.WaitForNextTickAsync(ct));
+    }
+
+    /// <summary>One round of every automation step (the server runs it each minute; the phone app also from its background check).</summary>
+    public async Task RunOnceAsync(CancellationToken ct = default)
+    {
         {
             var bg = S<SettingsService>().Current.Background;
             await Step(BackgroundJobs.Tidy, HourlyAsync);
@@ -42,7 +48,7 @@ public sealed class AutomationService : BackgroundService
             if (bg.IsOn(BackgroundJobs.Presence)) await Step(BackgroundJobs.Presence, PresenceAsync);
             if (bg.IsOn(BackgroundJobs.AutoPlan)) await EachPerson(BackgroundJobs.AutoPlan, AutoPlanAsync);
             if (bg.IsOn(BackgroundJobs.HaSensors)) await Step(BackgroundJobs.HaSensors, () => PublishSensorsAsync(force: false));
-        } while (await timer.WaitForNextTickAsync(ct));
+        }
     }
 
     /// <summary>Runs a step once for each person, as that person (their tasks, their phones, their schedule).</summary>

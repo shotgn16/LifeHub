@@ -39,7 +39,11 @@
                         <span class="grow">@(me?.Name ?? context.User.Identity?.Name)</span>
                     </div>
                     <a href="lifehub-app://settings" class="small app-only">Phone app settings</a>
-                    @if (viaHa && User.Multi)
+                    @if (AppHost.IsPhoneApp)
+                    {
+                        <a href="phone" class="small">On this phone</a>
+                    }
+                    else if (viaHa && User.Multi)
                     {
                         <a href="auth/logout" target="_top" class="small">Switch person</a>
                     }

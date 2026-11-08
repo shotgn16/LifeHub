@@ -3,7 +3,8 @@
   LifeHub offline screen — shared by the Android and iPhone apps (bundled inside each app).
   Shown when your LifeHub server can't be reached. It shows the copy of your data saved on the phone and
   lets you keep working; changes wait on the phone and are sent automatically when LifeHub is back.
-  Talks to the app through a small bridge: Android `window.LifeHubNative`, iPhone `webkit.messageHandlers.lifehub`.
+  Talks to the app through a small bridge: Android `window.LifeHubNative`, iPhone `webkit.messageHandlers.lifehub`,
+  or (LifeHub app 2) `lifehub-bridge://` links answered through `window.__lhReply`.
 -->
 <html lang="en">
 <head>
@@ -125,6 +126,8 @@
   "use strict";
 
   // ---- bridge to the app ----------------------------------------------------------------------------
+  var bridgeSeq = 0, bridgeWaiting = {};
+  window.__lhReply = function (id, value) { var r = bridgeWaiting[id]; delete bridgeWaiting[id]; if (r) r(value); };
   function call(name, arg) {
     var a = arg === undefined ? "" : (typeof arg === "string" ? arg : JSON.stringify(arg));
     if (window.LifeHubNative && window.LifeHubNative[name]) {
@@ -133,7 +136,12 @@
     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.lifehub) {
       return window.webkit.messageHandlers.lifehub.postMessage({ name: name, arg: a });
     }
-    return Promise.reject(new Error("Not running inside the LifeHub app"));
+    // LifeHub app 2 (.NET MAUI): a lifehub-bridge:// link the app catches and answers through window.__lhReply.
+    return new Promise(function (resolve) {
+      var id = "r" + (++bridgeSeq);
+      bridgeWaiting[id] = resolve;
+      window.location.href = "lifehub-bridge://call?id=" + id + "&name=" + encodeURIComponent(name) + "&arg=" + encodeURIComponent(a);
+    });
   }
   function parse(s) { try { return typeof s === "string" ? JSON.parse(s) : s; } catch (e) { return null; } }
 

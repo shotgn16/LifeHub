@@ -49,7 +49,7 @@ jobs:
         run: |
           set +e +o pipefail
           dotnet publish lifehub/src/LifeHub/LifeHub.csproj -c Release -r ${{ matrix.rid }} --self-contained true \
-            -p:LifeHubDesktop=true -p:Version=${{ steps.v.outputs.version }} -p:DebugType=none -o out/${{ matrix.rid }} > publish.log 2>&1
+            -p:LifeHubDesktop=true -p:Version=${{ steps.v.outputs.version }} "-p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}" -p:DebugType=none -o out/${{ matrix.rid }} > publish.log 2>&1
           code=$?
           grep -E "error|warning NU" publish.log | sort -u | head -30 | while read -r l; do echo "::error::$l"; done
           [ $code -eq 0 ] || { tail -40 publish.log; exit $code; }

@@ -1,0 +1,157 @@
+@page "/phone"
+@inject MobileState State
+@inject PhoneJobs Jobs
+@inject SettingsService Settings
+@inject OnDeviceAi OnDevice
+@inject ServerClient Server
+@inject BackupService Backups
+@inject IDeviceNotifier Notifier
+
+@* Settings → This phone: how the app runs and what it does in the background. *@
+
+<PageTitle>This phone · LifeHub</PageTitle>
+<div class="page-head"><div><h1>This phone</h1><div class="sub">How the LifeHub app runs on this phone</div></div></div>
+
+<div class="card" style="margin-bottom:16px">
+    <h2 style="margin-bottom:6px">How the app runs</h2>
+    @if (State.Mode == MobileMode.Server)
+    {
+        <p>Connected to <strong>@State.ServerUrl</strong>. Your tasks, shopping, notes and meals are also kept on this phone (encrypted) for when it's offline.
+            Last synced @(DateTime.TryParse(Server.LastSyncUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var t) ? Fmt.Ago(t) : "never").</p>
+        <button class="btn" @onclick="SyncNow" disabled="@busy">Sync now</button>
+    }
+    else
+    {
+        <p>LifeHub runs on this phone, just for you. Everything is stored on the phone, encrypted with a key in its secure storage.</p>
+    }
+    <details style="margin-top:10px">
+        <summary class="small">Change how the app runs</summary>
+        <p class="small muted">@(State.Mode == MobileMode.Server
+            ? "Switch to LifeHub on this phone on its own. Your server isn't changed; the phone starts with its own empty LifeHub."
+            : "Switch to connecting to a LifeHub server. What's stored on this phone stays here, unused, until you switch back.")</p>
+        <button class="btn danger sm" @onclick="SwitchMode">@(State.Mode == MobileMode.Server ? "Use LifeHub on this phone instead" : "Connect to a LifeHub server instead")</button>
+    </details>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+    <h2 style="margin-bottom:6px">In the background</h2>
+    <label class="check"><input type="checkbox" checked="@State.CheckOnOpen" @onchange="e => SetCheckOnOpen((bool)e.Value!)" />
+        Check @(State.Mode == MobileMode.Server ? "for news" : "my email") whenever I open the app</label>
+    <div class="field" style="max-width:320px">
+        <label>When the app is closed, check</label>
+        <select value="@State.BackgroundMinutes" @onchange="e => SetMinutes(int.Parse(e.Value!.ToString()!))">
+            <option value="15">every 15 minutes</option>
+            <option value="30">every 30 minutes</option>
+            <option value="60">every hour</option>
+            <option value="180">every 3 hours</option>
+            <option value="0">never</option>
+        </select>
+        <div class="help">@(DeviceInfo.Platform == DevicePlatform.Android
+            ? "Android runs it at most every 15 minutes, and may wait a little longer to save battery. If checks stop, set LifeHub's battery use to Unrestricted in Android's settings."
+            : "iPhone and iPad decide when to run it (they learn when you use the app), so it's roughly this often at best. Background App Refresh must be on for LifeHub in iOS Settings.")</div>
+    </div>
+    @if (!string.IsNullOrEmpty(Jobs.LastBackgroundRun)) { <p class="small muted">Last background check: @Jobs.LastBackgroundRun</p> }
+    @if (State.Mode == MobileMode.Device) { <p class="small muted">What runs while the app is open (email interval, reminders, Home Assistant) is in <a href="settings?tab=background">Settings → Background tasks</a>.</p> }
+</div>
+
+<div class="card" style="margin-bottom:16px">
+    <h2 style="margin-bottom:6px">Notifications</h2>
+    @if (notificationsAllowed)
+    {
+        <p>On. Choose what you're told about in @if (State.Mode == MobileMode.Device) { <a href="settings?tab=notifications">Settings → Notifications</a> } else { <span>LifeHub's Settings → Notifications</span> }; each kind can also be silenced in the phone's own settings.</p>
+        <button class="btn sm" @onclick="Test">Send a test</button>
+    }
+    else
+    {
+        <p>Off. LifeHub can tell you about reminders, renewals and what it found in your email.</p>
+        <button class="btn primary" @onclick="AllowNotifications">Allow notifications</button>
+    }
+</div>
+
+@if (State.Mode == MobileMode.Device)
+{
+    <div class="card" style="margin-bottom:16px">
+        <h2 style="margin-bottom:6px">AI on this phone</h2>
+        @if (!OnDevice.GpuSupported)
+        {
+            <p class="small muted">This phone's web view doesn't offer WebGPU, so the AI can't run on the phone itself. Use Ollama on a computer, or ChatGPT, Gemini or Claude, in <a href="settings?tab=ai">Settings → AI</a>.</p>
+        }
+        else
+        {
+            <p class="small muted">A small AI model that runs on the phone — private and offline. It downloads once and reads your email whenever the app is open.</p>
+            <div class="field">
+                <label>Model</label>
+                <select @bind="model" disabled="@busy">
+                    @foreach (var (id, note) in OnDeviceAi.Catalog) { <option value="@id">@id — @note</option> }
+                </select>
+            </div>
+            <button class="btn primary" @onclick="UseOnDevice" disabled="@busy">@if (busy) { <span class="spinner"></span> } Download and use</button>
+            @if (progress.Length > 0) { <p class="small">@progress</p> }
+            <p class="tiny muted">Or choose Ollama, ChatGPT, Gemini or Claude in <a href="settings?tab=ai">Settings → AI</a>.</p>
+        }
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:6px">Your data</h2>
+        <p class="small muted">Stored on this phone only, encrypted. Make a backup and save it somewhere (Files, Drive, iCloud): it opens with your recovery key from <a href="settings?tab=backup">Settings → Backup</a>.</p>
+        <button class="btn" @onclick="ShareBackup">Back up and share…</button>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Standalone { get; set; }
+    private bool busy, notificationsAllowed;
+    private string model = OnDeviceAi.Catalog[0].Id, progress = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        notificationsAllowed = await DeviceNotifier.AllowedAsync();
+        var o = Settings.Current.Ollama;
+        if (o.Provider == AiProvider.OnDevice && OnDeviceAi.Catalog.Any(c => c.Id == o.Model)) model = o.Model;
+    }
+
+    private async Task SetCheckOnOpen(bool on)
+    {
+        State.CheckOnOpen = on;
+        if (State.Mode == MobileMode.Device) await Settings.UpdateAsync(s => s.Email.SyncOnOpen = on);
+    }
+
+    private void SetMinutes(int minutes) => State.BackgroundMinutes = minutes;
+
+    private async Task AllowNotifications()
+    {
+        notificationsAllowed = await DeviceNotifier.RequestPermissionAsync();
+        if (!notificationsAllowed) AppInfo.Current.ShowSettingsUI();
+    }
+
+    private Task Test() => ((DeviceNotifier)Notifier).Show("LifeHub", "Notifications from LifeHub will look like this.", NoticeCategories.System, "", "test");
+
+    private async Task SyncNow()
+    {
+        busy = true;
+        try { await Server.CheckAsync(openedApp: true); }
+        finally { busy = false; }
+    }
+
+    private async Task UseOnDevice()
+    {
+        busy = true; progress = "Starting…";
+        try
+        {
+            await OnDevice.LoadAsync(model, t => { progress = t; InvokeAsync(StateHasChanged); });
+            var m = model;
+            await Settings.UpdateAsync(s => { s.Ollama.Enabled = true; s.Ollama.Provider = AiProvider.OnDevice; s.Ollama.Model = m; s.Ollama.VisionModel = ""; });
+            progress = $"The AI on this phone is ready ({model}).";
+        }
+        catch (Exception ex) { progress = "Couldn't load it: " + ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task ShareBackup()
+    {
+        var file = Backups.Create();
+        await Share.Default.RequestAsync(new ShareFileRequest { Title = "LifeHub backup", File = new ShareFile(file) });
+    }
+
+    private void SwitchMode() => State.Mode = State.Mode == MobileMode.Server ? MobileMode.Device : MobileMode.None;
+}

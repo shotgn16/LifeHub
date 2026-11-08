@@ -25,14 +25,12 @@ jobs:
     uses: ./.github/workflows/desktop.yml
     with:
       version: ${{ inputs.version || github.ref_name }}
-  android:
-    uses: ./.github/workflows/mobile-android.yml
+  phone:
+    uses: ./.github/workflows/mobile.yml
     secrets: inherit
-  ios:
-    uses: ./.github/workflows/mobile-ios.yml
 
   release:
-    needs: [desktop, android, ios]
+    needs: [desktop, phone]
     if: ${{ !cancelled() && needs.desktop.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -48,7 +46,7 @@ jobs:
           echo "tag=v${v#v}" >> "$GITHUB_OUTPUT"
       - name: Portable server build (any OS with .NET 8)
         run: |
-          dotnet publish lifehub/src/LifeHub/LifeHub.csproj -c Release -o publish /p:UseAppHost=false /p:Version=${{ steps.v.outputs.version }}
+          dotnet publish lifehub/src/LifeHub/LifeHub.csproj -c Release -o publish /p:UseAppHost=false /p:Version=${{ steps.v.outputs.version }} "/p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}"
           mkdir -p files && (cd publish && zip -qr ../files/LifeHub-${{ steps.v.outputs.version }}-server-portable.zip .)
       - uses: actions/download-artifact@v4
         with:

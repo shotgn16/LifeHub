@@ -69,6 +69,9 @@ public sealed class EmailSyncService : BackgroundService
             var settings = _settings.Current;
             var accounts = settings.Email.Accounts.Where(a => a.Enabled).ToList();
             if (accounts.Count == 0) return LastRunSummary = "No email accounts enabled";
+            // Phone app with the on-device AI, opened in the background: leave new emails for when the app is open.
+            if (_sp.GetRequiredService<LifeHub.Integrations.Ollama.AiClient>().WaitingForDevice)
+                return LastRunSummary = "Waiting for the app to be open (the on-device AI reads your email)";
 
             int fetched = 0, suggested = 0;
             var errors = new List<string>();

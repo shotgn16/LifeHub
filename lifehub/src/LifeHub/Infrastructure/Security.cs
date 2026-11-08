@@ -2,9 +2,11 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
+#if !MOBILE
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
+#endif
 
 namespace LifeHub.Infrastructure;
 
@@ -73,6 +75,8 @@ public static class AuthConstants
     }
 }
 
+#if !MOBILE
+// ---- Web server only (the phone app has no sign-in, API or circuits) ----
 /// <summary>Authenticates REST API calls (e.g. from Home Assistant rest_command) with X-Api-Key or a Bearer token.</summary>
 public sealed class ApiKeyAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
@@ -238,6 +242,8 @@ public sealed class UserCircuitHandler : Microsoft.AspNetCore.Components.Server.
             await next(context);
     };
 }
+
+#endif
 
 /// <summary>The person signed in to this browser tab (for pages and components).</summary>
 public sealed class UserContext

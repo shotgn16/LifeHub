@@ -1,0 +1,57 @@
+@inject MobileState State
+@inject SettingsService Settings
+@inject OnDeviceAi OnDevice
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@implements IDisposable
+
+@* The phone app: first-start choice, then LifeHub itself running on the phone. *@
+
+@if (State.Mode == MobileMode.Device)
+{
+    <CascadingAuthenticationState>
+        <MobileRoutes />
+    </CascadingAuthenticationState>
+}
+else
+{
+    <MobileSetup />
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        State.ModeChanged += Changed;
+        Settings.Changed += ApplyTheme;
+        PendingNavigation.Requested += Open;
+    }
+
+    private void Changed() => InvokeAsync(StateHasChanged);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await OnDevice.AttachAsync(JS);
+        await ApplyThemeAsync();
+        if (PendingNavigation.Take() is { } link) Open(link);
+    }
+
+    private void Open(string link) => _ = InvokeAsync(() => { if (State.Mode == MobileMode.Device) Nav.NavigateTo(link.TrimStart('/')); });
+
+    private void ApplyTheme() => _ = InvokeAsync(ApplyThemeAsync);
+
+    /// <summary>The person's theme, accent, density and the household's custom CSS (the server's App.razor does this in HTML).</summary>
+    private async Task ApplyThemeAsync()
+    {
+        var me = Settings.User(Settings.PrimaryUserId);
+        var css = Settings.Current.General.CustomCss ?? "";
+        try { await JS.InvokeVoidAsync("lifehubTheme.apply", me?.Theme ?? "auto", me?.Density ?? "", me?.Accent ?? "", css); } catch { }
+    }
+
+    public void Dispose()
+    {
+        State.ModeChanged -= Changed;
+        Settings.Changed -= ApplyTheme;
+        PendingNavigation.Requested -= Open;
+    }
+}

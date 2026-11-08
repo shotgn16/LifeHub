@@ -1,0 +1,104 @@
+name: Phone apps
+
+# Builds the LifeHub phone app (.NET MAUI) for Android and iPhone/iPad from mobile/maui.
+#   LifeHub-android-N:  app-release.apk (install directly) and app-release.aab (Google Play)
+#   LifeHub-ios-N:      LifeHub-unsigned.ipa (sideload with Sideloadly / AltStore, or sign it yourself)
+# Optional repository secrets sign the Android app with your own key (so updates install over the top):
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+# Optional repository variable MS_CLIENT_ID: the Microsoft app ID for "Sign in with Microsoft".
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["mobile/**", "lifehub/src/**", ".github/workflows/mobile.yml"]
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: .NET MAUI for Android
+        run: dotnet workload install maui-android --skip-sign-check > workload.log 2>&1 || (tail -30 workload.log; exit 1)
+      - name: LifeHub's web files
+        run: bash mobile/maui/copy-web.sh
+      - name: Android SDK parts
+        run: |
+          dotnet build mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android \
+            -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=True > deps.log 2>&1 || (tail -40 deps.log; exit 1)
+      - name: Signing key (optional)
+        id: key
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/lifehub.jks"
+            echo "args=-p:AndroidKeyStore=true -p:AndroidSigningKeyStore=$RUNNER_TEMP/lifehub.jks -p:AndroidSigningStorePass=env:KS_PASS -p:AndroidSigningKeyAlias=${{ secrets.ANDROID_KEY_ALIAS }} -p:AndroidSigningKeyPass=env:KEY_PASS" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No ANDROID_KEYSTORE_BASE64 secret — the APK is signed with a temporary debug key (uninstall the old app before installing a newer build)."
+          fi
+      - name: Build
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set +e +o pipefail
+          dotnet publish mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-android -c Release \
+            -p:ApplicationVersion=${{ github.run_number }} "-p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}" \
+            ${{ steps.key.outputs.args }} -o out > build.log 2>&1
+          code=$?
+          grep -E "error [A-Z]+[0-9]+" build.log | sed 's#.*/mobile/#mobile/#; s#.*/lifehub/#lifehub/#' | sort -u | head -40 | while read -r l; do echo "::error::$l"; done
+          [ $code -eq 0 ] || { tail -60 build.log; exit $code; }
+          mkdir -p dist
+          cp "$(ls out/*-Signed.apk | head -1)" dist/app-release.apk
+          aab=$(ls out/*-Signed.aab 2>/dev/null | head -1); [ -n "$aab" ] && cp "$aab" dist/app-release.aab
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LifeHub-android-${{ github.run_number }}
+          path: dist/*
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Newest Xcode
+        run: |
+          x=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -z "$x" ] && x=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$x/Contents/Developer"; xcodebuild -version
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: .NET MAUI for iOS
+        run: dotnet workload install maui-ios > workload.log 2>&1 || (tail -30 workload.log; exit 1)
+      - name: LifeHub's web files
+        run: bash mobile/maui/copy-web.sh
+      - name: Build (unsigned)
+        run: |
+          set +e +o pipefail
+          dotnet build mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-ios -c Release -p:RuntimeIdentifier=ios-arm64 \
+            -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" \
+            -p:ApplicationVersion=${{ github.run_number }} "-p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}" > build.log 2>&1
+          code=$?
+          grep -E "error [A-Z]+[0-9]+" build.log | sed 's#.*/mobile/#mobile/#; s#.*/lifehub/#lifehub/#' | sort -u | head -40 | while read -r l; do echo "::error::$l"; done
+          [ $code -eq 0 ] || { tail -60 build.log; exit $code; }
+          app=$(find mobile/maui/LifeHub.Mobile/bin/Release -name "*.app" -type d | head -1)
+          echo "App: $app"
+          mkdir -p dist/Payload && cp -R "$app" dist/Payload/
+          (cd dist && zip -qr LifeHub-unsigned.ipa Payload && rm -rf Payload)
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LifeHub-ios-${{ github.run_number }}
+          path: dist/*
+          if-no-files-found: error

@@ -12,7 +12,7 @@
 </div>
 
 <div class="tabs">
-    @foreach (var (key, label) in Tabs.Where(t => (User.IsAdmin || PersonalTabs.Contains(t.Item1)) && (t.Item1 != "computer" || LifeHub.Desktop.DesktopRuntime.Active)))
+    @foreach (var (key, label) in Tabs.Where(t => (User.IsAdmin || PersonalTabs.Contains(t.Item1)) && (t.Item1 != "computer" || LifeHub.Desktop.DesktopRuntime.Active) && !(AppHost.IsPhoneApp && PhoneHidden.Contains(t.Item1))))
     {
         <a class="tab @(Current == key ? "on" : "")" href="settings?tab=@key" style="text-decoration:none">@label</a>
     }
@@ -38,6 +38,8 @@
 }
 
 @code {
+    // The phone app on its own is one person's LifeHub with no sign-in.
+    private static readonly HashSet<string> PhoneHidden = new() { "people", "security", "computer" };
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
     private string Current => Tab ?? (User.IsAdmin ? "general" : "email");
     /// <summary>Tabs everyone sees (their own mailboxes, phones and sign-in); the rest are for admins.</summary>

@@ -1,0 +1,1 @@
+@mlc-ai/web-llm 0.2.87 (lib/index.js) – https://github.com/mlc-ai/web-llm (Apache-2.0; LICENSE in this folder)

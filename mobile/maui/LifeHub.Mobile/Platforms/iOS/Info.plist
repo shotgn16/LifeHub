@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>LSRequiresIPhoneOS</key><true/>
+    <key>UIDeviceFamily</key>
+    <array><integer>1</integer><integer>2</integer></array>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array><string>arm64</string></array>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>XSAppIconAssets</key><string>Assets.xcassets/appicon.appiconset</string>
+    <key>CFBundleDisplayName</key><string>LifeHub</string>
+    <key>ITSAppUsesNonExemptEncryption</key><false/>
+    <!-- LifeHub at home is often plain http on your network. -->
+    <key>NSAppTransportSecurity</key>
+    <dict><key>NSAllowsArbitraryLoads</key><true/><key>NSAllowsLocalNetworking</key><true/></dict>
+    <key>NSLocalNetworkUsageDescription</key><string>LifeHub connects to your LifeHub server, Home Assistant and Ollama on your home network.</string>
+    <key>NSCameraUsageDescription</key><string>LifeHub uses the camera to scan barcodes and photograph your fridge.</string>
+    <key>NSPhotoLibraryUsageDescription</key><string>Choose photos of groceries or leaflets for LifeHub to read.</string>
+    <!-- Background checks (email, the server's notifications) when iOS allows. -->
+    <key>UIBackgroundModes</key>
+    <array><string>fetch</string></array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array><string>io.github.shotgn16.lifehub.refresh</string></array>
+</dict>
+</plist>

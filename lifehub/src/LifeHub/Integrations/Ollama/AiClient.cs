@@ -23,6 +23,9 @@ public sealed class AiClient
 
     public AiProvider Provider => _settings.Current.Ollama.Provider;
     public string ProviderLabel => AiProviders.Label(Provider);
+    /// <summary>The on-device AI is chosen but the app isn't open to run it (phone in the background): wait.</summary>
+    public bool WaitingForDevice => _settings.Current.Ollama is { Enabled: true, Provider: AiProvider.OnDevice } && _onDevice is { Available: false };
+
     /// <summary>A model that runs inside this app is possible here (the phone app).</summary>
     public bool OnDeviceSupported => _onDevice is not null;
 

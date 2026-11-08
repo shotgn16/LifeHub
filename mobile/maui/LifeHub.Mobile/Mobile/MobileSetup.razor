@@ -1,0 +1,96 @@
+@inject MobileState State
+@inject SettingsService Settings
+@inject ServerClient Server
+
+@* First start: LifeHub on this phone, or a window onto your LifeHub server. *@
+
+<div class="welcome">
+    <div class="welcome-head">
+        <span class="brand-mark">L</span>
+        <div><h1>Welcome to LifeHub</h1><div class="muted small">Tasks, renewals, kitchen, meals and notes</div></div>
+    </div>
+
+    @if (step == 0)
+    {
+        <div class="mode-grid">
+            <button type="button" class="mode-card" @onclick="() => step = 1">
+                <Icon Name="phone" Size="22" />
+                <strong>Use LifeHub on this phone</strong>
+                <span class="small muted">Just you. Everything stays on this phone, encrypted. No server needed.</span>
+                <span class="badge ok">most people</span>
+            </button>
+            <button type="button" class="mode-card" @onclick="() => step = 2">
+                <Icon Name="link" Size="22" />
+                <strong>Connect to my LifeHub</strong>
+                <span class="small muted">Your LifeHub on a computer, server, Docker or Home Assistant — shared with your household.</span>
+            </button>
+        </div>
+        <p class="tiny muted">You can change this later in This phone.</p>
+    }
+    else if (step == 1)
+    {
+        <div class="card">
+            <h2>What's your name?</h2>
+            <div class="field"><input type="text" @bind="name" placeholder="e.g. Alex" autocomplete="given-name" /></div>
+            <p class="small muted">Next you can add your email, choose an AI (on this phone, Ollama, ChatGPT, Gemini or Claude) and arrange your home screen — all in Settings.</p>
+        </div>
+        <div class="welcome-actions">
+            <button class="btn" @onclick="() => step = 0">Back</button>
+            <button class="btn primary" @onclick="StartOnPhone">Start</button>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <h2>Connect to your LifeHub</h2>
+            <div class="field">
+                <label>LifeHub address</label>
+                <input type="url" @bind="url" placeholder="http://192.168.1.10:8099 or https://lifehub.example.com" autocapitalize="off" />
+                <div class="help">On your computer: LifeHub → Settings → This computer shows it. Home Assistant: the add-on's port (not the Home Assistant address).</div>
+            </div>
+            <div class="field">
+                <label>Your API key</label>
+                <input type="password" @bind="key" autocomplete="off" />
+                <div class="help">In LifeHub: Settings → Security &amp; API → Your API key → Show.</div>
+            </div>
+            @if (!string.IsNullOrEmpty(error)) { <div class="alert danger small">@error</div> }
+        </div>
+        <div class="welcome-actions">
+            <button class="btn" @onclick="() => step = 0" disabled="@busy">Back</button>
+            <button class="btn primary" @onclick="Connect" disabled="@(busy || string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key))">
+                @if (busy) { <span class="spinner"></span> } Check &amp; connect
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private int step;
+    private string name = "", url = "", key = "", error = "";
+    private bool busy;
+
+    private async Task StartOnPhone()
+    {
+        var n = name.Trim();
+        if (n.Length > 0) await Settings.UpdateUserAsync(Settings.PrimaryUserId, u => u.Name = n);
+        await DeviceNotifier.RequestPermissionAsync();
+        State.Mode = MobileMode.Device;
+    }
+
+    private async Task Connect()
+    {
+        busy = true; error = "";
+        try
+        {
+            var u = url.Trim();
+            if (!u.StartsWith("http", StringComparison.OrdinalIgnoreCase)) u = "http://" + u;
+            var who = await Server.TestAsync(u, key);
+            State.ServerUrl = u;
+            State.ApiKey = key.Trim();
+            await DeviceNotifier.RequestPermissionAsync();
+            State.Mode = MobileMode.Server;
+        }
+        catch (Exception ex) { error = "Couldn't connect: " + ex.Message; }
+        finally { busy = false; }
+    }
+}

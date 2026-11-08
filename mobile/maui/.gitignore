@@ -1,0 +1,10 @@
+# Copied in by copy-web.sh before each build
+LifeHub.Mobile/wwwroot/app.css
+LifeHub.Mobile/wwwroot/favicon.svg
+LifeHub.Mobile/wwwroot/icon.svg
+LifeHub.Mobile/wwwroot/css/
+LifeHub.Mobile/wwwroot/js/*
+!LifeHub.Mobile/wwwroot/js/ondevice.js
+LifeHub.Mobile/Resources/Raw/offline.html
+bin/
+obj/

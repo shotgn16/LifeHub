@@ -67,6 +67,7 @@ jobs:
           push: true
           build-args: |
             VERSION=${{ steps.v.outputs.version }}
+            MS_CLIENT_ID=${{ vars.MS_CLIENT_ID }}
             BUILD_ARCH=${{ matrix.arch }}
           tags: |
             ${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}
@@ -119,6 +120,7 @@ jobs:
           push: true
           build-args: |
             VERSION=${{ steps.v.outputs.version }}
+            MS_CLIENT_ID=${{ vars.MS_CLIENT_ID }}
           tags: |
             ${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}
             ${{ steps.v.outputs.image }}:latest

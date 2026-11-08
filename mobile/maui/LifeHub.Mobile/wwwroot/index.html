@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>LifeHub</title>
+    <base href="/" />
+    <!-- LifeHub's own styles and scripts (copied from lifehub/src/LifeHub/wwwroot by ../copy-web.sh) -->
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="phone.css" />
+    <style id="lh-accent"></style>
+    <style id="lh-custom"></style>
+</head>
+<body>
+    <div id="app"><div class="phone-loading"><span class="brand-mark">L</span></div></div>
+    <div id="blazor-error-ui" style="display:none">Something went wrong. <a href="" class="reload">Reload</a></div>
+    <script>
+        // The person's look (Settings → Appearance), applied by the app as it starts and whenever it changes.
+        window.lifehubTheme = {
+            apply: function (theme, density, accent, css) {
+                var h = document.documentElement;
+                if (theme === 'light' || theme === 'dark') h.setAttribute('data-theme', theme); else h.removeAttribute('data-theme');
+                if (density === 'compact') h.setAttribute('data-density', 'compact'); else h.removeAttribute('data-density');
+                document.getElementById('lh-accent').textContent = /^#[0-9a-fA-F]{6}$/.test(accent || '')
+                    ? ':root{--accent:' + accent + ';--accent-soft:color-mix(in srgb,' + accent + ' 14%,var(--surface));}' : '';
+                document.getElementById('lh-custom').textContent = css || '';
+            }
+        };
+    </script>
+    <script src="js/ondevice.js"></script>
+    <script src="_framework/blazor.webview.js"></script>
+</body>
+</html>

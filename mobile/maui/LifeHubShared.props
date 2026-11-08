@@ -1,0 +1,27 @@
+<Project>
+  <!--
+    The phone app compiles LifeHub's own code (services, AI, email, pages) straight from lifehub/src/LifeHub,
+    so the app and the server always behave the same. Only the web-server parts are left out; code that differs
+    is marked #if MOBILE.
+  -->
+  <PropertyGroup>
+    <LifeHubSrc>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../lifehub/src/LifeHub/'))</LifeHubSrc>
+    <DefineConstants>$(DefineConstants);MOBILE</DefineConstants>
+    <RootNamespace>LifeHub</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The same implicit usings the web project gets from Microsoft.NET.Sdk.Web. -->
+    <Using Include="System.Net.Http.Json" />
+    <Using Include="Microsoft.Extensions.Configuration" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Hosting" />
+    <Using Include="Microsoft.Extensions.Logging" />
+    <Compile Include="$(LifeHubSrc)**/*.cs"
+             Exclude="$(LifeHubSrc)obj/**;$(LifeHubSrc)bin/**;$(LifeHubSrc)Program.cs;$(LifeHubSrc)Api/**;$(LifeHubSrc)Desktop/DesktopHost.cs;$(LifeHubSrc)Desktop/DesktopWindow.cs;$(LifeHubSrc)Infrastructure/FileDataKeyStore.cs"
+             Link="LifeHub/%(RecursiveDir)%(Filename)%(Extension)" />
+    <RazorComponent Include="$(LifeHubSrc)Components/**/*.razor"
+                    Exclude="$(LifeHubSrc)Components/App.razor;$(LifeHubSrc)Components/Routes.razor;$(LifeHubSrc)Components/Pages/Error.razor;$(LifeHubSrc)Components/Pages/Setup.razor"
+                    Link="Components/%(RecursiveDir)%(Filename)%(Extension)"
+                    TargetPath="Components/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

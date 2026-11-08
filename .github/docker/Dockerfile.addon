@@ -3,11 +3,12 @@
 # architecture-neutral .NET, copied onto the ASP.NET runtime image for each target architecture.
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG VERSION=0.0.0
+ARG MS_CLIENT_ID=
 WORKDIR /src
 COPY lifehub/src/LifeHub/LifeHub.csproj src/LifeHub/
 RUN dotnet restore src/LifeHub/LifeHub.csproj
 COPY lifehub/src/ src/
-RUN dotnet publish src/LifeHub/LifeHub.csproj -c Release -o /app --no-restore /p:UseAppHost=false /p:Version=$VERSION
+RUN dotnet publish src/LifeHub/LifeHub.csproj -c Release -o /app --no-restore /p:UseAppHost=false /p:Version=$VERSION "/p:MicrosoftClientId=$MS_CLIENT_ID"
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 ARG VERSION=0.0.0

@@ -19,6 +19,14 @@ public sealed class DataPaths
     /// <summary>True when running inside a Home Assistant add-on container.</summary>
     public bool IsHomeAssistantAddon { get; }
 
+    /// <summary>A data folder chosen by the host (the phone app's private storage).</summary>
+    public DataPaths(string root)
+    {
+        Root = root;
+        foreach (var dir in new[] { Root, Db, Backups, Keys }) Directory.CreateDirectory(dir);
+    }
+
+#if !MOBILE
     public DataPaths(IConfiguration config, IWebHostEnvironment env)
     {
         IsHomeAssistantAddon = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SUPERVISOR_TOKEN"));
@@ -29,4 +37,5 @@ public sealed class DataPaths
 
         foreach (var dir in new[] { Root, Db, Backups, Keys }) Directory.CreateDirectory(dir);
     }
+#endif
 }

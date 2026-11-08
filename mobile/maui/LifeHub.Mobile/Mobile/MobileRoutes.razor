@@ -1,0 +1,12 @@
+@* The phone app's router: LifeHub's own pages (compiled into this app) plus the phone's. *@
+<Router AppAssembly="typeof(MobileRoot).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(LifeHub.Components.Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(LifeHub.Components.Layout.MainLayout)">
+            <div class="empty"><h2>Not here</h2><p><a href="">Back to Today</a></p></div>
+        </LayoutView>
+    </NotFound>
+</Router>
