@@ -87,7 +87,7 @@
                 }
                 <div class="form-grid">
                     <div class="field"><label>Email address</label><input type="email" @bind="address" @bind:event="oninput" autocomplete="email" /></div>
-                    <div class="field"><label>@(service is null ? "Password" : "App password")</label><input type="password" @bind="password" autocomplete="new-password" /></div>
+                    <div class="field"><label>@(service is null ? "Password" : "App password")</label><input type="password" @bind="password" @bind:event="oninput" autocomplete="new-password" /></div>
                     @if (showServer)
                     {
                         <div class="field"><label>IMAP server</label><input type="text" @bind="host" /></div>
