@@ -68,13 +68,13 @@ jobs:
           if-no-files-found: error
 
   ios:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Newest Xcode
         run: |
-          x=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-          [ -z "$x" ] && x=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          ls -d /Applications/Xcode*.app
+          x=$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1)
           sudo xcode-select -s "$x/Contents/Developer"; xcodebuild -version
       - uses: actions/setup-dotnet@v4
         with:
@@ -87,7 +87,7 @@ jobs:
         run: |
           set +e +o pipefail
           dotnet build mobile/maui/LifeHub.Mobile/LifeHub.Mobile.csproj -f net10.0-ios -p:TargetFrameworks=net10.0-ios -c Release -p:RuntimeIdentifier=ios-arm64 \
-            -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" \
+            -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" -p:ValidateXcodeVersion=false \
             -p:ApplicationVersion=${{ github.run_number }} "-p:MicrosoftClientId=${{ vars.MS_CLIENT_ID }}" > build.log 2>&1
           code=$?
           grep -E "(: error|error [A-Z]+[0-9]+)" build.log | sed -E 's#(/Users|/home)/runner/work/LifeHub/LifeHub/##g; s# \[[^]]*\]$##' | sort -u | head -40 | while read -r l; do echo "::error::$l"; done
