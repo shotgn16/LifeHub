@@ -159,3 +159,9 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: bash mobile/maui/check-android.sh apk/app-release.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phone-check-${{ github.run_number }}
+          path: /tmp/phone-check
+          retention-days: 7

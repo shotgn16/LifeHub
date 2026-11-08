@@ -19,6 +19,9 @@ public static class MauiProgram
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();
 #endif
+#if ANDROID
+        builder.Logging.AddProvider(new AndroidLoggerProvider());
+#endif
 
         // ---- LifeHub on this phone: data in the app's private storage, encrypted with a key in the phone's keystore ----
         var paths = new DataPaths(Path.Combine(FileSystem.AppDataDirectory, "lifehub"));

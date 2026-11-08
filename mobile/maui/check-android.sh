@@ -35,6 +35,11 @@ shot 2-today
 echo "::notice title=screen 2::$(texts)"
 crash=$(adb logcat -d | grep -E "FATAL EXCEPTION|Unhandled Exception|Unhandled managed exception|System\.[A-Za-z.]*Exception" | head -15)
 running=$(adb shell pidof $PKG)
+# Everything for the run's "phone-check" artifact
+mkdir -p /tmp/phone-check && cp /tmp/*.png /tmp/phone-check/ 2>/dev/null
+adb logcat -d > /tmp/phone-check/logcat.txt
+adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb shell cat /sdcard/ui.xml > /tmp/phone-check/ui.xml
+echo "----- LifeHub log -----"; adb logcat -d -s LifeHub:W chromium:I | grep -v "^-" | head -60
 if [ -n "$crash" ]; then echo "$crash" | while read -r l; do echo "::warning::$l"; done; fi
 adb logcat -d | grep -iE "lifehub|blazor|chromium.*console" | grep -iE "error|exception|fail" | head -15 | while read -r l; do echo "::warning::$l"; done
 if [ -z "$running" ]; then
