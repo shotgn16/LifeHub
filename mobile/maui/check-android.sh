@@ -20,18 +20,25 @@ tap_text() {   # taps the first element whose text contains $1
   set -- $b
   [ -n "$4" ] && adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 ))
 }
+no_anr() {   # the emulator's own apps sometimes hang ("Pixel Launcher isn't responding"): choose Wait
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  if adb shell cat /sdcard/ui.xml | grep -q "isn't responding"; then tap_text 'text="Wait"'; sleep 2; fi
+}
 adb install -r "$APK" || { echo "::error::APK didn't install"; exit 1; }
 adb logcat -c
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null
 sleep 40
+no_anr
 shot 1-start
 echo "::notice title=screen 1::$(texts)"
-tap_text "Use LifeHub on this phone"; sleep 4
+no_anr; tap_text "Use LifeHub on this phone"; sleep 4
 adb shell input text "Alex"; sleep 1
-tap_text "Start"; sleep 15
+no_anr; tap_text "Start"; sleep 15
+no_anr
 shot 2-asks
 # Android asks to allow notifications
 tap_text "Allow"; sleep 15
+no_anr
 shot 3-today
 echo "::notice title=screen 2::$(texts)"
 crash=$(adb logcat -d | grep -E "FATAL EXCEPTION|Unhandled Exception|Unhandled managed exception|System\.[A-Za-z.]*Exception" | head -15)
