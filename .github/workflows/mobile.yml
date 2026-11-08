@@ -138,7 +138,7 @@ jobs:
 
   android-check:
     # Installs the APK on an Android emulator, opens it, goes through the first start ("Use LifeHub on this phone")
-    # and checks nothing crashed. Small screenshots are attached to the run as notices (base64 JPEG).
+    # and checks nothing crashed. Small screenshots are in the log as "SHOT name base64-JPEG" lines.
     needs: android
     runs-on: ubuntu-latest
     steps:

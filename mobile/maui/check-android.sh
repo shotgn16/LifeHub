@@ -2,15 +2,15 @@
 # Smoke test on an emulator (used by CI): install, open, first start, look around, check for crashes.
 set +e
 APK="$1"; PKG=io.github.shotgn16.lifehub
-shot() {   # small JPEG as a base64 notice, so it can be seen without downloading anything
+shot() {   # small JPEG as a base64 log line (SHOT name data), so it can be seen without downloading anything
   adb exec-out screencap -p > "/tmp/$1.png"
   python3 - "$1" <<'PY'
 import base64, io, sys
 from PIL import Image
 im = Image.open(f"/tmp/{sys.argv[1]}.png").convert("RGB")
-im.thumbnail((300, 640))
-b = io.BytesIO(); im.save(b, "JPEG", quality=45)
-print(f"::notice title=screenshot {sys.argv[1]}::" + base64.b64encode(b.getvalue()).decode())
+im.thumbnail((360, 800))
+b = io.BytesIO(); im.save(b, "JPEG", quality=60)
+print(f"SHOT {sys.argv[1]} " + base64.b64encode(b.getvalue()).decode())
 PY
 }
 texts() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb shell cat /sdcard/ui.xml | grep -o 'text="[^"]*"' | grep -v 'text=""' | head -40 | tr '\n' ' '; }
@@ -28,10 +28,11 @@ shot 1-start
 echo "::notice title=screen 1::$(texts)"
 tap_text "Use LifeHub on this phone"; sleep 4
 adb shell input text "Alex"; sleep 1
-tap_text "Start"; sleep 6
+tap_text "Start"; sleep 15
+shot 2-asks
 # Android asks to allow notifications
-tap_text "Allow"; sleep 12
-shot 2-today
+tap_text "Allow"; sleep 15
+shot 3-today
 echo "::notice title=screen 2::$(texts)"
 crash=$(adb logcat -d | grep -E "FATAL EXCEPTION|Unhandled Exception|Unhandled managed exception|System\.[A-Za-z.]*Exception" | head -15)
 running=$(adb shell pidof $PKG)
