@@ -78,7 +78,7 @@ jobs:
           sudo xcode-select -s "$x/Contents/Developer"; xcodebuild -version
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 10.0.1xx   # the first SDK band has .NET for iOS builds for every Xcode 26.x
       - name: .NET MAUI for iOS (matching this Xcode)
         run: |
           # The newest .NET for iOS can need a newer Xcode than GitHub's Macs have yet, so pick the newest
