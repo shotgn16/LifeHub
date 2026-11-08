@@ -9,7 +9,7 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
-## [3.1.0] – Unreleased
+## [3.1.0] – 2026-11-08
 
 Easier email set-up, a phone app that runs on its own, any AI, tidier notifications, and
 everything stored encrypted.
@@ -534,7 +534,9 @@ and existing Shortcuts and automations keep working.
   - Nightly backups.
 - Runs as a Home Assistant add-on (ingress), with Docker, or on Plesk (Docker, .NET Toolkit or IIS).
 
-[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/Shotgn16/LifeHub/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/Shotgn16/LifeHub/releases/tag/v3.0.0
 [1.5.0]: https://github.com/Shotgn16/LifeHub/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Shotgn16/LifeHub/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/Shotgn16/LifeHub/compare/v1.3.1...v1.3.2

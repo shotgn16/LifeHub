@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>LifeHub</RootNamespace>
     <AssemblyName>LifeHub</AssemblyName>
-    <Version>3.0.0</Version>
+    <Version>3.1.0</Version>
     <!-- "Sign in with Microsoft": your Entra app's client ID (dotnet build -p:MicrosoftClientId=…, or the MS_CLIENT_ID repository variable in CI). -->
     <MicrosoftClientId Condition="'$(MicrosoftClientId)' == ''"></MicrosoftClientId>
     <InvariantGlobalization>false</InvariantGlobalization>
