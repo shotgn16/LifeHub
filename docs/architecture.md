@@ -48,9 +48,9 @@ The **phone app** (`mobile/maui`, .NET MAUI Blazor Hybrid, Android + iPhone/iPad
 
 | Folder | Contents |
 |---|---|
-| `Domain/` | Plain entity classes: `TaskItem`, `Renewal`, `PantryItem`, `StapleItem`, `ShoppingItem`, `ProductInfo`, `EmailRecord`, `Promotion`, `AiSuggestion`, `Note`, `Recipe`, `MealPlanEntry`, `PushDevice`, … |
+| `Domain/` | Plain entity classes: `TaskItem`, `Renewal`, `PantryItem`, `StapleItem`, `ShoppingItem`, `ProductInfo`, `EmailRecord`, `Promotion`, `AiSuggestion`, `Note`, `Recipe`, `MealPlanEntry`, `PushDevice`, `SchedulePlan` (time off and plans), `MemoryFact`, … |
 | `Data/` | `IRepository<T>` and `JsonRepository<T>`, which keeps an in-memory copy, writes the file atomically and raises a change event. `Ownership.cs` holds `UserScope`, `[Owned]` and the visibility rules for several people |
-| `Services/` | Business logic and background jobs: `TaskService`, `RenewalService`, `KitchenService`, `MealService`, `PeopleService`, `NotesService`, `DealsService` (nearby stores, offers, ideas), `KitchenPhotoService`, `Freshness` (use-by vs best-before), `WebPushService` (RFC 8291/8292), `SyncService` (offline changes), `BibleArchiveService` (exports and removes LifeHub 2 Bible data) |
+| `Services/` | Business logic and background jobs: `TaskService`, `RenewalService`, `KitchenService`, `MealService`, `PeopleService`, `NotesService`, `DealsService` (nearby stores, offers, ideas), `KitchenPhotoService`, `Freshness` (use-by vs best-before), `WebPushService` (RFC 8291/8292), `ScheduleService` (usual week + time off and plans + calendar → periods), `PlannerService`, `MemoryService`, `SyncService` (offline changes), `BibleArchiveService` (exports and removes LifeHub 2 Bible data) |
 | `Modules/` | `LifeHubModule` and `ModuleRegistry`: every section (menu entry, home-screen card, badge, bottom bar) is registered in `AddLifeHubModules()` |
 | `Desktop/` | Desktop app: window, setup decisions, background services, Ollama and Docker setup |
 | `Data/DataCipher.cs` | AES-256-GCM encryption of every data file (key from `IDataKeyStore`) |
@@ -58,7 +58,8 @@ The **phone app** (`mobile/maui`, .NET MAUI Blazor Hybrid, Android + iPhone/iPad
 | `Integrations/HomeAssistant/` | REST client, entity catalogue (names, areas, devices), automatic setup, two-way to-do sync |
 | `Integrations/Email/` | `IEmailProvider` implementations: IMAP (MailKit), Microsoft Graph, EWS (SOAP) |
 | `Integrations/Ollama/` | `AiClient` (one front door for every AI call) and `AiProviders` (Ollama `/api/chat` with JSON schema; OpenAI, Gemini, Claude, OpenAI-compatible; on-device) |
-| `Ai/` | `AiService` (prompt, schema, checks, apply, undo) and `Handlers/`, with one class per action type |
+| `Ai/` | `AiService` (prompt, schema, checks, apply, undo), `AskService` (Ask LifeHub: context + answer + suggestions) and `Handlers/`, with one class per action type (`IUserOnlyAction` marks ones emails can't trigger) |
+| `Integrations/Telegram/` | `TelegramService`: the household bot (long polling, pairing codes, confirm buttons) and the Telegram notification channel (`IChatNotifier`) |
 | `Api/` | Login/setup endpoints and the REST API |
 | `mobile/maui`, `mobile/shared` | The phone app and its offline screen. Built by GitHub Actions; see [mobile-apps.md](mobile-apps.md) |
 | `Infrastructure/` | Settings (with encrypted `[Secret]` fields), auth, HA ingress middleware, clock and time zone, data paths |

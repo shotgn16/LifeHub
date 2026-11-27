@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.2.0
+- **Ask LifeHub**: ask questions about your tasks, week, kitchen and renewals, or tell it what to
+  do ("add milk", "I'm out Thursday 2–4"). It always asks before changing anything.
+- **Memory** (AI Inbox → Memory): facts the AI keeps in mind, like diets and routines.
+- **Telegram**: chat with LifeHub and get notifications there (Settings → Telegram).
+- **Schedule**: set the days and hours you work, add holidays, time out and time you keep free —
+  even if they're not in a calendar — and see the whole week at a glance.
+
 ## 3.1.0
 - **Easier email set-up**: Settings → Email → **Add mailbox**. Sign in with Microsoft, or follow
   the steps for a Gmail, iCloud, Yahoo, AOL or Fastmail app password. Add as many mailboxes as

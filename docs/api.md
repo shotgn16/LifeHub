@@ -30,6 +30,9 @@ ingress URLs need a Home Assistant session, so they don't suit API calls.
 | GET | `/api/v1/shopping` | | Items to buy |
 | POST | `/api/v1/shopping` | `{"name":"Milk","quantity":2,"unit":"pints"}` | Adds the item, merging duplicates |
 | POST | `/api/v1/capture` | `{"text":"dentist Tuesday 2:30 and buy coffee"}` | AI quick capture. The actions follow your auto-apply settings. |
+| POST | `/api/v1/ask` | `{"text":"what's due this week?"}` | Ask LifeHub: returns `answer` and `suggestions` (each with an `id`), which wait for you to apply them. |
+| POST | `/api/v1/suggestions/{id}/apply` | – | Applies a suggestion (from Ask or the AI Inbox). |
+| POST | `/api/v1/suggestions/{id}/skip` | – | Skips a suggestion. |
 | POST | `/api/v1/scan` | `{"barcode":"5000112637922","mode":"add\|use\|shopping","quantity":1}` | The scan result. Unknown barcodes return 404; scan them once in the app to name them. |
 | POST | `/api/v1/notes` | `{"text":"Door code 4471","shared":false}` | Saves a note; the AI files it into a category. Returns `category` (a first guess while the AI works). |
 | GET | `/api/v1/notes` | `?category=Gift Ideas&q=scarf` | Your notes (and shared ones), newest first |

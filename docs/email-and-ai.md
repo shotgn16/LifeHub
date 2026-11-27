@@ -161,6 +161,10 @@ LifeHub checks every mailbox when someone opens LifeHub or the phone app (at mos
 
 ## Other things the local AI does
 
+- [Ask LifeHub](manual/ask-and-telegram.md): answers questions about your lists and week, and
+  suggests changes you confirm — in the app and on Telegram.
+- [Memory](manual/ask-and-telegram.md#memory): facts you've saved (diets, routines, people) are
+  given to the AI with every email, question and meal plan.
 - [Notes](notes.md): files each note into a category with tags.
 - [Kitchen photos](kitchen-and-meals.md#add-from-photo): lists your groceries and reads their dates.
 - [Meal planner](kitchen-and-meals.md#meal-planner): moves meals around your week, adapts recipes

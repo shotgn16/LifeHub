@@ -43,6 +43,15 @@ Handlers can use any service. For example, `HomeAssistantClient.CallServiceAsync
 script or scene, and `CalendarService` and `KitchenService` are available too. Free-form extra
 fields can go in `AiSuggestion.Extra`.
 
+If an action should only come from something the user typed or said (Ask LifeHub, quick capture,
+Telegram) and never from an email, add the marker interface `IUserOnlyAction`
+(`class MyHandler : IAiActionHandler, IUserOnlyAction`). LifeHub's own schedule, memory and
+tick-off actions use it, so an email's sender can't change someone's schedule or memory.
+
+Ask LifeHub (`AskService`) gives the model a compact picture of the person's lists and week
+(`AskService.ContextAsync`) and the facts in **AI Inbox → Memory** (`MemoryService.PromptBlock`).
+Its suggestions are always saved for review, never applied automatically.
+
 ## Add a mail system
 
 1. Implement `IEmailProvider`:

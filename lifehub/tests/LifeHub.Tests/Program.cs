@@ -136,6 +136,25 @@ Eq("note guess unsorted", NotesService.Guess("door code 1234", Array.Empty<strin
     Eq("route override", ns.RouteOf(NoticeCategories.Deals), NoticeRoute.Off);
     Eq("route categories", NoticeCategories.All.Length >= 8, true);
 }
+{
+    // 3.2: usual week → detailed periods
+    var week = new UsualWeek();
+    var blocks = week.ToBlocks();
+    string Key(IEnumerable<PeriodBlock> x) => string.Join(";", x.SelectMany(b => b.Days.Select(d => $"{d}|{b.Start}|{b.End}|{b.Kind}")).OrderBy(k => k));
+    Eq("usual week default = default blocks", Key(blocks), Key(ScheduleSettings.DefaultBlocks()));
+    UsualWeek.FromBlocks(ScheduleSettings.DefaultBlocks(), out var exact);
+    Eq("default blocks read back exactly", exact, true);
+    week.Regular.Add(new RegularTime { Label = "Gym", Days = new() { DayOfWeek.Monday }, Start = new(18, 0), End = new(19, 30) });
+    week.Days.First(d => d.Day == DayOfWeek.Saturday).Working = true;
+    var mon = week.ToBlocks().Where(b => b.Days.Contains(DayOfWeek.Monday)).OrderBy(b => b.Start).Select(b => $"{b.Start:HH:mm}-{b.End:HH:mm} {b.Kind}").ToList();
+    Eq("monday with gym", string.Join(", ", mon), "07:00-09:00 Free, 09:00-17:30 Work, 17:30-18:00 Free, 18:00-19:30 Reserved, 19:30-23:00 Free");
+    Eq("saturday working", week.ToBlocks().Any(b => b.Days.Contains(DayOfWeek.Saturday) && b.Kind == PeriodKind.Work), true);
+    var back = UsualWeek.FromBlocks(week.ToBlocks(), out var exact2);
+    Eq("gym survives round trip", back.Regular.Count == 1 && exact2, true);
+    var plan = new SchedulePlan { Kind = PlanKind.DayOff, From = new(2026, 3, 3), To = new(2026, 3, 7) };
+    Eq("plan covers", plan.Covers(new(2026, 3, 5)) && !plan.Covers(new(2026, 3, 8)), true);
+    Eq("plan name", plan.Name, "Day off");
+}
 Eq("html text", HtmlText.Extract("<html><body><p>Hello <b>world</b></p><script>x()</script></body></html>").Trim(), "Hello world");
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;

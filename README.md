@@ -50,7 +50,7 @@ stored as JSON files in one folder.
 |---|---|
 | **Today** | Shows the current period (work, free or busy), tasks due, your agenda, upcoming renewals, food to use up, and who's home. |
 | **Tasks** | Categories, priorities, recurrence, checklists and tags. Repeat issues stack onto one task with a ×N count. |
-| **Schedule** | A weekly template of work and free time. Calendar events and holidays override it. **Plan my day** slots tasks into free gaps, and runs automatically every evening. |
+| **Schedule** | Your usual week in plain terms (the days and hours you work, regular times you keep free) plus one-off **time off and plans** — holidays, time out, reserved time, extra shifts — even when they're not in a calendar. Day and week views. **Plan my day** slots tasks into free gaps, and runs automatically every evening. |
 | **Renewals** | Domains, hosting, subscriptions, insurance and utilities: cost, cycle, usage, auto-renew. It records price-rise history and reminds you before each date. |
 | **Kitchen** | Fridge, freezer and cupboard stock with freeze/defrost and waste tracking. **Use-by** dates count down; **best-before** food (eggs, cereal, pasta…) fades on a scale. **Add from photo** lists your groceries and reads their dates. **Staples** predict when you'll run out. |
 | **Scan** | Phone barcode scanner with three modes: stock in, use up, and add to the shopping list. It looks products up on Open Food Facts, learns them after the first scan, and lets you undo. |
@@ -60,6 +60,9 @@ stored as JSON files in one folder.
 | **Notes** | Drop in bits of text (ideas, links, gift ideas, door codes). The local AI files each one into a category, reusing yours, with tags. **Tidy up** merges near-duplicate categories. Notes are private, or shared one by one. |
 | **Deals** | Optional: checks offers at supermarkets near your town or postcode (offers pages, supermarket emails, pasted offers, leaflet photos), matches them to your shopping list, staples, recipes and dietary needs, and suggests meals on days that suit plus when to shop. |
 | **Home** | Home Assistant runs the house; LifeHub gives you one place to see and nudge it. Rooms, lights, climate, scenes, who's home and energy, all shown with friendly names. Setup is automatic. |
+| **Ask LifeHub** | One box for questions (*"what's due this week?"*) and requests (*"add milk"*, *"I'm out Thursday 2–4"*). It answers from your own lists and suggests changes you confirm with one tap. |
+| **Memory** | A short list of facts the AI keeps in mind — diets, routines, people — that you add or confirm. Used when reading email, answering and planning meals. |
+| **Telegram** | Chat with LifeHub from Telegram: ask, add, tick off, with buttons to confirm. Each person connects their own chat with a one-time code. Notifications can come there too. |
 | **AI Inbox** | Reads Gmail/IMAP, Microsoft 365 and on-prem Exchange. A local Ollama model classifies each email and proposes actions. Safe actions are applied automatically and can be undone. |
 | **Promotions** | Adverts and newsletters go into their own list instead of becoming tasks or shopping items, and clear themselves when they expire. |
 | **Email ↔ task link** | Delete a task and its email moves to the Bin. Delete the email and its task goes. |

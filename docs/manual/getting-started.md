@@ -13,15 +13,18 @@ Press **Customise** to show, hide and reorder the cards.
 
 ## Try these first
 
-1. **Add a task**: the **+ Capture** button at the top → **Task**. Type it naturally, e.g.
-   *"Dentist Friday 3pm"*.
-2. **Add a renewal**: **Renewals → Add**, e.g. your car insurance with its renewal date. LifeHub
+1. **Ask LifeHub**: the **Ask** button at the top. Type naturally, e.g. *"Dentist Friday 3pm"*,
+   *"add milk"* or *"what's due this week?"*, then press **Do it** on what it suggests
+   ([more](ask-and-telegram.md)). Without an AI, the same button adds tasks and shopping.
+2. **Set your week**: **Schedule → My usual week** — the days and hours you work. Add holidays and
+   time out with **Time off or plans** ([more](schedule.md)).
+3. **Add a renewal**: **Renewals → Add**, e.g. your car insurance with its renewal date. LifeHub
    reminds you before it's due.
-3. **Stock the kitchen**: **Scan** (on your phone) and scan a barcode, or **Kitchen → Add**.
+4. **Stock the kitchen**: **Scan** (on your phone) and scan a barcode, or **Kitchen → Add**.
    Use-by dates count down; LifeHub tells you what to use first.
-4. **Plan meals**: **Meals → Plan**, then **Suggest improvements** for AI ideas that fit your
+5. **Plan meals**: **Meals → Plan**, then **Suggest improvements** for AI ideas that fit your
    week.
-5. **Drop a note**: **Notes**, type anything — a link, a gift idea, a door code.
+6. **Drop a note**: **Notes**, type anything — a link, a gift idea, a door code.
 
 ## Where things are
 
@@ -29,12 +32,12 @@ Press **Customise** to show, hide and reorder the cards.
 |---|---|
 | Today | Your day at a glance |
 | Tasks | To-dos with dates, priorities and repeats |
-| Schedule | Your week; **Plan my day** fits tasks into free time |
+| Schedule | Your working hours, time off and plans; **Plan my day** fits tasks into free time |
 | Notes | Quick notes, sorted into categories for you |
 | Renewals | Subscriptions, insurance, bills and their dates |
 | Kitchen / Scan / Shopping / Meals | Food at home, the shopping list and the meal plan |
 | Home | Your Home Assistant rooms (when connected) |
-| AI Inbox | Emails turned into tasks and events (when email and the AI are set up) |
+| AI Inbox | Ask LifeHub, emails turned into tasks and events, and what the AI remembers |
 | Settings | Everything else |
 
 Don't need some of these? Turn them off in **Settings → Modules** — see [Make it yours](customise.md).
@@ -46,3 +49,4 @@ Don't need some of these? Turn them off in **Settings → Modules** — see [Mak
 - Connect your email: **Settings → Email** ([details](../email-and-ai.md)).
 - Connect Home Assistant: **Settings → Home Assistant** ([details](../home-assistant.md)).
 - Notifications on your phone: **Settings → Notifications**.
+- Chat with LifeHub on Telegram: **Settings → Telegram** ([details](ask-and-telegram.md#telegram)).

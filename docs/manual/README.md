@@ -34,6 +34,9 @@ Each installer contains everything LifeHub needs, so there's nothing else to ins
 
 - [Getting started](getting-started.md): a five-minute tour of LifeHub once it's running.
 - [Your email](email.md): add mailboxes with a few taps, and how LifeHub checks them.
+- [Your schedule](schedule.md): working hours, days off, time out and times you keep free.
+- [Ask LifeHub, memory and Telegram](ask-and-telegram.md): ask questions and tell LifeHub what to
+  do, in the app or on Telegram.
 - [Notifications](notifications.md): choose what reaches your phone, and quiet hours.
 - [Make it yours](customise.md): colours, the home screen, turning sections on or off, and your
   own styles.

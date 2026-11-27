@@ -9,6 +9,40 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [3.2.0] – Unreleased
+
+Ask LifeHub anything, chat with it on Telegram, give its AI a memory, and set up your week properly.
+
+### Added
+- **Ask LifeHub**: the **Ask** button (and the box in the AI Inbox) takes questions (*"what's due
+  this week?"*, *"am I free Thursday afternoon?"*) and requests (*"add milk"*, *"I'm out Thursday
+  2–4"*, *"I paid the council tax"*). It answers from your own lists, schedule, kitchen, meals and
+  renewals, and lists any change with **Do it** / **Skip** — nothing changes until you confirm.
+  Also `POST /api/v1/ask`, `/api/v1/suggestions/{id}/apply` and `/skip`.
+- **Memory** (AI Inbox → Memory): facts the AI keeps in mind — diets, routines, people. Add them
+  yourself or confirm ones LifeHub suggests when you say *"remember…"*; share them with the
+  household or keep them to yourself. Used when reading email, answering and planning meals.
+- **Telegram**: connect a bot once in **Settings → Telegram**; each person connects their own chat
+  with a 6-digit code (or an admin approves it). Ask and tell LifeHub things from Telegram, with
+  buttons to confirm changes; `/today`, `/shopping`, `/stop`. Notifications can go there too.
+  Works without opening LifeHub to the internet. Switch it off in Background tasks.
+- **Schedule: time off and plans** — holidays, days off, time out, time you're keeping free and
+  extra work, even when they're not in a calendar. Add them from **Time off or plans** or by
+  asking LifeHub. Nothing is ever planned into time you're out or keeping free.
+- **Schedule: week view** with each day's hours, time out, events and planned tasks.
+- New AI actions for things you say (never from email): schedule changes, remembering, and
+  ticking off tasks and shopping. All can be undone from AI Inbox → History.
+- **Send a test message** in Settings → Telegram; the test notification in Settings →
+  Notifications now always goes to your phone.
+
+### Changed
+- **Schedule → My usual week** replaces the weekly template table: switch on the days you work
+  and set each day's hours, when your day starts and ends, and regular times to keep free (gym,
+  school run). The detailed period editor is still there under **Edit every period in detail**.
+- **Capture** is now **Ask** (or **Add** when no AI is set up). Quick capture from Home Assistant
+  (`/api/v1/capture`) works as before.
+- Day-off calendar words live under **My usual week → Planning**.
+
 ## [3.1.0] – 2026-11-08
 
 Easier email set-up, a phone app that runs on its own, any AI, tidier notifications, and

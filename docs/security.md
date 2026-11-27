@@ -65,9 +65,31 @@ LifeHub only connects to outside services you've set up:
 | OpenAI, Google (Gemini) or Anthropic (Claude) | only if you choose one in Settings → AI | the emails, notes, photos and lists LifeHub asks the AI about, with your API key |
 | Hugging Face (model files) | phone app, when you download the on-device AI | a normal download |
 | Thunderbird's provider database / your mail domain | adding a mailbox with "Another provider" | the domain part of the address |
+| Telegram | only if you set up a bot in Settings → Telegram | messages to and from connected chats, and the notifications people chose to get there |
 
 With **Ollama** or the **on-device AI** (the defaults), your notes, photos and emails never leave your network or
 phone.
+
+## Telegram
+
+- The bot token is stored encrypted, like other secrets. LifeHub polls Telegram for messages, so
+  it never needs to be reachable from the internet.
+- Only one-to-one chats someone has connected can use the bot. Anyone else only gets a random
+  6-digit code; it expires after an hour and does nothing until a signed-in person enters it (for
+  themselves) or an admin approves it (for someone in the household). Strangers get at most one
+  reply a minute, and at most 20 codes wait at once.
+- Each connected chat acts as that person only, with the same rules as the app: anything the AI
+  would change waits for a button press. `/stop`, **Disconnect this chat** or **Disconnect the
+  bot** cut it off.
+- Message text isn't written to LifeHub's logs.
+
+## Memory and Ask LifeHub
+
+- Facts in **AI Inbox → Memory** are stored encrypted like everything else and are given to the
+  AI as background information, not as instructions. They're private to each person unless shared.
+- Only things a person types or says can add to memory, change their schedule or tick things off
+  (`IUserOnlyAction`); these actions are never offered when the AI reads an email.
+- Ask LifeHub never applies anything on its own, whatever the auto-apply settings say.
 
 ## Authentication
 

@@ -50,6 +50,10 @@ public sealed class ScheduleService
         if (plan.Kind != PlanKind.DayOff && plan.Kind != PlanKind.Working && plan.AllDay && plan.To.DayNumber - plan.From.DayNumber > 60)
             throw new InvalidOperationException("That's more than two months — add it as a day off instead");
         plan.Label = plan.Label.Trim();
+        // The same thing twice (a double tap, or saying it again) is kept once.
+        var same = _plans.Where(p => p.Id != plan.Id && p.Kind == plan.Kind && p.From == plan.From && p.To == plan.To &&
+                                     p.Start == plan.Start && p.End == plan.End && string.Equals(p.Label, plan.Label, StringComparison.OrdinalIgnoreCase)).FirstOrDefault();
+        if (same is not null) return same;
         await _plans.UpsertAsync(plan);
         return plan;
     }
