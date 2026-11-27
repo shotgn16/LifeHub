@@ -39,7 +39,7 @@ public sealed class PlannerService
 
         // Free gaps per period kind.
         var gaps = new List<(DateTime Start, DateTime End, PeriodKind Kind)>();
-        foreach (var p in periods.Where(p => p.Kind is not (PeriodKind.Sleep or PeriodKind.Commute)))
+        foreach (var p in periods.Where(p => p.Kind is not (PeriodKind.Sleep or PeriodKind.Commute or PeriodKind.Out or PeriodKind.Reserved)))
         {
             var pieces = new List<(DateTime, DateTime)> { (Max(p.Start, earliest), p.End) };
             foreach (var (bs, be) in busy)

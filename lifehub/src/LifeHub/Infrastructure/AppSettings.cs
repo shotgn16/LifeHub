@@ -296,7 +296,123 @@ public sealed class EmailAccount
     public List<string> IgnoreSenders { get; set; } = new();
 }
 
-public enum PeriodKind { Work, Free, Sleep, Commute, Focus, Other }
+public enum PeriodKind { Work, Free, Sleep, Commute, Focus, Other, Out, Reserved }
+
+/// <summary>One day of your usual week: whether you work, and when.</summary>
+public sealed class UsualDay
+{
+    public DayOfWeek Day { get; set; }
+    public bool Working { get; set; }
+    public TimeOnly WorkStart { get; set; } = new(9, 0);
+    public TimeOnly WorkEnd { get; set; } = new(17, 30);
+}
+
+/// <summary>Something you do every week at the same time (gym, school run, a club) — nothing gets planned then.</summary>
+public sealed class RegularTime
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Label { get; set; } = "";
+    public List<DayOfWeek> Days { get; set; } = new();
+    public TimeOnly Start { get; set; } = new(18, 0);
+    public TimeOnly End { get; set; } = new(19, 0);
+}
+
+/// <summary>
+/// Your usual week in plain terms (Schedule → My usual week). LifeHub turns it into the detailed periods
+/// (<see cref="ScheduleSettings.Blocks"/>) that the day view and "Plan my day" use.
+/// </summary>
+public sealed class UsualWeek
+{
+    public static readonly DayOfWeek[] Order = { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
+
+    public List<UsualDay> Days { get; set; } = Order.Select(d => new UsualDay { Day = d, Working = d is not (DayOfWeek.Saturday or DayOfWeek.Sunday) }).ToList();
+    /// <summary>When your day starts and ends on days you work…</summary>
+    public TimeOnly WorkDayFrom { get; set; } = new(7, 0);
+    public TimeOnly WorkDayTo { get; set; } = new(23, 0);
+    /// <summary>…and on days you don't.</summary>
+    public TimeOnly OffDayFrom { get; set; } = new(8, 0);
+    public TimeOnly OffDayTo { get; set; } = new(23, 0);
+    public List<RegularTime> Regular { get; set; } = new();
+
+    public UsualDay Of(DayOfWeek d) => Days.FirstOrDefault(x => x.Day == d) ?? new UsualDay { Day = d };
+
+    /// <summary>The detailed periods for this week: work, regular times, and free time around them.</summary>
+    public List<PeriodBlock> ToBlocks()
+    {
+        var perDay = new List<(DayOfWeek Day, TimeOnly Start, TimeOnly End, PeriodKind Kind, string Label)>();
+        foreach (var d in Order)
+        {
+            var u = Of(d);
+            var from = u.Working ? WorkDayFrom : OffDayFrom;
+            var to = u.Working ? WorkDayTo : OffDayTo;
+            var busy = new List<(TimeOnly Start, TimeOnly End, PeriodKind Kind, string Label)>();
+            if (u.Working) busy.Add((u.WorkStart, u.WorkEnd, PeriodKind.Work, "Work"));
+            foreach (var r in Regular.Where(r => r.Days.Contains(d) && r.End > r.Start))
+                busy.Add((r.Start, r.End, PeriodKind.Reserved, string.IsNullOrWhiteSpace(r.Label) ? "Reserved" : r.Label.Trim()));
+            foreach (var b in busy) perDay.Add((d, b.Start, b.End, b.Kind, b.Label));
+
+            // Free time is the rest of the waking day (an overnight shift only blocks until midnight here).
+            var free = new List<(TimeOnly, TimeOnly)>();
+            if (to > from) free.Add((from, to));
+            foreach (var b in busy)
+            {
+                var end = b.End <= b.Start ? TimeOnly.MaxValue : b.End;
+                free = free.SelectMany(f => Cut(f, (b.Start, end))).ToList();
+            }
+            var workStart = u.Working ? u.WorkStart : (TimeOnly?)null;
+            foreach (var (s, e) in free.Where(f => (f.Item2 - f.Item1).TotalMinutes >= 15))
+            {
+                var label = !u.Working ? (d is DayOfWeek.Saturday or DayOfWeek.Sunday ? "Weekend" : "Day off")
+                          : s < workStart ? "Morning" : "Evening";
+                perDay.Add((d, s, e, PeriodKind.Free, label));
+            }
+        }
+        // Days with exactly the same period share one block, so the detailed list stays short.
+        return perDay.GroupBy(p => (p.Start, p.End, p.Kind, p.Label))
+            .Select(g => new PeriodBlock { Days = g.Select(x => x.Day).ToList(), Start = g.Key.Start, End = g.Key.End, Kind = g.Key.Kind, Label = g.Key.Label })
+            .OrderBy(b => b.Days.Select(x => Array.IndexOf(Order, x)).Min()).ThenBy(b => b.Start).ToList();
+    }
+
+    private static IEnumerable<(TimeOnly, TimeOnly)> Cut((TimeOnly Start, TimeOnly End) span, (TimeOnly Start, TimeOnly End) busy)
+    {
+        if (busy.End <= span.Start || busy.Start >= span.End) { yield return span; yield break; }
+        if (busy.Start > span.Start) yield return (span.Start, busy.Start);
+        if (busy.End < span.End) yield return (busy.End, span.End);
+    }
+
+    /// <summary>A best guess at the usual week from detailed periods (older versions, or the detailed editor).</summary>
+    public static UsualWeek FromBlocks(IEnumerable<PeriodBlock> blocks, out bool exact)
+    {
+        var list = blocks.ToList();
+        var week = new UsualWeek { Days = new() };
+        var workFrom = new List<TimeOnly>(); var workTo = new List<TimeOnly>();
+        var offFrom = new List<TimeOnly>(); var offTo = new List<TimeOnly>();
+        foreach (var d in Order)
+        {
+            var today = list.Where(b => b.Days.Contains(d)).ToList();
+            var work = today.Where(b => b.Kind == PeriodKind.Work).ToList();
+            var day = new UsualDay { Day = d, Working = work.Count > 0 };
+            if (work.Count > 0) { day.WorkStart = work.Min(b => b.Start); day.WorkEnd = work.Max(b => b.End); }
+            week.Days.Add(day);
+            if (today.Count == 0) continue;
+            (day.Working ? workFrom : offFrom).Add(today.Min(b => b.Start));
+            (day.Working ? workTo : offTo).Add(today.Max(b => b.End <= b.Start ? new TimeOnly(23, 59) : b.End));
+        }
+        if (workFrom.Count > 0) { week.WorkDayFrom = workFrom.Min(); week.WorkDayTo = workTo.Max(); }
+        if (offFrom.Count > 0) { week.OffDayFrom = offFrom.Min(); week.OffDayTo = offTo.Max(); }
+        foreach (var r in list.Where(b => b.Kind == PeriodKind.Reserved))
+            week.Regular.Add(new RegularTime { Label = r.Label, Days = new(r.Days), Start = r.Start, End = r.End });
+        // Exact when rebuilding gives the same periods back (true for the default week).
+        exact = Same(week.ToBlocks(), list);
+        return week;
+    }
+
+    private static bool Same(List<PeriodBlock> a, List<PeriodBlock> b)
+    {
+        static IEnumerable<string> Keys(IEnumerable<PeriodBlock> x) => x.SelectMany(p => p.Days.Select(d => $"{d}|{p.Start}|{p.End}|{p.Kind}")).OrderBy(k => k);
+        return Keys(a).SequenceEqual(Keys(b));
+    }
+}
 
 public sealed class PeriodBlock
 {
@@ -310,6 +426,8 @@ public sealed class PeriodBlock
 
 public sealed class ScheduleSettings
 {
+    /// <summary>Your usual week as set in Schedule → My usual week; null when the periods were set up in detail instead.</summary>
+    public UsualWeek? Usual { get; set; }
     public List<PeriodBlock> Blocks { get; set; } = DefaultBlocks();
     /// <summary>All-day calendar events containing one of these words turn that day's Work periods into Free time.</summary>
     public List<string> DayOffKeywords { get; set; } = new() { "holiday", "annual leave", "day off", "vacation", "bank holiday", "pto" };

@@ -21,12 +21,16 @@
         <button class="btn sm" @onclick="() => GoTo(Clock.Today)">Today</button>
         <button class="icon-btn" @onclick="() => Go(1)" title="Next day"><Icon Name="right" /></button>
         <input type="date" value="@date.ToString("yyyy-MM-dd")" @onchange="DatePicked" style="width:auto" />
+        <button class="btn primary" @onclick="() => planOpen = true"><Icon Name="plus" Size="15" /> <span>Time off or plans</span></button>
     </div>
 </div>
 
+<PlanEditor @bind-Open="planOpen" Date="date" Saved="PlansChanged" />
+
 <div class="tabs">
     <button class="tab @(tab == "day" ? "on" : "")" @onclick='() => tab = "day"'>Day</button>
-    <button class="tab @(tab == "template" ? "on" : "")" @onclick='() => tab = "template"'>Weekly template</button>
+    <button class="tab @(tab == "week" ? "on" : "")" @onclick="OpenWeek">Week</button>
+    <button class="tab @(tab == "template" ? "on" : "")" @onclick='() => tab = "template"'>My usual week</button>
 </div>
 
 @if (tab == "day")
@@ -40,6 +44,14 @@
                 </div>
             </div>
             @if (loading) { <p class="muted">Loading calendar…</p> }
+            @if (dayPlans.Count > 0) { <div class="tiny muted" style="margin:0 0 4px 72px">Added for this day</div> }
+            @foreach (var p in dayPlans)
+            {
+                <div class="tl-item plan-row k-@PlanCss(p.Kind)" style="margin-left:72px">
+                    <span><strong>@p.Name</strong> <span class="tiny muted">@(p.AllDay ? "all day" : $"{p.Start:HH:mm}–{p.End:HH:mm}") · @SchedulePlan.KindName(p.Kind).ToLower()</span></span>
+                    <button class="icon-btn right" title="Remove" @onclick="() => RemovePlan(p)"><Icon Name="x" Size="14" /></button>
+                </div>
+            }
             @foreach (var e in events.Where(e => e.AllDay))
             {
                 <div class="tl-item event" style="margin-left:72px">All day · <strong>@e.Title</strong> <span class="tiny muted">@e.Source</span></div>
@@ -64,8 +76,8 @@
                 <div class="alert warn small">@string.Join("; ", Calendar.LastErrors)</div>
             }
             <p class="tiny muted" style="margin-top:8px">
-                <span class="badge info">Work</span> <span class="badge ok">Free</span> periods come from your weekly template;
-                <span class="badge warn">events</span> from your calendars; <span class="badge accent">tasks</span> planned by you or "Plan my day".
+                <span class="badge info">Work</span> <span class="badge ok">Free</span> time comes from your usual week; <span class="badge">out / kept free</span>
+                from time off and plans you've added; <span class="badge warn">events</span> from your calendars; <span class="badge accent">tasks</span> planned by you or "Plan my day".
             </p>
         </div>
 
@@ -117,40 +129,166 @@
         </div>
     </div>
 }
+else if (tab == "week")
+{
+    <div class="week-head">
+        <button class="icon-btn" @onclick="() => MoveWeek(-7)" title="Previous week"><Icon Name="left" /></button>
+        <strong>@weekStart.ToString("d MMM", Fmt.Culture) – @weekStart.AddDays(6).ToString("d MMM yyyy", Fmt.Culture)</strong>
+        <button class="icon-btn" @onclick="() => MoveWeek(7)" title="Next week"><Icon Name="right" /></button>
+    </div>
+    <div class="week-grid">
+        @foreach (var d in week)
+        {
+            <div class="week-day @(d.Date == Clock.Today ? "today" : "") @(d.DayOff ? "off" : "")">
+                <button class="week-day-head" @onclick="() => OpenDay(d.Date)" title="Open this day">
+                    <span>@d.Date.ToString("ddd", Fmt.Culture)</span> <strong>@d.Date.Day</strong>
+                </button>
+                <div class="week-sum">@d.Summary</div>
+                @foreach (var i in d.Items)
+                {
+                    <div class="week-item k-@i.Css" title="@i.Title">
+                        <span class="tiny muted">@i.When</span><span class="week-title">@i.Title</span>
+                    </div>
+                }
+                @if (d.Items.Count == 0) { <div class="tiny muted">Nothing booked</div> }
+            </div>
+        }
+    </div>
+    @if (loading) { <p class="muted">Loading calendars…</p> }
+
+    <div class="card" style="margin-top:16px">
+        <div class="card-head">
+            <h2><Icon Name="calendar" /> Time off and plans</h2>
+            <div class="right"><button class="btn sm" @onclick="() => planOpen = true"><Icon Name="plus" Size="14" /> Add</button></div>
+        </div>
+        <p class="small muted">Holidays, time out, time you're keeping free and extra work — they don't need to be in a calendar.
+            You can also just tell LifeHub, e.g. <em>"I'm out Thursday 2 till 4"</em>.</p>
+        <ul class="list">
+            @if (upcoming.Count == 0) { <li class="empty small">Nothing coming up.</li> }
+            @foreach (var p in upcoming)
+            {
+                <li class="row">
+                    <span class="badge @PlanBadge(p.Kind)">@SchedulePlan.KindName(p.Kind)</span>
+                    <div class="grow"><div class="title">@p.Name</div><div class="meta">@p.When(Fmt.Culture)</div></div>
+                    <button class="icon-btn" title="Remove" @onclick="() => RemovePlan(p)"><Icon Name="trash" Size="15" /></button>
+                </li>
+            }
+        </ul>
+    </div>
+}
 else
 {
-    <div class="card" style="margin-bottom:16px">
-        <div class="card-head">
-            <h2>Weekly periods</h2>
-            <div class="right"><button class="btn sm" @onclick="AddBlock"><Icon Name="plus" Size="14" /> Add period</button></div>
-        </div>
-        <p class="small muted">The time that's assumed to be work or free unless your calendar says otherwise. Calendar events always win; an all-day event containing a day-off word turns that day's work periods into free time.</p>
-        <div class="table-wrap">
-            <table class="table">
-                <thead><tr><th>Days</th><th>From</th><th>To</th><th>Type</th><th>Label</th><th></th></tr></thead>
-                <tbody>
-                    @foreach (var b in blocks)
+    @if (!usualExact && !advanced)
+    {
+        <div class="alert info small"><Icon Name="alert" /> <div>Your week was set up in detail. These simpler settings are LifeHub's best guess — saving them replaces the detailed periods.
+            <a href="" @onclick:preventDefault @onclick="() => advanced = true">Keep editing in detail</a></div></div>
+    }
+    @if (!advanced)
+    {
+        <div class="grid cols-2">
+            <div class="card">
+                <h2 style="margin-bottom:4px">When I work</h2>
+                <p class="small muted" style="margin-top:0">Tick the days you work and your hours. Work tasks are planned into work time.</p>
+                <ul class="list usual-days">
+                    @foreach (var d in usual.Days)
                     {
-                        <tr>
-                            <td>
-                                <div class="chips">
-                                    @foreach (var d in WeekOrder)
-                                    {
-                                        <button class="chip @(b.Days.Contains(d) ? "on" : "")" style="padding:3px 8px" @onclick="() => ToggleDay(b, d)">@d.ToString()[..2]</button>
-                                    }
+                        <li class="row">
+                            <Toggle Value="d.Working" ValueChanged="v => d.Working = v" />
+                            <div class="usual-day">@d.Day.ToString()</div>
+                            @if (d.Working)
+                            {
+                                <div class="usual-hours">
+                                    <input type="time" @bind="d.WorkStart" aria-label="@($"{d.Day} start")" />
+                                    <span class="muted">–</span>
+                                    <input type="time" @bind="d.WorkEnd" aria-label="@($"{d.Day} finish")" />
                                 </div>
-                            </td>
-                            <td><input type="time" @bind="b.Start" style="width:auto" /></td>
-                            <td><input type="time" @bind="b.End" style="width:auto" /></td>
-                            <td><select @bind="b.Kind" style="width:auto">@foreach (var k in Enum.GetValues<PeriodKind>()) { <option value="@k">@k</option> }</select></td>
-                            <td><input type="text" @bind="b.Label" /></td>
-                            <td><button class="icon-btn" @onclick="() => blocks.Remove(b)"><Icon Name="trash" Size="15" /></button></td>
-                        </tr>
+                            }
+                            else { <span class="small muted">Not working</span> }
+                        </li>
                     }
-                </tbody>
-            </table>
+                </ul>
+                <button class="btn sm" @onclick="CopyFirstWorkDay" style="margin-top:8px">Use @FirstWorkDayName's hours on every work day</button>
+            </div>
+
+            <div class="card">
+                <h2 style="margin-bottom:4px">My day</h2>
+                <p class="small muted" style="margin-top:0">When you're up and about. Nothing gets planned outside these times.</p>
+                <div class="usual-span">
+                    <span>On days I work</span>
+                    <div class="usual-hours"><input type="time" @bind="usual.WorkDayFrom" aria-label="Day starts on work days" /> <span class="muted">to</span>
+                    <input type="time" @bind="usual.WorkDayTo" aria-label="Day ends on work days" /></div>
+                </div>
+                <div class="usual-span">
+                    <span>On days off</span>
+                    <div class="usual-hours"><input type="time" @bind="usual.OffDayFrom" aria-label="Day starts on days off" /> <span class="muted">to</span>
+                    <input type="time" @bind="usual.OffDayTo" aria-label="Day ends on days off" /></div>
+                </div>
+
+                <h3 style="margin:18px 0 4px">Regular times to keep free</h3>
+                <p class="small muted" style="margin-top:0">Things you do every week, like the gym or the school run.</p>
+                <ul class="list">
+                    @foreach (var r in usual.Regular)
+                    {
+                        <li class="regular">
+                            <input type="text" @bind="r.Label" placeholder="e.g. Gym" maxlength="40" aria-label="What it's for" />
+                            <div class="chips">
+                                @foreach (var d in UsualWeek.Order)
+                                {
+                                    <button class="chip @(r.Days.Contains(d) ? "on" : "")" style="padding:3px 8px" @onclick="() => ToggleDay(r.Days, d)">@d.ToString()[..2]</button>
+                                }
+                            </div>
+                            <div class="regular-times">
+                                <input type="time" @bind="r.Start" aria-label="From" /> <span class="muted">–</span> <input type="time" @bind="r.End" aria-label="To" />
+                                <button class="icon-btn" title="Remove" @onclick="() => usual.Regular.Remove(r)"><Icon Name="trash" Size="15" /></button>
+                            </div>
+                        </li>
+                    }
+                </ul>
+                <button class="btn sm" @onclick="AddRegular"><Icon Name="plus" Size="14" /> Add a regular time</button>
+            </div>
         </div>
-    </div>
+    }
+    else
+    {
+        <div class="card" style="margin-bottom:16px">
+            <div class="card-head">
+                <h2>Periods in detail</h2>
+                <div class="right">
+                    <button class="btn sm" @onclick="AddBlock"><Icon Name="plus" Size="14" /> Add period</button>
+                </div>
+            </div>
+            <p class="small muted">Every period of your usual week. Calendar events always win; an all-day event containing a day-off word turns that day's work periods into free time.</p>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Days</th><th>From</th><th>To</th><th>Type</th><th>Label</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var b in blocks)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="chips">
+                                        @foreach (var d in UsualWeek.Order)
+                                        {
+                                            <button class="chip @(b.Days.Contains(d) ? "on" : "")" style="padding:3px 8px" @onclick="() => { ToggleDay(b.Days, d); blocksEdited = true; }">@d.ToString()[..2]</button>
+                                        }
+                                    </div>
+                                </td>
+                                <td><input type="time" @bind="b.Start" @bind:after="Edited" style="width:auto" /></td>
+                                <td><input type="time" @bind="b.End" @bind:after="Edited" style="width:auto" /></td>
+                                <td><select @bind="b.Kind" @bind:after="Edited" style="width:auto">@foreach (var k in Enum.GetValues<PeriodKind>()) { <option value="@k">@KindLabel(k)</option> }</select></td>
+                                <td><input type="text" @bind="b.Label" @bind:after="Edited" /></td>
+                                <td><button class="icon-btn" @onclick="() => { blocks.Remove(b); blocksEdited = true; }"><Icon Name="trash" Size="15" /></button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    <p class="small" style="margin:12px 0 16px">
+        @if (advanced) { <a href="" @onclick:preventDefault @onclick="BackToSimple">Back to the simple settings</a> }
+        else { <a href="" @onclick:preventDefault @onclick="() => advanced = true">Edit every period in detail</a> }
+    </p>
 
     <div class="grid cols-3">
         <div class="card">
@@ -160,7 +298,9 @@ else
                 <div class="row">
                     <div class="grow">@c</div>
                     <select style="width:auto" value="@(categoryMap.TryGetValue(c, out var k) ? k.ToString() : "Free")" @onchange="e => categoryMap[c] = Enum.Parse<PeriodKind>(e.Value!.ToString()!)">
-                        @foreach (var kind in Enum.GetValues<PeriodKind>()) { <option value="@kind">@kind</option> }
+                        <option value="Free">Free time</option>
+                        <option value="Work">Work time</option>
+                        <option value="Focus">Focus time</option>
                     </select>
                 </div>
             }
@@ -181,7 +321,7 @@ else
         </div>
         <div class="card">
             <h2 style="margin-bottom:10px">Planning</h2>
-            <div class="field"><label>Day-off keywords</label><input type="text" @bind="dayOffWords" /><div class="help">Comma separated, matched against all-day calendar events.</div></div>
+            <div class="field"><label>Day-off words</label><input type="text" @bind="dayOffWords" /><div class="help">An all-day calendar event with one of these words (comma separated) counts as a day off.</div></div>
             <div class="form-grid">
                 <div class="field"><label>Default task length (min)</label><input type="number" min="5" @bind="defaultMinutes" /></div>
                 <div class="field"><label>Gap between items (min)</label><input type="number" min="0" @bind="bufferMinutes" /></div>
@@ -189,14 +329,27 @@ else
         </div>
     </div>
     <div style="margin-top:16px;display:flex;gap:8px">
-        <button class="btn primary" @onclick="SaveTemplate">Save template</button>
+        <button class="btn primary" @onclick="SaveTemplate">Save</button>
         <button class="btn" @onclick="ResetTemplate">Reset to defaults</button>
     </div>
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
     private string tab = "day";
     private DateOnly date;
+    private List<SchedulePlan> dayPlans = new(), upcoming = new();
+    private bool planOpen;
+
+    // Week view
+    private DateOnly weekStart;
+    private record WeekItem(string When, string Title, string Css);
+    private record WeekDay(DateOnly Date, string Summary, bool DayOff, List<WeekItem> Items);
+    private List<WeekDay> week = new();
+
+    // Usual week
+    private UsualWeek usual = new();
+    private bool usualExact = true, advanced, blocksEdited;
     private List<DaySegment> periods = new();
     private List<CalendarEvent> events = new();
     private List<TaskItem> scheduledToday = new();
@@ -217,12 +370,20 @@ else
     protected override async Task OnInitializedAsync()
     {
         Watch(Tasks.Repo);
+        Watch(Schedule.Plans);
         date = Clock.Today;
+        if (Tab is "week" or "template") tab = Tab;
         LoadTemplate();
         await LoadDayAsync();
+        if (tab == "week") await LoadWeekAsync();
     }
 
-    protected override void OnDataChanged() => LoadTasks();
+    protected override void OnDataChanged()
+    {
+        LoadTasks();
+        dayPlans = Schedule.PlansOn(date);
+        upcoming = Schedule.Upcoming();
+    }
 
     private void LoadTasks() =>
         scheduledToday = Tasks.Open().Where(t => t.ScheduledStart is { } s && DateOnly.FromDateTime(s) == date).OrderBy(t => t.ScheduledStart).ToList();
@@ -235,6 +396,8 @@ else
             events = await Calendar.GetEventsAsync(date, date, bypass);
             periods = Schedule.Periods(date, events);
             dayOff = Schedule.IsDayOff(date, events);
+            dayPlans = Schedule.PlansOn(date);
+            upcoming = Schedule.Upcoming();
         }
         catch (Exception ex) { Ui.Error(ex); }
         finally { loading = false; }
@@ -299,12 +462,87 @@ else
         await Tasks.SaveAsync(t);
     }
 
-    // ----- template -----
+    // ----- time off and plans -----
+
+    private async Task PlansChanged()
+    {
+        await LoadDayAsync();
+        if (tab == "week") await LoadWeekAsync();
+    }
+
+    private async Task RemovePlan(SchedulePlan p)
+    {
+        await Schedule.DeletePlanAsync(p.Id);
+        Ui.Show($"Removed {p.Name}");
+        await PlansChanged();
+    }
+
+    private static string PlanCss(PlanKind k) => k switch { PlanKind.Out => "Out", PlanKind.Reserved => "Reserved", PlanKind.Working => "Work", _ => "Free" };
+    private static string PlanBadge(PlanKind k) => k switch { PlanKind.DayOff => "ok", PlanKind.Working => "info", PlanKind.Out => "warn", _ => "" };
+    private static string KindLabel(PeriodKind k) => k == PeriodKind.Reserved ? "Keep free" : k.ToString();
+
+    // ----- week -----
+
+    private async Task OpenWeek()
+    {
+        tab = "week";
+        await LoadWeekAsync();
+    }
+
+    private async Task MoveWeek(int days)
+    {
+        weekStart = weekStart.AddDays(days);
+        await LoadWeekAsync(keepStart: true);
+    }
+
+    private async Task OpenDay(DateOnly d)
+    {
+        tab = "day";
+        await GoTo(d);
+    }
+
+    private async Task LoadWeekAsync(bool keepStart = false)
+    {
+        if (!keepStart) weekStart = date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
+        loading = true;
+        try
+        {
+            var all = await Calendar.GetEventsAsync(weekStart, weekStart.AddDays(6));
+            var minutes = Settings.Current.Schedule.DefaultTaskMinutes;
+            var planned = Tasks.Open().Where(t => t.ScheduledStart is not null).ToList();
+            var list = new List<WeekDay>();
+            for (var i = 0; i < 7; i++)
+            {
+                var d = weekStart.AddDays(i);
+                var dayEvents = all.Where(e => DateOnly.FromDateTime(e.Start) <= d && (e.AllDay ? DateOnly.FromDateTime(e.End) > d : DateOnly.FromDateTime(e.Start) == d)).ToList();
+                var items = new List<(DateTime Start, WeekItem Item)>();
+                // Working hours are in the day's summary line; only extra or changed work is listed.
+                foreach (var p in Schedule.Periods(d, dayEvents).Where(p => p.Kind is PeriodKind.Out or PeriodKind.Reserved || (p.Kind == PeriodKind.Work && p.Label != "Work")))
+                    items.Add((p.Start, new WeekItem($"{p.Start:HH:mm}–{p.End:HH:mm}", p.Label, p.Kind.ToString()!)));
+                foreach (var p in Schedule.PlansOn(d).Where(p => p.AllDay && p.Kind == PlanKind.DayOff))
+                    items.Add((d.ToDateTime(TimeOnly.MinValue), new WeekItem("all day", p.Name, "Free")));
+                foreach (var e in dayEvents)
+                    items.Add((e.AllDay ? d.ToDateTime(TimeOnly.MinValue) : e.Start, new WeekItem(e.AllDay ? "all day" : e.Start.ToString("HH:mm"), e.Title, "event")));
+                foreach (var t in planned.Where(t => DateOnly.FromDateTime(t.ScheduledStart!.Value) == d))
+                    items.Add((t.ScheduledStart!.Value, new WeekItem(t.ScheduledStart!.Value.ToString("HH:mm"), t.Title, "task")));
+                list.Add(new WeekDay(d, Schedule.Summary(d, dayEvents), Schedule.IsDayOff(d, dayEvents), items.OrderBy(x => x.Start).Select(x => x.Item).ToList()));
+            }
+            week = list;
+            upcoming = Schedule.Upcoming();
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { loading = false; }
+    }
+
+    // ----- usual week -----
 
     private void LoadTemplate()
     {
         var s = Settings.Current.Schedule;
         blocks = s.Blocks.OrderBy(b => b.Days.Select(d => ((int)d + 6) % 7).DefaultIfEmpty(9).Min()).ThenBy(b => b.Start).ToList();
+        if (s.Usual is not null) { usual = Json.Clone(s.Usual); usualExact = true; }
+        else usual = UsualWeek.FromBlocks(s.Blocks, out usualExact);
+        advanced = false; blocksEdited = false;
         categoryMap = new Dictionary<string, PeriodKind>(s.CategoryPeriods);
         dayOffWords = string.Join(", ", s.DayOffKeywords);
         defaultMinutes = s.DefaultTaskMinutes;
@@ -314,6 +552,25 @@ else
         autoCalendar = s.AutoPlanAddToCalendar; autoMax = s.AutoPlanMaxTasks;
     }
 
+    private string FirstWorkDayName => usual.Days.FirstOrDefault(d => d.Working)?.Day.ToString() ?? "Monday";
+
+    private void CopyFirstWorkDay()
+    {
+        var first = usual.Days.FirstOrDefault(d => d.Working);
+        if (first is null) return;
+        foreach (var d in usual.Days.Where(d => d.Working)) { d.WorkStart = first.WorkStart; d.WorkEnd = first.WorkEnd; }
+    }
+
+    private void AddRegular() => usual.Regular.Add(new RegularTime { Days = new() { DayOfWeek.Monday } });
+
+    private void Edited() => blocksEdited = true;
+
+    private void BackToSimple()
+    {
+        if (blocksEdited) usual = UsualWeek.FromBlocks(blocks, out usualExact);
+        advanced = false;
+    }
+
     private async Task RunAutoPlanNow()
     {
         await SaveTemplate();
@@ -321,19 +578,27 @@ else
         catch (Exception ex) { Ui.Error(ex); }
     }
 
-    private void ToggleDay(PeriodBlock b, DayOfWeek d)
+    private static void ToggleDay(List<DayOfWeek> days, DayOfWeek d)
     {
-        if (!b.Days.Remove(d)) b.Days.Add(d);
+        if (!days.Remove(d)) days.Add(d);
     }
 
-    private void AddBlock() => blocks.Add(new PeriodBlock { Days = WeekOrder.Take(5).ToList(), Start = new(9, 0), End = new(17, 0), Kind = PeriodKind.Work, Label = "Work" });
+    private void AddBlock()
+    {
+        blocks.Add(new PeriodBlock { Days = UsualWeek.Order.Take(5).ToList(), Start = new(9, 0), End = new(17, 0), Kind = PeriodKind.Work, Label = "Work" });
+        blocksEdited = true;
+    }
 
     private async Task SaveTemplate()
     {
         var map = categoryMap.Where(kv => kv.Value != PeriodKind.Free).ToDictionary(kv => kv.Key, kv => kv.Value);
+        // The detailed editor wins only when it was used; otherwise the simple settings make the periods.
+        var detailed = advanced && blocksEdited;
+        var newBlocks = detailed ? blocks : usual.ToBlocks();
         await Settings.UpdateAsync(s =>
         {
-            s.Schedule.Blocks = blocks;
+            s.Schedule.Usual = detailed ? null : Json.Clone(usual);
+            s.Schedule.Blocks = newBlocks;
             s.Schedule.CategoryPeriods = map;
             s.Schedule.DayOffKeywords = dayOffWords.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             s.Schedule.DefaultTaskMinutes = Math.Max(5, defaultMinutes);
@@ -342,13 +607,17 @@ else
             s.Schedule.AutoPlanMorning = autoMorning; s.Schedule.AutoPlanMorningTime = autoMorningTime;
             s.Schedule.AutoPlanAddToCalendar = autoCalendar; s.Schedule.AutoPlanMaxTasks = Math.Clamp(autoMax, 1, 30);
         });
-        Ui.Show("Template saved");
+        Ui.Show("Saved");
+        LoadTemplate();
         await LoadDayAsync();
     }
 
     private void ResetTemplate()
     {
-        blocks = ScheduleSettings.DefaultBlocks();
+        usual = new UsualWeek();
+        usualExact = true;
+        blocks = usual.ToBlocks();
+        advanced = false; blocksEdited = false;
         categoryMap = new() { ["Work"] = PeriodKind.Work };
     }
 }

@@ -1,0 +1,117 @@
+@inject ScheduleService Schedule
+@inject UiState Ui
+
+@* Adds a one-off change to the usual week: time off, time out, reserved time or extra work. *@
+<Modal Open="Open" OpenChanged="OpenChanged" Title="Add to your schedule">
+    <ChildContent>
+        <div class="plan-kinds">
+            @foreach (var (k, title, help) in Kinds)
+            {
+                <button type="button" class="plan-kind @(kind == k ? "on" : "")" @onclick="() => Pick(k)">
+                    <strong>@title</strong><span>@help</span>
+                </button>
+            }
+        </div>
+        <div class="field">
+            <label>What's it for? <span class="muted">(optional)</span></label>
+            <input type="text" @bind="label" placeholder="@Placeholder" maxlength="60" />
+        </div>
+        <div class="form-grid">
+            <div class="field"><label>@(manyDays ? "From" : "Day")</label><input type="date" @bind="from" @bind:after="FromChanged" /></div>
+            @if (manyDays)
+            {
+                <div class="field"><label>To</label><input type="date" @bind="to" /></div>
+            }
+        </div>
+        <label class="check"><input type="checkbox" @bind="manyDays" /> More than one day</label>
+        <label class="check"><input type="checkbox" @bind="allDay" /> All day</label>
+        @if (!allDay)
+        {
+            <div class="form-grid">
+                <div class="field"><label>From</label><input type="time" @bind="start" /></div>
+                <div class="field"><label>To</label><input type="time" @bind="end" /></div>
+            </div>
+        }
+        <p class="small muted" style="margin-bottom:0">@Explain</p>
+    </ChildContent>
+    <Footer>
+        <button class="btn" @onclick="() => OpenChanged.InvokeAsync(false)">Cancel</button>
+        <button class="btn primary" @onclick="Save" disabled="@busy"><Icon Name="check" Size="15" /> Add</button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    /// <summary>The day the editor starts on.</summary>
+    [Parameter] public DateOnly Date { get; set; }
+    [Parameter] public EventCallback Saved { get; set; }
+
+    private static readonly (PlanKind, string, string)[] Kinds =
+    {
+        (PlanKind.DayOff, "Day off", "Holiday, leave, sick day"),
+        (PlanKind.Out, "Out", "Appointment, visiting, away"),
+        (PlanKind.Reserved, "Keep free", "Time set aside for something"),
+        (PlanKind.Working, "Working", "Extra shift or other hours")
+    };
+
+    private PlanKind kind = PlanKind.DayOff;
+    private string label = "";
+    private DateOnly from, to;
+    private bool manyDays, allDay = true, busy, wasOpen;
+    private TimeOnly start = new(14, 0), end = new(16, 0);
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !wasOpen)
+        {
+            kind = PlanKind.DayOff; label = ""; from = to = Date; manyDays = false; allDay = true;
+            start = new(14, 0); end = new(16, 0);
+        }
+        wasOpen = Open;
+    }
+
+    private void Pick(PlanKind k)
+    {
+        kind = k;
+        allDay = k == PlanKind.DayOff;
+        if (k == PlanKind.Working) { start = new(9, 0); end = new(17, 0); }
+        else if (!allDay) { start = new(14, 0); end = new(16, 0); }
+    }
+
+    private void FromChanged() { if (to < from) to = from; }
+
+    private string Placeholder => kind switch
+    {
+        PlanKind.DayOff => "e.g. Holiday",
+        PlanKind.Out => "e.g. Dentist",
+        PlanKind.Reserved => "e.g. Gym, family time",
+        _ => "e.g. Covering a shift"
+    };
+
+    private string Explain => kind switch
+    {
+        PlanKind.DayOff => allDay ? "Work time becomes free time, and LifeHub can plan tasks into it." : "That part of your work time becomes free time.",
+        PlanKind.Out => "LifeHub won't plan anything while you're out.",
+        PlanKind.Reserved => "LifeHub keeps this time free — nothing gets planned into it.",
+        _ => allDay ? "Uses your usual working hours. Work tasks can be planned into it." : "Counts as work time, so work tasks can be planned into it."
+    };
+
+    private async Task Save()
+    {
+        busy = true;
+        try
+        {
+            await Schedule.AddPlanAsync(new SchedulePlan
+            {
+                Kind = kind, Label = label, From = from, To = manyDays ? to : from,
+                Start = allDay ? null : start, End = allDay ? null : end
+            });
+            Ui.Show("Added to your schedule");
+            await OpenChanged.InvokeAsync(false);
+            await Saved.InvokeAsync();
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+}
