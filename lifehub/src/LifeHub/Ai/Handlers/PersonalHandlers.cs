@@ -1,3 +1,4 @@
+using LifeHub.Modules;
 using System.Globalization;
 
 namespace LifeHub.Ai.Handlers;
@@ -9,6 +10,7 @@ public sealed class ScheduleActionHandler : IAiActionHandler, IUserOnlyAction
     public ScheduleActionHandler(ScheduleService schedule) => _schedule = schedule;
 
     public string Type => "schedule";
+    public string? Module => ModuleKeys.Schedule;
     public string Label => "Schedule change";
     public string Instructions =>
         "Only when the user talks about their own availability: time off, holiday or sick (category \"day_off\"), being out or away " +
@@ -52,6 +54,7 @@ public sealed class MemoryActionHandler : IAiActionHandler, IUserOnlyAction
     public MemoryActionHandler(MemoryService memory) => _memory = memory;
 
     public string Type => "memory";
+    public string? Module => ModuleKeys.Memory;
     public string Label => "Remember";
     public string Instructions =>
         "Only when the user asks you to remember something, or tells you a lasting fact or preference about themselves or their household " +

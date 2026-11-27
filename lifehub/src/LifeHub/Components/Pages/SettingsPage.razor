@@ -1,6 +1,7 @@
 @page "/settings"
 @inject DataPaths Paths
 @inject UserContext User
+@inject ModuleRegistry Modules
 
 <PageTitle>Settings · LifeHub</PageTitle>
 
@@ -12,7 +13,7 @@
 </div>
 
 <div class="tabs">
-    @foreach (var (key, label) in Tabs.Where(t => (User.IsAdmin || PersonalTabs.Contains(t.Item1)) && (t.Item1 != "computer" || LifeHub.Desktop.DesktopRuntime.Active) && !(AppHost.IsPhoneApp && PhoneHidden.Contains(t.Item1))))
+    @foreach (var (key, label) in Tabs.Where(t => (User.IsAdmin || PersonalTabs.Contains(t.Item1)) && (t.Item1 != "computer" || LifeHub.Desktop.DesktopRuntime.Active) && !(AppHost.IsPhoneApp && PhoneHidden.Contains(t.Item1)) && (t.Item1 != "telegram" || Modules.IsOn(ModuleKeys.Telegram))))
     {
         <a class="tab @(Current == key ? "on" : "")" href="settings?tab=@key" style="text-decoration:none">@label</a>
     }
@@ -27,7 +28,7 @@
     case "ai" when User.IsAdmin: <SettingsAi /> break;
     case "email": <SettingsEmail /> break;
     case "notifications": <SettingsNotifications /> break;
-    case "telegram" when !AppHost.IsPhoneApp: <SettingsTelegram /> break;
+    case "telegram" when !AppHost.IsPhoneApp && Modules.IsOn(ModuleKeys.Telegram): <SettingsTelegram /> break;
     case "security": <SettingsSecurity /> break;
     case "backup" when User.IsAdmin: <SettingsBackup /> break;
     case "general" when User.IsAdmin: <SettingsGeneral /> break;

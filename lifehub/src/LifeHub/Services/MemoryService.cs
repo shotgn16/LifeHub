@@ -1,3 +1,4 @@
+using LifeHub.Modules;
 namespace LifeHub.Services;
 
 /// <summary>What LifeHub remembers (AI Inbox → Memory), and the short block of it given to the AI.</summary>
@@ -9,11 +10,15 @@ public sealed class MemoryService
 
     private readonly IRepository<MemoryFact> _repo;
     private readonly SettingsService _settings;
+    private readonly IServiceProvider _sp;
 
-    public MemoryService(IRepository<MemoryFact> repo, SettingsService settings)
+    public MemoryService(IRepository<MemoryFact> repo, SettingsService settings, IServiceProvider sp)
     {
-        _repo = repo; _settings = settings;
+        _repo = repo; _settings = settings; _sp = sp;
     }
+
+    /// <summary>Switched on in Settings → Modules.</summary>
+    public bool IsOn => _sp.GetService<LifeHub.Modules.ModuleRegistry>()?.IsOn(ModuleKeys.Memory) != false;
 
     public IRepository<MemoryFact> Repo => _repo;
 
@@ -53,6 +58,7 @@ public sealed class MemoryService
     /// </summary>
     public string PromptBlock()
     {
+        if (!IsOn) return "";
         var facts = All();
         if (facts.Count == 0) return "";
         var name = _settings.Me?.Name is { Length: > 0 } n ? NotificationService.FirstName(n) : "the user";

@@ -37,6 +37,8 @@ public sealed class App : Application
     protected override void OnResume()
     {
         _sp.GetRequiredService<PhoneJobs>().AppOpened();
+        // Connected to a server: the page's live connection dropped while the app was in the background — restore it.
+        if (Windows.Count > 0 && Windows[0].Page is ServerPage server) _ = server.ResumedAsync();
         base.OnResume();
     }
 }

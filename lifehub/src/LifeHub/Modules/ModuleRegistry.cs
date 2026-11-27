@@ -31,6 +31,9 @@ public sealed class ModuleRegistry
     public IReadOnlyList<LifeHubModule> Enabled() =>
         _all.Where(m => IsOn(m.Key) && (m.Available?.Invoke(_sp) ?? true)).ToList();
 
+    /// <summary>The menu and bottom bar: switched-on modules that have a page.</summary>
+    public IReadOnlyList<LifeHubModule> Menu() => Enabled().Where(m => m.InMenu).ToList();
+
     public int BadgeOf(LifeHubModule m)
     {
         try { return m.Badge?.Invoke(_sp) ?? 0; } catch { return 0; }
@@ -45,6 +48,15 @@ public sealed class ModuleRegistry
         return list.Where(m => !me.DashboardHidden.Contains(m.Key))
             .OrderBy(m => order.IndexOf(m.Key) is var i && i >= 0 ? i : 1000 + m.Order).ToList();
     }
+}
+
+/// <summary>Keys of modules that other code checks.</summary>
+public static class ModuleKeys
+{
+    public const string Ask = "ask";
+    public const string Memory = "memory";
+    public const string Telegram = "telegram";
+    public const string Schedule = "schedule";
 }
 
 public static class ModuleServiceExtensions
@@ -114,6 +126,17 @@ public static class ModuleServiceExtensions
             Key = "inbox", Title = "AI Inbox", Icon = "inbox", Route = "inbox", Section = "Connected", Order = 90,
             Description = "Your email, read by your own AI and turned into tasks, events and renewals.", Widget = typeof(InboxWidget),
             Badge = sp => sp.GetRequiredService<LifeHub.Ai.AiService>().PendingCount
+        });
+        // Features without their own page: switched on and off here like the rest.
+        services.AddLifeHubModule(new LifeHubModule
+        {
+            Key = ModuleKeys.Ask, Title = "Ask LifeHub", Icon = "sparkles", Route = "inbox", Section = "AI", Order = 92, InMenu = false,
+            Description = "The Ask button: questions and requests in plain English, confirmed before anything changes. Needs an AI."
+        });
+        services.AddLifeHubModule(new LifeHubModule
+        {
+            Key = ModuleKeys.Memory, Title = "Memory", Icon = "brain", Route = "inbox?tab=memory", Section = "AI", Order = 94, InMenu = false,
+            Description = "Facts the AI keeps in mind, like diets and routines (AI Inbox → Memory)."
         });
         return services;
     }

@@ -7,6 +7,7 @@
 @inject BackupService Backups
 @inject DealsService Deals
 @inject UiState Ui
+@inject ModuleRegistry Modules
 
 @* What LifeHub does by itself, and how often. The phone apps have their own settings for what they do on the phone. *@
 
@@ -87,7 +88,7 @@
                 <div class="meta">Watches who's home in Home Assistant and sends the shopping list to whoever leaves. @LastRun(BackgroundJobs.Presence)</div>
             </div>
         </li>
-        @if (!AppHost.IsPhoneApp)
+        @if (!AppHost.IsPhoneApp && Modules.IsOn(ModuleKeys.Telegram))
         {
             <li class="row">
                 <Toggle Value="@On(BackgroundJobs.Telegram)" ValueChanged="v => Set(BackgroundJobs.Telegram, v)" />

@@ -723,3 +723,29 @@ table.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 /* ---------- Telegram ---------- */
 .steps { padding-left: 20px; margin: 8px 0 12px; display: grid; gap: 8px; }
 .steps li { line-height: 1.5; }
+
+/* ---------- Reconnecting (after the phone or tab was asleep) ---------- */
+/* A small bar near the bottom, clear of camera cut-outs and the home bar, that doesn't block the page. */
+#components-reconnect-modal { display: none; }
+#components-reconnect-modal.components-reconnect-show,
+#components-reconnect-modal.components-reconnect-failed,
+#components-reconnect-modal.components-reconnect-rejected {
+  display: flex; position: fixed; left: 0; right: 0; z-index: 1000; justify-content: center; pointer-events: none;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px)); padding: 0 16px;
+}
+.reconnect-box { pointer-events: auto; display: flex; align-items: center; gap: 10px; max-width: 100%;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px;
+  padding: 8px 10px 8px 16px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,.18)); font-size: .9rem; }
+.reconnect-spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: lh-spin 0.8s linear infinite; flex-shrink: 0; }
+#components-reconnect-modal .reconnect-gone { display: none; }
+#components-reconnect-modal.components-reconnect-failed .reconnect-gone,
+#components-reconnect-modal.components-reconnect-rejected .reconnect-gone { display: inline-flex; }
+#components-reconnect-modal.components-reconnect-failed .reconnect-busy,
+#components-reconnect-modal.components-reconnect-rejected .reconnect-busy,
+#components-reconnect-modal.components-reconnect-failed .reconnect-spinner,
+#components-reconnect-modal.components-reconnect-rejected .reconnect-spinner { display: none; }
+@media (min-width: 761px) { #components-reconnect-modal.components-reconnect-show,
+  #components-reconnect-modal.components-reconnect-failed, #components-reconnect-modal.components-reconnect-rejected { bottom: 24px; } }
+
+.list > .list-head { padding: 14px 0 4px; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-top: 0; }

@@ -38,8 +38,11 @@ public sealed class AiService
     // ---------- Prompt & schema ----------
 
     /// <summary>The actions the AI may propose for this kind of input (emails never get the user-only ones).</summary>
-    public IEnumerable<IAiActionHandler> HandlersFor(string origin) =>
-        origin == "email" ? _handlers.Where(h => h is not IUserOnlyAction) : _handlers;
+    public IEnumerable<IAiActionHandler> HandlersFor(string origin)
+    {
+        var modules = _sp.GetService<LifeHub.Modules.ModuleRegistry>();
+        return _handlers.Where(h => !(origin == "email" && h is IUserOnlyAction) && (h.Module is null || modules?.IsOn(h.Module) != false));
+    }
 
     public string BuildSystemPrompt(string origin = "email")
     {

@@ -16,7 +16,32 @@ public class MainActivity : MauiAppCompatActivity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
+        KeepClearOfSystemBars();
         HandleIntent(Intent);
+    }
+
+    /// <summary>
+    /// Android 15 draws apps edge to edge, under the status bar, the camera cut-out and the gesture bar. LifeHub's pages
+    /// aren't made for that (buttons ended up behind the camera), so the app's content is padded to sit between them,
+    /// and above the keyboard when it's open.
+    /// </summary>
+    private void KeepClearOfSystemBars()
+    {
+        if (FindViewById(Android.Resource.Id.Content) is not { } content) return;
+        AndroidX.Core.View.ViewCompat.SetOnApplyWindowInsetsListener(content, new SystemBarPadding());
+    }
+
+    private sealed class SystemBarPadding : Java.Lang.Object, AndroidX.Core.View.IOnApplyWindowInsetsListener
+    {
+        public AndroidX.Core.View.WindowInsetsCompat OnApplyWindowInsets(Android.Views.View? v, AndroidX.Core.View.WindowInsetsCompat? insets)
+        {
+            if (v is null || insets is null) return insets!;
+            var types = AndroidX.Core.View.WindowInsetsCompat.Type.SystemBars() | AndroidX.Core.View.WindowInsetsCompat.Type.DisplayCutout() |
+                        AndroidX.Core.View.WindowInsetsCompat.Type.Ime();
+            var bars = insets.GetInsets(types);
+            v.SetPadding(bars.Left, bars.Top, bars.Right, bars.Bottom);
+            return AndroidX.Core.View.WindowInsetsCompat.Consumed!;
+        }
     }
 
     protected override void OnNewIntent(Intent? intent)

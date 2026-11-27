@@ -1,5 +1,8 @@
 # Ask LifeHub, memory and Telegram
 
+Don't need one of these? Switch it off in **Settings → Modules** (under **AI**), like any other
+part of LifeHub.
+
 ## Ask LifeHub
 
 Press **Ask** at the top of any page (the **+** button on a phone), or use the box at the top of

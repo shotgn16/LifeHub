@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.1
+- Reopening LifeHub after the phone or tab was asleep no longer freezes: it reconnects (or reloads
+  itself) straight away.
+- Phone app: nothing hides behind the camera cut-out on Android 15 any more.
+- Ask LifeHub, Memory and Telegram can be switched off in **Settings → Modules**.
+
 ## 3.2.0
 - **Ask LifeHub**: ask questions about your tasks, week, kitchen and renewals, or tell it what to
   do ("add milk", "I'm out Thursday 2–4"). It always asks before changing anything.

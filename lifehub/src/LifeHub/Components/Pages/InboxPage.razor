@@ -51,7 +51,10 @@
     <button class="tab @(tab == "history" ? "on" : "")" @onclick='() => tab = "history"'>History</button>
     <button class="tab @(tab == "promotions" ? "on" : "")" @onclick='() => tab = "promotions"'>Promotions @if (promotions.Count > 0) { <span class="badge">@promotions.Count</span> }</button>
     <button class="tab @(tab == "emails" ? "on" : "")" @onclick='() => tab = "emails"'>Emails read</button>
+    @if (Memory.IsOn)
+    {
     <button class="tab @(tab == "memory" ? "on" : "")" @onclick='() => tab = "memory"'>Memory @if (facts.Count > 0) { <span class="badge">@facts.Count</span> }</button>
+    }
 </div>
 
 @if (tab == "pending")
@@ -217,7 +220,7 @@ else if (tab == "emails")
     </div>
 }
 
-else if (tab == "memory")
+else if (tab == "memory" && Memory.IsOn)
 {
     <div class="card">
         <p class="small muted" style="margin-top:0">Things LifeHub's AI keeps in mind when it reads your email, answers questions and plans meals —

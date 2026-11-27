@@ -58,6 +58,11 @@ static WebApplication CreateLifeHub(string[] args, string? urls, bool windowsSer
     builder.Services.AddHostedService(sp => sp.GetRequiredService<HaListSyncService>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailSyncService>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationService>());
+    builder.Services.AddLifeHubModule(new LifeHubModule
+    {
+        Key = ModuleKeys.Telegram, Title = "Telegram", Icon = "send", Route = "settings?tab=telegram", Section = "AI", Order = 96, InMenu = false,
+        Description = "Chat with LifeHub and get notifications in Telegram (Settings → Telegram). Not in the phone app on its own."
+    });
     builder.Services.AddSingleton<LifeHub.Integrations.Telegram.TelegramService>();
     builder.Services.AddSingleton<LifeHub.Integrations.Telegram.IChatNotifier>(sp => sp.GetRequiredService<LifeHub.Integrations.Telegram.TelegramService>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<LifeHub.Integrations.Telegram.TelegramService>());

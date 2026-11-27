@@ -38,6 +38,11 @@ public sealed class LifeHubModule
     public Func<IServiceProvider, int>? Badge { get; init; }
     /// <summary>Only shown when this returns true (e.g. only when Home Assistant is connected).</summary>
     public Func<IServiceProvider, bool>? Available { get; init; }
+    /// <summary>
+    /// False for a feature without a page of its own (Ask LifeHub, Memory, Telegram): it can still be switched off in
+    /// Settings → Modules, but it isn't in the menu.
+    /// </summary>
+    public bool InMenu { get; init; } = true;
     /// <summary>Another module this one needs (e.g. Scan needs Kitchen).</summary>
     public string? Requires { get; init; }
 }

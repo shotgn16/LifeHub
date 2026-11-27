@@ -39,6 +39,25 @@ public sealed class ServerPage : ContentPage
 
     private string Base => _state.ServerUrl.TrimEnd('/');
 
+    /// <summary>
+    /// The app was reopened. If LifeHub can't be reached, show the offline screen; if it can, tell the page to restore its
+    /// connection (it reloads itself when the server has let the old session go); from the offline screen, go back online.
+    /// </summary>
+    public async Task ResumedAsync()
+    {
+        try
+        {
+            var reachable = await _client.ReachableAsync();
+            await MainThread.InvokeOnMainThreadAsync(async () =>
+            {
+                if (!reachable) { if (!_offline) await ShowOfflineAsync(); return; }
+                if (_offline) { _offline = false; SignIn(); return; }
+                await _web.EvaluateJavaScriptAsync("window.lifehubResume && window.lifehubResume()");
+            });
+        }
+        catch (Exception) { /* the page's own reconnect handling still runs */ }
+    }
+
     public async Task OpenAsync()
     {
         if (await _client.ReachableAsync()) { _offline = false; SignIn(); }

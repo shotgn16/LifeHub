@@ -21,6 +21,9 @@ public interface IAiActionHandler
     /// </summary>
     string Instructions { get; }
 
+    /// <summary>The module this action belongs to (Settings → Modules); while it's switched off the AI isn't offered it.</summary>
+    string? Module => null;
+
     /// <summary>Performs the action. Returns a short result line shown in the AI Inbox.</summary>
     Task<string> ApplyAsync(AiSuggestion suggestion, CancellationToken ct);
 }

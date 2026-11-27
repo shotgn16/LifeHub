@@ -1,3 +1,4 @@
+using LifeHub.Modules;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
@@ -54,7 +55,9 @@ public sealed class TelegramService : BackgroundService, IChatNotifier
     /// <summary>Last problem talking to Telegram, for Settings (empty when all is well).</summary>
     public string LastError { get; private set; } = "";
     public DateTime? LastContactUtc { get; private set; }
-    public bool Running => _settings.Household.Telegram.IsReady && _settings.Household.Background.IsOn(BackgroundJobs.Telegram);
+    public bool Running => IsOn && _settings.Household.Telegram.IsReady && _settings.Household.Background.IsOn(BackgroundJobs.Telegram);
+    /// <summary>The Telegram module is switched on (Settings → Modules).</summary>
+    public bool IsOn => _sp.GetService<LifeHub.Modules.ModuleRegistry>()?.IsOn(ModuleKeys.Telegram) == true;
 
     public IReadOnlyList<TelegramPairing> Pairings =>
         _pairings.Values.Where(p => p.ExpiresUtc > DateTime.UtcNow).OrderBy(p => p.ExpiresUtc).ToList();

@@ -1,7 +1,7 @@
-@inject AiService Ai
+@inject AskService Ask
 
 @* The "Ask" / "Add" pop-up from the top bar and the phone's + button. *@
-<Modal Open="Open" OpenChanged="OpenChanged" Title="@(Ai.IsAvailable ? "Ask LifeHub" : "Add something")">
+<Modal Open="Open" OpenChanged="OpenChanged" Title="@(Ask.IsAvailable ? "Ask LifeHub" : "Add something")">
     <ChildContent>
         @if (Open)
         {

@@ -9,6 +9,7 @@
 @inject UiState UiState
 @inject NavigationManager Nav
 @inject ModuleRegistry Modules
+@inject AskService Ask
 @inject Clock Clock
 @inject UserContext User
 
@@ -70,7 +71,7 @@
                 </span>
             }
             <div class="right" style="display:flex;gap:4px;align-items:center">
-                <button class="btn sm primary" @onclick="() => captureOpen = true" aria-label="@(Ai.IsAvailable ? "Ask LifeHub" : "Add")"><Icon Name="@(Ai.IsAvailable ? "sparkles" : "plus")" Size="15" /> <span class="desktop-only">@(Ai.IsAvailable ? "Ask" : "Add")</span></button>
+                <button class="btn sm primary" @onclick="() => captureOpen = true" aria-label="@(Ask.IsAvailable ? "Ask LifeHub" : "Add")"><Icon Name="@(Ask.IsAvailable ? "sparkles" : "plus")" Size="15" /> <span class="desktop-only">@(Ask.IsAvailable ? "Ask" : "Add")</span></button>
                 <div class="dropdown">
                     <button class="icon-btn" @onclick="ToggleNotices" aria-label="Notifications">
                         <Icon Name="bell" />
@@ -169,7 +170,7 @@
     private void Refresh()
     {
         // Menu entries and their counts come from the modules (Modules/ModuleRegistry.cs).
-        nav = Modules.Enabled().ToList();
+        nav = Modules.Menu().ToList();
         unread = Notices.UnreadCount;
         recent = Notices.Recent(25).ToList();
         householdName = Settings.Current.General.HouseholdName;

@@ -48,6 +48,10 @@ Telegram) and never from an email, add the marker interface `IUserOnlyAction`
 (`class MyHandler : IAiActionHandler, IUserOnlyAction`). LifeHub's own schedule, memory and
 tick-off actions use it, so an email's sender can't change someone's schedule or memory.
 
+A feature without a page of its own can still be a module (`InMenu = false`), so it can be
+switched off in Settings → Modules; Ask LifeHub, Memory and Telegram work this way. Give an AI
+action a `Module` key and the AI isn't offered it while that module is off.
+
 Ask LifeHub (`AskService`) gives the model a compact picture of the person's lists and week
 (`AskService.ContextAsync`) and the facts in **AI Inbox → Memory** (`MemoryService.PromptBlock`).
 Its suggestions are always saved for review, never applied automatically.

@@ -7,8 +7,11 @@
     <h2 style="margin-bottom:4px">Modules</h2>
     <p class="small muted" style="margin-top:0">Switch off the parts of LifeHub your household doesn't use; they disappear from the menu and the home screen (nothing is deleted — switch them back on any time). Developers can add their own modules; see <code>docs/extending.md</code>.</p>
     <ul class="list">
-        @foreach (var m in Modules.All.Where(m => !m.Core))
+        @foreach (var group in Modules.All.Where(m => !m.Core).GroupBy(m => m.Section))
         {
+            <li class="list-head">@group.Key</li>
+            @foreach (var m in group)
+            {
             var on = !off.Contains(m.Key);
             <li class="row">
                 <Icon Name="@m.Icon" Size="18" />
@@ -18,12 +21,14 @@
                 </div>
                 <label class="switch"><input type="checkbox" checked="@on" @onchange="e => Toggle(m.Key, (bool)e.Value!)" /></label>
             </li>
+            }
         }
     </ul>
 </div>
 
 @code {
     private List<string> off = new();
+
 
     protected override void OnInitialized() => off = Settings.Household.General.DisabledModules.ToList();
 

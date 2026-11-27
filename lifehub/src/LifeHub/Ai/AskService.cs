@@ -1,3 +1,4 @@
+using LifeHub.Modules;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -26,15 +27,19 @@ public sealed class AskService
     private readonly SettingsService _settings;
     private readonly Clock _clock;
     private readonly ILogger<AskService> _log;
+    private readonly IServiceProvider _sp;
 
     public AskService(AiService ai, TaskService tasks, KitchenService kitchen, RenewalService renewals, MealService meals,
-        ScheduleService schedule, CalendarService calendar, SettingsService settings, Clock clock, ILogger<AskService> log)
+        ScheduleService schedule, CalendarService calendar, SettingsService settings, Clock clock, ILogger<AskService> log, IServiceProvider sp)
     {
+        _sp = sp;
         _ai = ai; _tasks = tasks; _kitchen = kitchen; _renewals = renewals; _meals = meals;
         _schedule = schedule; _calendar = calendar; _settings = settings; _clock = clock; _log = log;
     }
 
-    public bool IsAvailable => _ai.IsAvailable;
+    /// <summary>An AI is set up and Ask LifeHub is switched on (Settings → Modules).</summary>
+    public bool IsAvailable => _ai.IsAvailable && IsOn;
+    public bool IsOn => _sp.GetService<LifeHub.Modules.ModuleRegistry>()?.IsOn(ModuleKeys.Ask) != false;
 
     /// <summary>Asks the AI. <paramref name="origin"/> is "ask" (the app), "telegram" or "api".</summary>
     public async Task<AskReply> AskAsync(string text, string origin = "ask", CancellationToken ct = default)
@@ -42,6 +47,7 @@ public sealed class AskService
         text = (text ?? "").Trim();
         if (text.Length == 0) throw new InvalidOperationException("Type a question or something to do");
         if (text.Length > MaxQuestionChars) text = text[..MaxQuestionChars];
+        if (!IsOn) throw new InvalidOperationException("Ask LifeHub is switched off in Settings → Modules.");
         if (!_ai.IsAvailable) throw new InvalidOperationException("Set up an AI in Settings → AI first.");
 
         var context = await ContextAsync(ct);

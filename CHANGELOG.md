@@ -9,6 +9,21 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [3.2.1] – Unreleased
+
+### Added
+- **Ask LifeHub, Memory and Telegram are modules**: switch each off in **Settings → Modules**
+  (now grouped like the menu). Switched off, Ask becomes the plain Add button, Memory isn't given
+  to the AI, and the Telegram bot stops.
+
+### Fixed
+- **Reopening LifeHub after it's been in the background** no longer leaves it frozen: it reconnects
+  straight away, and reloads itself when the server has let the old session go. The message shown
+  meanwhile is a small bar near the bottom of the screen with a **Try again** button.
+- **Phone app (Android 15)**: LifeHub no longer draws under the status bar and camera cut-out (or
+  under the keyboard), so buttons at the top of the screen can be reached. Reopening the app
+  reconnects to your LifeHub, or shows the offline screen if it can't be reached.
+
 ## [3.2.0] – 2026-11-27
 
 Ask LifeHub anything, chat with it on Telegram, give its AI a memory, and set up your week properly.

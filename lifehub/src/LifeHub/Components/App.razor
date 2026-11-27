@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <base href="@BaseHref" />
-    <link rel="stylesheet" href="css/theme.css?v=11" />
-    <link rel="stylesheet" href="app.css?v=11" />
+    <link rel="stylesheet" href="css/theme.css?v=12" />
+    <link rel="stylesheet" href="app.css?v=12" />
     @if (!string.IsNullOrEmpty(Look.Accent))
     {
         <style>:root{--accent:@Look.Accent;--accent-soft:color-mix(in srgb,@Look.Accent 14%,var(--surface));}</style>
@@ -23,7 +23,17 @@
 </head>
 <body>
     <Routes @rendermode="PageRenderMode" />
-    <script src="_framework/blazor.web.js"></script>
+    @* Shown while the live connection is being restored (e.g. after the phone was asleep); see js/reconnect.js. *@
+    <div id="components-reconnect-modal" class="reconnect" role="status" aria-live="polite">
+        <div class="reconnect-box">
+            <span class="reconnect-spinner" aria-hidden="true"></span>
+            <span class="reconnect-text reconnect-busy">Reconnecting to LifeHub…</span>
+            <span class="reconnect-text reconnect-gone">Can't reach LifeHub right now.</span>
+            <button type="button" class="btn sm primary reconnect-gone" onclick="location.reload()">Try again</button>
+        </div>
+    </div>
+    <script src="_framework/blazor.web.js" autostart="false"></script>
+    <script src="js/reconnect.js?v=2"></script>
 </body>
 </html>
 

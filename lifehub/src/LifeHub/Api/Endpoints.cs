@@ -198,7 +198,7 @@ public static class Endpoints
         // Ask LifeHub: an answer, plus suggestions that wait for POST /suggestions/{id}/apply (or the app's AI Inbox).
         api.MapPost("/ask", async (CaptureRequest req, AskService ask) =>
         {
-            if (!ask.IsAvailable) return Results.Problem("No AI is set up (Settings → AI)", statusCode: 503);
+            if (!ask.IsAvailable) return Results.Problem(ask.IsOn ? "No AI is set up (Settings → AI)" : "Ask LifeHub is switched off (Settings → Modules)", statusCode: 503);
             var reply = await ask.AskAsync(req.Text, "api");
             return Results.Ok(new
             {
