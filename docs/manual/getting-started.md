@@ -37,7 +37,8 @@ Press **Customise** to show, hide and reorder the cards.
 | Renewals | Subscriptions, insurance, bills and their dates |
 | Kitchen / Scan / Shopping / Meals | Food at home, the shopping list and the meal plan |
 | Home | Your Home Assistant rooms (when connected) |
-| AI Inbox | Ask LifeHub, emails turned into tasks and events, and what the AI remembers |
+| AI Inbox | Ask LifeHub, and emails turned into tasks and events |
+| Memory | What LifeHub's AI knows about you — add to it any time |
 | Settings | Everything else |
 
 Don't need some of these? Turn them off in **Settings → Modules** — see [Make it yours](customise.md).

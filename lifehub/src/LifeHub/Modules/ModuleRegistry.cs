@@ -135,8 +135,8 @@ public static class ModuleServiceExtensions
         });
         services.AddLifeHubModule(new LifeHubModule
         {
-            Key = ModuleKeys.Memory, Title = "Memory", Icon = "brain", Route = "inbox?tab=memory", Section = "AI", Order = 94, InMenu = false,
-            Description = "Facts the AI keeps in mind, like diets and routines (AI Inbox → Memory)."
+            Key = ModuleKeys.Memory, Title = "Memory", Icon = "brain", Route = "memory", Section = "AI", Order = 94,
+            Description = "What LifeHub knows: facts the AI keeps in mind, like diets and routines."
         });
         return services;
     }

@@ -23,12 +23,13 @@ Ask needs an AI (**Settings → AI**). Without one, the same box adds tasks, sho
 
 ## Memory
 
-**AI Inbox → Memory** is a short list of things LifeHub's AI keeps in mind: routines, diets,
+**Memory** (in the menu) shows everything LifeHub's AI keeps in mind, and is where you add to it — a short list of things: routines, diets,
 people, regular arrangements — *"Sam is vegetarian"*, *"bins go out Tuesday night"*,
 *"I work from home on Fridays"*. The AI uses them when it reads your email, answers questions and
 suggests meals.
 
-- Type one and press **Remember**, or tell LifeHub *"remember…"* and confirm.
+- Add them on the **Memory** page (one per line), type them in the **Ask** box and press
+  **Remember** (no AI needed), send `/remember …` on Telegram, or tell LifeHub *"remember…"* and confirm.
 - Each is just for you unless you press **Share**, so everyone's AI in the household uses it.
 - Edit or forget any of them at any time. LifeHub never adds one without you confirming, and
   refuses things that look like passwords or bank details.
@@ -57,7 +58,8 @@ Or the admin can connect it for you: people who messaged the bot are listed unde
 connected** — choose who it is and press **Connect**. Only connect chats you recognise.
 
 Once connected, switch **Send my notifications here too** on or off. In the chat:
-`/today` shows today at a glance, `/shopping` the shopping list, and `/stop` disconnects.
+`/today` shows today at a glance, `/shopping` the shopping list, `/remember …` saves something
+to memory, and `/stop` disconnects.
 
 Good to know:
 - LifeHub only answers chats someone connected. Anyone else just gets a code, which only works

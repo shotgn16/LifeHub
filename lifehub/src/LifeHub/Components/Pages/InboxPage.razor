@@ -10,6 +10,7 @@
 @inject IRepository<Promotion> Promotions
 @inject KitchenService Kitchen
 @inject MemoryService Memory
+@inject NavigationManager Nav
 
 <PageTitle>AI Inbox · LifeHub</PageTitle>
 
@@ -53,7 +54,7 @@
     <button class="tab @(tab == "emails" ? "on" : "")" @onclick='() => tab = "emails"'>Emails read</button>
     @if (Memory.IsOn)
     {
-    <button class="tab @(tab == "memory" ? "on" : "")" @onclick='() => tab = "memory"'>Memory @if (facts.Count > 0) { <span class="badge">@facts.Count</span> }</button>
+        <a class="tab" href="memory">Memory @if (facts.Count > 0) { <span class="badge">@facts.Count</span> }</a>
     }
 </div>
 
@@ -220,61 +221,12 @@ else if (tab == "emails")
     </div>
 }
 
-else if (tab == "memory" && Memory.IsOn)
-{
-    <div class="card">
-        <p class="small muted" style="margin-top:0">Things LifeHub's AI keeps in mind when it reads your email, answers questions and plans meals —
-            routines, diets, people, regular arrangements. Add them here, or tell LifeHub (<em>"remember the bins go out Tuesday night"</em>) and confirm.
-            It never saves anything here by itself. Don't add passwords or bank details.</p>
-        <div class="memory-add">
-            <input type="text" @bind="newFact" @bind:event="oninput" maxlength="@MemoryService.MaxFactChars" placeholder="e.g. Sam is vegetarian" aria-label="Something to remember" />
-            <button class="btn primary" disabled="@string.IsNullOrWhiteSpace(newFact)" @onclick="AddFact"><Icon Name="plus" Size="15" /> Remember</button>
-        </div>
-        <label class="check" style="margin-top:8px"><input type="checkbox" @bind="newFactShared" /> Everyone in the household can use this</label>
-        <ul class="list">
-            @if (facts.Count == 0) { <li class="empty small">Nothing yet.</li> }
-            @foreach (var f in facts)
-            {
-                var mine = f.OwnerId == (UserScope.UserId ?? Guid.Empty) || f.OwnerId == Guid.Empty;
-                <li class="row">
-                    @if (editingFact == f.Id)
-                    {
-                        <input type="text" class="grow" @bind="editText" maxlength="@MemoryService.MaxFactChars" aria-label="Edit" />
-                        <button class="btn sm" @onclick="() => editingFact = null">Cancel</button>
-                        <button class="btn sm primary" @onclick="() => SaveFact(f)">Save</button>
-                    }
-                    else
-                    {
-                        <div class="grow">
-                            <div class="title">@f.Text</div>
-                            <div class="meta">
-                                <span>@(f.Shared ? "Whole household" : "Just you")</span>
-                                <span>@(f.Source switch { "ask" => "from Ask LifeHub", "telegram" => "from Telegram", _ => "added by you" })</span>
-                                <span>@Fmt.Ago(f.CreatedUtc)</span>
-                            </div>
-                        </div>
-                        @if (mine)
-                        {
-                            <button class="btn sm" title="@(f.Shared ? "Only use it for you" : "Let everyone in the household's AI use it")" @onclick="() => ToggleShared(f)">@(f.Shared ? "Just me" : "Share")</button>
-                            <button class="icon-btn" title="Edit" @onclick="() => { editingFact = f.Id; editText = f.Text; }"><Icon Name="edit" Size="15" /></button>
-                            <button class="icon-btn" title="Forget" @onclick="() => ForgetFact(f)"><Icon Name="trash" Size="15" /></button>
-                        }
-                    }
-                </li>
-            }
-        </ul>
-    </div>
-}
-
 @code {
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
     private string tab = "pending";
     private bool checking;
     private List<MemoryFact> facts = new();
-    private string newFact = "";
-    private bool newFactShared;
-    private Guid? editingFact;
-    private string editText = "";
+
     private List<AiSuggestion> pending = new();
     private List<AiSuggestion> history = new();
     private List<EmailRecord> emails = new();
@@ -336,7 +288,8 @@ else if (tab == "memory" && Memory.IsOn)
         Watch(Emails);
         Watch(Promotions);
         Watch(Memory.Repo);
-        if (Tab is "history" or "promotions" or "emails" or "memory") tab = Tab;
+        if (Tab == "memory") { Nav.NavigateTo("memory", replace: true); return; }   // where Memory used to be
+        if (Tab is "history" or "promotions" or "emails") tab = Tab;
         Load();
     }
 
@@ -352,30 +305,6 @@ else if (tab == "memory" && Memory.IsOn)
         emails = Emails.All().OrderByDescending(e => e.ReceivedUtc).Take(200).ToList();
         promotions = Promotions.Where(p => !p.Dismissed).OrderBy(p => p.EndsOn ?? DateOnly.MaxValue).ThenByDescending(p => p.CreatedUtc).ToList();
         facts = Memory.All().ToList();
-    }
-
-    // ----- memory -----
-
-    private async Task AddFact()
-    {
-        await Ui.Try(async () => { await Memory.AddAsync(newFact, newFactShared); newFact = ""; }, "Remembered");
-    }
-
-    private async Task SaveFact(MemoryFact f)
-    {
-        await Ui.Try(async () => { f.Text = editText; await Memory.SaveAsync(f); editingFact = null; }, "Saved");
-    }
-
-    private async Task ToggleShared(MemoryFact f)
-    {
-        f.Shared = !f.Shared;
-        await Memory.SaveAsync(f);
-    }
-
-    private async Task ForgetFact(MemoryFact f)
-    {
-        await Memory.DeleteAsync(f.Id);
-        Ui.Show("Forgotten");
     }
 
     private async Task Approve(AiSuggestion s)

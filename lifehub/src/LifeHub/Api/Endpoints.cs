@@ -155,6 +155,7 @@ public static class Endpoints
     }
 
     public sealed record CaptureRequest(string Text);
+    public sealed record MemoryRequest(string Text, bool Shared = false);
     public sealed record TaskRequest(string Title, string? Category, DateOnly? Due, TimeOnly? Time, string? Priority, string? Notes);
     public sealed record ShoppingRequest(string Name, decimal? Quantity, string? Unit);
     public sealed record ScanRequest(string Barcode, string? Mode, decimal? Quantity);
@@ -205,6 +206,21 @@ public static class Endpoints
                 answer = reply.Answer,
                 suggestions = reply.Suggestions.Select(s => new { s.Id, s.Type, s.Title, s.Date, s.Time, status = s.Status.ToString() })
             });
+        });
+
+        // Memory (the Memory page): what the AI keeps in mind.
+        api.MapGet("/memory", (MemoryService memory) => memory.All().Select(f => new { f.Id, f.Text, f.Shared, f.Source, f.CreatedUtc }));
+        api.MapPost("/memory", async (MemoryRequest req, MemoryService memory) =>
+        {
+            if (!memory.IsOn) return Results.Problem("Memory is switched off (Settings → Modules)", statusCode: 503);
+            try { return Results.Ok(new { saved = await memory.AddLinesAsync(req.Text, req.Shared, "api") }); }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+        api.MapDelete("/memory/{id:guid}", async (Guid id, MemoryService memory) =>
+        {
+            if (memory.Repo.Get(id) is null) return Results.NotFound();
+            await memory.DeleteAsync(id);
+            return Results.Ok();
         });
 
         api.MapPost("/suggestions/{id:guid}/apply", async (Guid id, AiService ai) =>

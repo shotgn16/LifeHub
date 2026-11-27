@@ -9,6 +9,17 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
+## [3.2.2] – Unreleased
+
+### Added
+- **Memory has its own page in the menu**: add things (one per line) and see everything LifeHub
+  knows, with search, edit, share and forget. Old links to AI Inbox → Memory go there.
+- **Remember** button in the Ask / Add box saves what you typed straight to memory — no AI needed.
+- Telegram: `/remember …`. API: `GET`/`POST /api/v1/memory`, `DELETE /api/v1/memory/{id}`.
+
+### Changed
+- Passwords, PINs and account numbers are refused however they're added to memory.
+
 ## [3.2.1] – 2026-11-27
 
 ### Added

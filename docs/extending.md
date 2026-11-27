@@ -53,7 +53,7 @@ switched off in Settings → Modules; Ask LifeHub, Memory and Telegram work this
 action a `Module` key and the AI isn't offered it while that module is off.
 
 Ask LifeHub (`AskService`) gives the model a compact picture of the person's lists and week
-(`AskService.ContextAsync`) and the facts in **AI Inbox → Memory** (`MemoryService.PromptBlock`).
+(`AskService.ContextAsync`) and the facts on the **Memory** page (`MemoryService.PromptBlock`).
 Its suggestions are always saved for review, never applied automatically.
 
 ## Add a mail system

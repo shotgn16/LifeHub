@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.2.2
+- **Memory** is now in the menu: add things and see everything LifeHub knows.
+- A **Remember** button in the Ask box, and `/remember` on Telegram, save things straight to memory.
+
 ## 3.2.1
 - Reopening LifeHub after the phone or tab was asleep no longer freezes: it reconnects (or reloads
   itself) straight away.

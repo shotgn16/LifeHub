@@ -64,15 +64,10 @@ public sealed class MemoryActionHandler : IAiActionHandler, IUserOnlyAction
 
     public async Task<string> ApplyAsync(AiSuggestion s, CancellationToken ct)
     {
-        if (LooksSecret(s.Title)) throw new InvalidOperationException("That looks like a password or account detail — LifeHub doesn't remember those");
         var fact = await _memory.AddAsync(s.Title, source: s.Origin is "telegram" ? "telegram" : "ask");
         s.Extra["undo"] = $"memory:{fact.Id}";
         return "Remembered";
     }
-
-    private static bool LooksSecret(string text) =>
-        System.Text.RegularExpressions.Regex.IsMatch(text, @"password|passcode|\bpin\b|sort code|account number|card number|cvv|\b\d{12,19}\b",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 }
 
 /// <summary>"Paid the council tax", "got the milk": ticks off a task or a shopping item that's already on a list.</summary>

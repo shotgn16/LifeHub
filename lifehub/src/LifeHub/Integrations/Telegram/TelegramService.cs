@@ -267,6 +267,18 @@ public sealed class TelegramService : BackgroundService, IChatNotifier
                 await SendTextAsync(chatId, items.Count == 0 ? "The shopping list is empty." :
                     "<b>Shopping list</b>\n" + string.Join("\n", items.Select(x => "• " + Html(x.Quantity > 1 ? $"{x.Name} ×{x.Quantity:0.##}" : x.Name))), ct: ct);
                 return;
+            case "/remember":
+                var memory = _sp.GetRequiredService<MemoryService>();
+                var fact = text.Length > command.Length ? text[(text.IndexOf(' ') + 1)..].Trim() : "";
+                if (!memory.IsOn) { await SendTextAsync(chatId, "Memory is switched off in LifeHub (Settings → Modules).", ct: ct); return; }
+                if (fact.Length == 0) { await SendTextAsync(chatId, "Send it like this: <i>/remember Sam is vegetarian</i>", ct: ct); return; }
+                try
+                {
+                    var n = await memory.AddLinesAsync(fact, source: "telegram");
+                    await SendTextAsync(chatId, n == 1 ? "Remembered ✓" : $"Remembered {n} things ✓", ct: ct);
+                }
+                catch (InvalidOperationException ex) { await SendTextAsync(chatId, Html(ex.Message), ct: ct); }
+                return;
             case "/stop":
                 await UnlinkAsync(user.Id);
                 return;
@@ -389,7 +401,7 @@ public sealed class TelegramService : BackgroundService, IChatNotifier
     private static string HelpText() =>
         "Ask me anything about your LifeHub, or tell me what to do. For example:\n" +
         "• <i>What's due this week?</i>\n• <i>Add milk and eggs</i>\n• <i>I'm out Thursday 2 till 4</i>\n• <i>Remember the bins go out Tuesday night</i>\n\n" +
-        "I always check with you before changing anything.\n/today — today at a glance\n/shopping — the shopping list\n/stop — disconnect this chat";
+        "I always check with you before changing anything.\n/today — today at a glance\n/shopping — the shopping list\n/remember … — save something to LifeHub's memory\n/stop — disconnect this chat";
 
     /// <summary>Today at a glance, without the AI.</summary>
     private async Task<string> TodayAsync()

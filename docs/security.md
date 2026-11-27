@@ -85,7 +85,7 @@ phone.
 
 ## Memory and Ask LifeHub
 
-- Facts in **AI Inbox → Memory** are stored encrypted like everything else and are given to the
+- Facts in **Memory (in the menu)** are stored encrypted like everything else and are given to the
   AI as background information, not as instructions. They're private to each person unless shared.
 - Only things a person types or says can add to memory, change their schedule or tick things off
   (`IUserOnlyAction`); these actions are never offered when the AI reads an email.

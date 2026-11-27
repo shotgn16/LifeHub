@@ -1,0 +1,125 @@
+@page "/memory"
+@inherits LiveComponent
+@inject MemoryService Memory
+@inject AiService Ai
+@inject UiState Ui
+
+<PageTitle>Memory · LifeHub</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Memory</h1>
+        <div class="sub">@(facts.Count == 0 ? "Nothing yet" : $"{facts.Count} thing{(facts.Count == 1 ? "" : "s")} LifeHub knows") · used by the AI when it reads your email, answers questions and plans meals</div>
+    </div>
+</div>
+
+@if (!Memory.IsOn)
+{
+    <div class="alert info small"><Icon Name="alert" /> <div>Memory is switched off, so the AI doesn't use any of this. Switch it on in <a href="settings?tab=modules">Settings → Modules</a>.</div></div>
+}
+
+<div class="card" style="margin-bottom:16px">
+    <h2 style="margin-bottom:4px">Add something</h2>
+    <p class="small muted" style="margin-top:0">Routines, diets, people, regular arrangements — anything the AI should keep in mind. One per line.
+        Don't add passwords or bank details.</p>
+    <textarea @bind="draft" @bind:event="oninput" rows="2" maxlength="2000" placeholder="e.g. Sam is vegetarian" aria-label="Something to remember"></textarea>
+    <div class="ask-buttons">
+        <label class="check" style="margin:0"><input type="checkbox" @bind="shared" /> Everyone in the household can use this</label>
+        <button class="btn primary right" disabled="@string.IsNullOrWhiteSpace(draft)" @onclick="Add"><Icon Name="plus" Size="15" /> Remember</button>
+    </div>
+    @if (Ai.IsAvailable)
+    {
+        <p class="tiny muted" style="margin:10px 0 0">You can also tell LifeHub — <em>"remember the window cleaner comes on Mondays"</em> — with Ask, or <code>/remember …</code> on Telegram.</p>
+    }
+</div>
+
+<div class="card">
+    <div class="card-head">
+        <h2>What LifeHub knows</h2>
+        @if (facts.Count > 5)
+        {
+            <div class="right"><input type="search" @bind="filter" @bind:event="oninput" placeholder="Search" aria-label="Search memory" style="width:180px" /></div>
+        }
+    </div>
+    <ul class="list">
+        @if (facts.Count == 0) { <li class="empty small">Nothing yet — add something above.</li> }
+        @foreach (var f in Shown)
+        {
+            var mine = f.OwnerId == (UserScope.UserId ?? Guid.Empty) || f.OwnerId == Guid.Empty;
+            <li class="row">
+                @if (editing == f.Id)
+                {
+                    <input type="text" class="grow" @bind="editText" maxlength="@MemoryService.MaxFactChars" aria-label="Edit" />
+                    <button class="btn sm" @onclick="() => editing = null">Cancel</button>
+                    <button class="btn sm primary" @onclick="() => Save(f)">Save</button>
+                }
+                else
+                {
+                    <div class="grow">
+                        <div class="title">@f.Text</div>
+                        <div class="meta">
+                            <span>@(f.Shared ? (mine ? "Whole household" : "Shared by someone else") : "Just you")</span>
+                            <span>@(f.Source switch { "ask" => "from Ask LifeHub", "telegram" => "from Telegram", "api" => "from Home Assistant / API", _ => "added by you" })</span>
+                            <span>@Fmt.Ago(f.CreatedUtc)</span>
+                        </div>
+                    </div>
+                    @if (mine)
+                    {
+                        <button class="btn sm" title="@(f.Shared ? "Only use it for you" : "Let everyone in the household's AI use it")" @onclick="() => ToggleShared(f)">@(f.Shared ? "Just me" : "Share")</button>
+                        <button class="icon-btn" title="Edit" @onclick="() => { editing = f.Id; editText = f.Text; }"><Icon Name="edit" Size="15" /></button>
+                        <button class="icon-btn" title="Forget" @onclick="() => Forget(f)"><Icon Name="trash" Size="15" /></button>
+                    }
+                }
+            </li>
+        }
+    </ul>
+</div>
+
+@code {
+    private List<MemoryFact> facts = new();
+    private string draft = "", filter = "", editText = "";
+    private bool shared;
+    private Guid? editing;
+
+    private IEnumerable<MemoryFact> Shown => string.IsNullOrWhiteSpace(filter) ? facts
+        : facts.Where(f => f.Text.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    protected override void OnInitialized()
+    {
+        Watch(Memory.Repo);
+        Load();
+    }
+
+    protected override void OnDataChanged() => Load();
+
+    private void Load() => facts = Memory.All().ToList();
+
+    private async Task Add()
+    {
+        try
+        {
+            var n = await Memory.AddLinesAsync(draft, shared);
+            draft = "";
+            Ui.Show(n == 1 ? "Remembered" : $"Remembered {n} things");
+            Load();
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+    }
+
+    private async Task Save(MemoryFact f) =>
+        await Ui.Try(async () => { f.Text = editText; await Memory.SaveAsync(f); editing = null; Load(); }, "Saved");
+
+    private async Task ToggleShared(MemoryFact f)
+    {
+        f.Shared = !f.Shared;
+        await Memory.SaveAsync(f);
+        Load();
+    }
+
+    private async Task Forget(MemoryFact f)
+    {
+        await Memory.DeleteAsync(f.Id);
+        Ui.Show("Forgotten");
+        Load();
+    }
+}

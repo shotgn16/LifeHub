@@ -31,6 +31,9 @@ ingress URLs need a Home Assistant session, so they don't suit API calls.
 | POST | `/api/v1/shopping` | `{"name":"Milk","quantity":2,"unit":"pints"}` | Adds the item, merging duplicates |
 | POST | `/api/v1/capture` | `{"text":"dentist Tuesday 2:30 and buy coffee"}` | AI quick capture. The actions follow your auto-apply settings. |
 | POST | `/api/v1/ask` | `{"text":"what's due this week?"}` | Ask LifeHub: returns `answer` and `suggestions` (each with an `id`), which wait for you to apply them. |
+| GET | `/api/v1/memory` | – | What LifeHub remembers (yours and shared). |
+| POST | `/api/v1/memory` | `{"text":"Sam is vegetarian","shared":false}` | Remembers something (one per line). |
+| DELETE | `/api/v1/memory/{id}` | – | Forgets something. |
 | POST | `/api/v1/suggestions/{id}/apply` | – | Applies a suggestion (from Ask or the AI Inbox). |
 | POST | `/api/v1/suggestions/{id}/skip` | – | Skips a suggestion. |
 | POST | `/api/v1/scan` | `{"barcode":"5000112637922","mode":"add\|use\|shopping","quantity":1}` | The scan result. Unknown barcodes return 404; scan them once in the app to name them. |
