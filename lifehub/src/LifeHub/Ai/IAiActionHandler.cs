@@ -24,3 +24,9 @@ public interface IAiActionHandler
     /// <summary>Performs the action. Returns a short result line shown in the AI Inbox.</summary>
     Task<string> ApplyAsync(AiSuggestion suggestion, CancellationToken ct);
 }
+
+/// <summary>
+/// An action only for things the user types or says (Ask LifeHub, quick capture, Telegram) — never offered
+/// when the AI reads an email, because an email's sender shouldn't be able to change your schedule or memory.
+/// </summary>
+public interface IUserOnlyAction { }

@@ -39,6 +39,8 @@ public static class LifeHubServices
         services.AddSingleton<MealService>();
         services.AddSingleton<PeopleService>();
         services.AddSingleton<NotesService>();
+        services.AddSingleton<MemoryService>();
+        services.AddSingleton<AskService>();
         services.AddSingleton<DealsService>();
         services.AddSingleton<SyncService>();
         services.AddSingleton<BibleArchiveService>();
@@ -64,6 +66,9 @@ public static class LifeHubServices
         services.AddSingleton<IAiActionHandler, ShoppingActionHandler>();
         services.AddSingleton<IAiActionHandler, PantryActionHandler>();
         services.AddSingleton<IAiActionHandler, PromotionActionHandler>();
+        services.AddSingleton<IAiActionHandler, ScheduleActionHandler>();
+        services.AddSingleton<IAiActionHandler, MemoryActionHandler>();
+        services.AddSingleton<IAiActionHandler, DoneActionHandler>();
         services.AddSingleton<AiService>();
 
         // ---------- Background jobs ----------

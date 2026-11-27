@@ -7,7 +7,7 @@ using LifeHub.Integrations.Ollama;
 
 namespace LifeHub.Ai;
 
-public sealed record AnalysisResult(string Summary, string Importance, List<AiSuggestion> Suggestions, string Category = "");
+public sealed record AnalysisResult(string Summary, string Importance, List<AiSuggestion> Suggestions, string Category = "", string Answer = "");
 
 /// <summary>
 /// Turns text (an email or a quick-capture note) into reviewed or auto-applied actions using
@@ -37,7 +37,11 @@ public sealed class AiService
 
     // ---------- Prompt & schema ----------
 
-    public string BuildSystemPrompt()
+    /// <summary>The actions the AI may propose for this kind of input (emails never get the user-only ones).</summary>
+    public IEnumerable<IAiActionHandler> HandlersFor(string origin) =>
+        origin == "email" ? _handlers.Where(h => h is not IUserOnlyAction) : _handlers;
+
+    public string BuildSystemPrompt(string origin = "email")
     {
         var s = _settings.Current;
         var now = _clock.Now;
@@ -45,7 +49,7 @@ public sealed class AiService
         sb.AppendLine($"You are the personal organiser assistant inside LifeHub for the {s.General.HouseholdName} household.");
         sb.AppendLine($"Right now it is {now.ToString("dddd d MMMM yyyy, HH:mm", CultureInfo.InvariantCulture)} ({_clock.Zone.Id}). ISO date today: {now:yyyy-MM-dd}.");
         sb.AppendLine("Read the input and propose concrete actions for the user. Available action types:");
-        foreach (var h in _handlers) sb.AppendLine($"- \"{h.Type}\": {h.Instructions}");
+        foreach (var h in HandlersFor(origin)) sb.AppendLine($"- \"{h.Type}\": {h.Instructions}");
         sb.AppendLine();
         sb.AppendLine($"Task categories: {string.Join(", ", s.General.TaskCategories)}.");
         sb.AppendLine($"Food categories: {string.Join(", ", s.General.FoodCategories)}.");
@@ -82,6 +86,8 @@ public sealed class AiService
             sb.AppendLine("Additional rules from the user:");
             sb.AppendLine(s.Ollama.ExtraInstructions);
         }
+        var memory = _sp.GetService<MemoryService>()?.PromptBlock();
+        if (!string.IsNullOrEmpty(memory)) sb.AppendLine().Append(memory);
         return sb.ToString();
     }
 
@@ -109,6 +115,7 @@ public sealed class AiService
                             ["title"] = Str(),
                             ["description"] = Str(),
                             ["date"] = Str(),
+                            ["end_date"] = Str(),
                             ["time"] = Str(),
                             ["duration_minutes"] = new JsonObject { ["type"] = "integer" },
                             ["category"] = Str(),
@@ -127,9 +134,11 @@ public sealed class AiService
 
     // ---------- Analysis ----------
 
-    public async Task<AnalysisResult> AnalyzeAsync(string input, string origin, CancellationToken ct = default)
+    public async Task<AnalysisResult> AnalyzeAsync(string input, string origin, CancellationToken ct = default,
+        string? system = null, JsonObject? schema = null)
     {
-        var json = await _ollama.ChatJsonAsync(BuildSystemPrompt(), input, BuildSchema(), ct);
+        var json = await _ollama.ChatJsonAsync(system ?? BuildSystemPrompt(origin), input, schema ?? BuildSchema(), ct);
+        var allowed = HandlersFor(origin).Select(h => h.Type).ToHashSet();
         var summary = Str(json, "summary") ?? "";
         var importance = Str(json, "importance") ?? "normal";
         var category = (Str(json, "email_type") ?? "").ToLowerInvariant();
@@ -141,9 +150,12 @@ public sealed class AiService
             {
                 var type = (Str(a, "type") ?? "").ToLowerInvariant();
                 var title = Str(a, "title");
-                if (string.IsNullOrWhiteSpace(title) || _handlers.All(h => h.Type != type)) continue;
+                if (string.IsNullOrWhiteSpace(title) || !allowed.Contains(type)) continue;
+                var extra = new Dictionary<string, string>();
+                if (Str(a, "end_date") is { Length: 10 } endDate) extra["end_date"] = endDate;
                 list.Add(new AiSuggestion
                 {
+                    Extra = extra,
                     Type = type,
                     Title = title.Trim(),
                     Description = Str(a, "description") ?? "",
@@ -195,7 +207,7 @@ public sealed class AiService
             // And promotions only come from marketing emails.
             list.RemoveAll(a => a.Type == "promotion" && origin == "email");
         }
-        return new AnalysisResult(summary, importance, list, category);
+        return new AnalysisResult(summary, importance, list, category, Str(json, "answer") ?? "");
     }
 
     public Task<AnalysisResult> AnalyzeEmailAsync(EmailMessage m, CancellationToken ct = default)
@@ -341,6 +353,19 @@ public sealed class AiService
             case "pantry":
                 var k = _sp.GetRequiredService<KitchenService>();
                 if (k.Pantry.Get(target) is { } p) await k.UndoAddAsync(p);
+                break;
+            case "plan":
+                await _sp.GetRequiredService<ScheduleService>().DeletePlanAsync(target);
+                break;
+            case "memory":
+                await _sp.GetRequiredService<MemoryService>().DeleteAsync(target);
+                break;
+            case "done-task":
+                await _sp.GetRequiredService<TaskService>().ReopenAsync(target);
+                break;
+            case "done-shopping":
+                var kk = _sp.GetRequiredService<KitchenService>();
+                if (kk.Shopping.Get(target) is { Checked: true }) await kk.ToggleAsync(target);
                 break;
         }
         s.Status = SuggestionStatus.Undone;

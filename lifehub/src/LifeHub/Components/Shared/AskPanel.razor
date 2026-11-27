@@ -1,0 +1,177 @@
+@inject AskService Ask
+@inject AiService Ai
+@inject TaskService Tasks
+@inject KitchenService Kitchen
+@inject SettingsService Settings
+@inject NotesService Notes
+@inject UiState Ui
+
+@* Ask LifeHub: one box for questions ("what's due this week?") and requests ("add milk", "I'm out Thursday 2–4").
+   LifeHub's answer is shown in purple; anything it would change waits for "Do it". *@
+<div class="ask">
+    <textarea @bind="text" @bind:event="oninput" rows="3" aria-label="Ask LifeHub"
+              placeholder="@(Ai.IsAvailable ? "Ask or tell LifeHub… e.g. What's due this week? · Add milk and eggs · I'm out Thursday 2 till 4 · Remember the bins go out Tuesday night" : "Type a task or something to buy…")"></textarea>
+
+    @if (!Ai.IsAvailable)
+    {
+        <div class="form-grid" style="margin-top:10px">
+            <div class="field">
+                <label>Category (for tasks)</label>
+                <select @bind="category">
+                    @foreach (var c in Settings.Current.General.TaskCategories) { <option>@c</option> }
+                </select>
+            </div>
+            <div class="field"><label>Due (optional)</label><input type="date" @bind="due" /></div>
+        </div>
+        <p class="small muted">Tip: set up an AI in <a href="settings?tab=ai">Settings → AI</a> to ask questions and add things in plain English.</p>
+    }
+
+    <div class="ask-buttons">
+        <button class="btn" disabled="@string.IsNullOrWhiteSpace(text)" @onclick="AddNote" title="Keep it as a note — LifeHub files it into a category"><Icon Name="note" Size="15" /> Save as note</button>
+        @if (Ai.IsAvailable)
+        {
+            <button class="btn primary right" disabled="@(busy || string.IsNullOrWhiteSpace(text))" @onclick="Send">
+                <Icon Name="sparkles" Size="15" /> @(busy ? "Thinking…" : "Ask")
+            </button>
+        }
+        else
+        {
+            <button class="btn right" disabled="@string.IsNullOrWhiteSpace(text)" @onclick="AddShopping"><Icon Name="cart" Size="15" /> Shopping item</button>
+            <button class="btn primary" disabled="@string.IsNullOrWhiteSpace(text)" @onclick="AddTask"><Icon Name="tasks" Size="15" /> Add task</button>
+        }
+    </div>
+
+    @if (asked is not null)
+    {
+        <div class="ask-q small muted">You asked: @asked</div>
+    }
+    @if (reply is not null)
+    {
+        <div class="ai-answer"><Icon Name="sparkles" Size="15" /> <div>@reply.Answer</div></div>
+        @if (items.Count > 0)
+        {
+            <ul class="list ask-list">
+                @foreach (var s in items)
+                {
+                    <li class="row">
+                        <span class="badge ai">@Label(s.Type)</span>
+                        <div class="grow">
+                            <div class="title">@s.Title</div>
+                            <div class="meta">
+                                @foreach (var bit in Meta(s)) { <span>@bit</span> }
+                                @if (s.Status != SuggestionStatus.Pending) { <span class="@(s.Status == SuggestionStatus.Failed ? "danger" : "")">@Status(s)</span> }
+                            </div>
+                        </div>
+                        @if (s.Status == SuggestionStatus.Pending)
+                        {
+                            <button class="btn sm" @onclick="() => Skip(s)">Skip</button>
+                            <button class="btn sm primary" @onclick="() => Apply(s)">Do it</button>
+                        }
+                    </li>
+                }
+            </ul>
+            @if (items.Count(i => i.Status == SuggestionStatus.Pending) > 1)
+            {
+                <button class="btn primary" style="margin-top:8px" @onclick="ApplyAll"><Icon Name="check" Size="15" /> Do all of these</button>
+            }
+        }
+    }
+</div>
+
+@code {
+    /// <summary>Called after something is saved that closes a pop-up (a note, a task without AI).</summary>
+    [Parameter] public EventCallback OnDone { get; set; }
+
+    private string text = "", category = "";
+    private string? asked;
+    private DateOnly? due;
+    private bool busy;
+    private AskReply? reply;
+    private List<AiSuggestion> items = new();
+
+    protected override void OnParametersSet()
+    {
+        if (string.IsNullOrEmpty(category)) category = Settings.Current.General.TaskCategories.FirstOrDefault() ?? "Admin";
+    }
+
+    private async Task Send()
+    {
+        busy = true;
+        var question = text.Trim();
+        try
+        {
+            reply = await Ask.AskAsync(question);
+            items = reply.Suggestions.ToList();
+            asked = question;
+            text = "";
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private string Label(string type) => Ai.Handlers.FirstOrDefault(h => h.Type == type)?.Label ?? type;
+
+    private static IEnumerable<string> Meta(AiSuggestion s)
+    {
+        if (s.Type == "schedule" && !string.IsNullOrEmpty(s.Category)) yield return s.Category.Replace('_', ' ');
+        if (s.Date is { } d)
+            yield return s.Extra.TryGetValue("end_date", out var end) && DateOnly.TryParse(end, CultureInfo.InvariantCulture, out var e) && e > d
+                ? $"{d.ToString("ddd d MMM", Fmt.Culture)} – {e.ToString("ddd d MMM", Fmt.Culture)}" : d.ToString("ddd d MMM", Fmt.Culture);
+        if (s.Time is { } t) yield return s.DurationMinutes is > 0 ? $"{t:HH:mm}–{t.AddMinutes(s.DurationMinutes.Value):HH:mm}" : t.ToString("HH:mm");
+        if (s.Type == "shopping" && s.Amount is > 1) yield return $"× {s.Amount:0.##}";
+        if (s.Type == "renewal" && s.Amount is > 0) yield return $"{s.Amount:0.00} {s.Currency}";
+    }
+
+    private static string Status(AiSuggestion s) => s.Status switch
+    {
+        SuggestionStatus.Applied => "✓ " + s.Result,
+        SuggestionStatus.Rejected => "Skipped",
+        SuggestionStatus.Failed => s.Result,
+        _ => s.Status.ToString()
+    };
+
+    private async Task Apply(AiSuggestion s)
+    {
+        var updated = await Ai.ApplyAsync(s.Id);
+        var i = items.FindIndex(r => r.Id == s.Id);
+        if (updated is not null && i >= 0) items[i] = updated;
+    }
+
+    private async Task Skip(AiSuggestion s)
+    {
+        await Ai.RejectAsync(s.Id);
+        var i = items.FindIndex(r => r.Id == s.Id);
+        if (Ai.Suggestions.Get(s.Id) is { } updated && i >= 0) items[i] = updated;
+    }
+
+    private async Task ApplyAll()
+    {
+        foreach (var s in items.Where(r => r.Status == SuggestionStatus.Pending).ToList()) await Apply(s);
+    }
+
+    private async Task AddTask()
+    {
+        foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            await Tasks.QuickAddAsync(line, category, due);
+        Ui.Show("Task added");
+        text = "";
+        await OnDone.InvokeAsync();
+    }
+
+    private async Task AddNote()
+    {
+        await Notes.AddAsync(text, source: "capture");
+        Ui.Show("Saved to Notes");
+        text = "";
+        await OnDone.InvokeAsync();
+    }
+
+    private async Task AddShopping()
+    {
+        foreach (var line in text.Split(new[] { '\n', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            await Kitchen.AddToShoppingAsync(line);
+        Ui.Show("Added to shopping list");
+        text = "";
+        await OnDone.InvokeAsync();
+    }
+}

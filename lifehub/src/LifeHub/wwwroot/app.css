@@ -707,3 +707,15 @@ table.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
   .usual-span { display: grid; gap: 6px; }
   .usual-hours input[type=time], .regular-times input[type=time] { flex: 1; min-width: 0; }
 }
+
+/* ---------- Ask LifeHub, memory ---------- */
+.ask textarea { width: 100%; min-height: 76px; resize: vertical; }
+.ask-buttons { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+.ask-q { margin-top: 14px; }
+.ai-answer { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--ai-border);
+  background: var(--ai-soft); color: var(--ai); border-radius: var(--radius-sm); white-space: pre-line; line-height: 1.45; }
+.ai-answer > svg { flex-shrink: 0; margin-top: 2px; }
+.ask-list { margin-top: 8px; }
+.ask-list .row { flex-wrap: wrap; }
+.memory-add { display: flex; gap: 8px; }
+.memory-add input { flex: 1; min-width: 0; }

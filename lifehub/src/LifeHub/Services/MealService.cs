@@ -40,6 +40,7 @@ public sealed class MealService
     private readonly ScheduleService _schedule;
     private readonly CalendarService _calendar;
     private readonly AiClient _ollama;
+    private readonly MemoryService _memory;
     private readonly SettingsService _settings;
     private readonly Clock _clock;
     private readonly ILogger<MealService> _log;
@@ -49,9 +50,9 @@ public sealed class MealService
 
     public MealService(IRepository<Recipe> recipes, IRepository<MealPlanEntry> entries, IRepository<MealDayNote> notes,
         IRepository<MealSuggestion> suggestions, KitchenService kitchen, ScheduleService schedule, CalendarService calendar,
-        AiClient ollama, SettingsService settings, Clock clock, ILogger<MealService> log, IRepository<DealOffer> deals)
+        AiClient ollama, SettingsService settings, Clock clock, ILogger<MealService> log, IRepository<DealOffer> deals, MemoryService memory)
     {
-        _deals = deals;
+        _deals = deals; _memory = memory;
         _recipes = recipes; _entries = entries; _notes = notes; _suggestions = suggestions; _kitchen = kitchen;
         _schedule = schedule; _calendar = calendar; _ollama = ollama; _settings = settings; _clock = clock; _log = log;
     }
@@ -392,6 +393,7 @@ public sealed class MealService
         sb.AppendLine($"Dietary requirements (must be met): {(m.Requirements.Count == 0 ? "none" : string.Join(", ", m.Requirements))}.");
         if (!string.IsNullOrWhiteSpace(m.Preferences)) sb.AppendLine($"Household preferences: {m.Preferences}");
         sb.AppendLine($"Use UK English and metric units (g, ml, tbsp, tsp) unless the recipe already uses others.");
+        sb.Append(_memory.PromptBlock());
         return sb.ToString();
     }
 
