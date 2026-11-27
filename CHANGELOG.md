@@ -9,7 +9,7 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
-## [3.2.1] – Unreleased
+## [3.2.1] – 2026-11-27
 
 ### Added
 - **Ask LifeHub, Memory and Telegram are modules**: switch each off in **Settings → Modules**
@@ -585,7 +585,8 @@ and existing Shortcuts and automations keep working.
   - Nightly backups.
 - Runs as a Home Assistant add-on (ingress), with Docker, or on Plesk (Docker, .NET Toolkit or IIS).
 
-[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v3.2.1...HEAD
+[3.2.1]: https://github.com/Shotgn16/LifeHub/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/Shotgn16/LifeHub/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/Shotgn16/LifeHub/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/Shotgn16/LifeHub/releases/tag/v3.0.0
