@@ -27,6 +27,7 @@
     case "ai" when User.IsAdmin: <SettingsAi /> break;
     case "email": <SettingsEmail /> break;
     case "notifications": <SettingsNotifications /> break;
+    case "telegram" when !AppHost.IsPhoneApp: <SettingsTelegram /> break;
     case "security": <SettingsSecurity /> break;
     case "backup" when User.IsAdmin: <SettingsBackup /> break;
     case "general" when User.IsAdmin: <SettingsGeneral /> break;
@@ -39,15 +40,15 @@
 
 @code {
     // The phone app on its own is one person's LifeHub with no sign-in.
-    private static readonly HashSet<string> PhoneHidden = new() { "people", "security", "computer" };
+    private static readonly HashSet<string> PhoneHidden = new() { "people", "security", "computer", "telegram" };
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
     private string Current => Tab ?? (User.IsAdmin ? "general" : "email");
     /// <summary>Tabs everyone sees (their own mailboxes, phones and sign-in); the rest are for admins.</summary>
-    private static readonly HashSet<string> PersonalTabs = new() { "appearance", "ha", "email", "notifications", "security" };
+    private static readonly HashSet<string> PersonalTabs = new() { "appearance", "ha", "email", "notifications", "telegram", "security" };
 
     private static readonly (string, string)[] Tabs =
     {
         ("general", "General"), ("appearance", "Appearance"), ("modules", "Modules"), ("people", "People"), ("ha", "Home Assistant"), ("ai", "AI"), ("email", "Email"),
-        ("notifications", "Notifications"), ("security", "Security & API"), ("backup", "Backup"), ("background", "Background tasks"), ("computer", "This computer")
+        ("notifications", "Notifications"), ("telegram", "Telegram"), ("security", "Security & API"), ("backup", "Backup"), ("background", "Background tasks"), ("computer", "This computer")
     };
 }

@@ -195,6 +195,28 @@ public static class Endpoints
             return Results.Ok(list.Select(s => new { s.Type, s.Title, s.Date, s.Time, status = s.Status.ToString(), s.Result }));
         });
 
+        // Ask LifeHub: an answer, plus suggestions that wait for POST /suggestions/{id}/apply (or the app's AI Inbox).
+        api.MapPost("/ask", async (CaptureRequest req, AskService ask) =>
+        {
+            if (!ask.IsAvailable) return Results.Problem("No AI is set up (Settings → AI)", statusCode: 503);
+            var reply = await ask.AskAsync(req.Text, "api");
+            return Results.Ok(new
+            {
+                answer = reply.Answer,
+                suggestions = reply.Suggestions.Select(s => new { s.Id, s.Type, s.Title, s.Date, s.Time, status = s.Status.ToString() })
+            });
+        });
+
+        api.MapPost("/suggestions/{id:guid}/apply", async (Guid id, AiService ai) =>
+            await ai.ApplyAsync(id) is { } s ? Results.Ok(new { status = s.Status.ToString(), s.Result }) : Results.NotFound());
+
+        api.MapPost("/suggestions/{id:guid}/skip", async (Guid id, AiService ai) =>
+        {
+            if (ai.Suggestions.Get(id) is null) return Results.NotFound();
+            await ai.RejectAsync(id);
+            return Results.Ok();
+        });
+
         api.MapGet("/tasks", (TaskService tasks, string? filter) =>
         {
             var list = filter == "today" ? tasks.DueToday() : tasks.Ordered(tasks.Open()).ToList();

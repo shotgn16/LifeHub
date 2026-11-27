@@ -1,4 +1,5 @@
 using LifeHub.Integrations.HomeAssistant;
+using LifeHub.Integrations.Telegram;
 
 namespace LifeHub.Services;
 
@@ -20,11 +21,12 @@ public sealed class NotificationService
     private readonly SettingsService _settings;
     private readonly Clock _clock;
     private readonly IDeviceNotifier? _device;
+    private readonly IReadOnlyList<IChatNotifier> _chats;
 
     public NotificationService(IRepository<Notice> repo, HomeAssistantClient ha, WebPushService push, SettingsService settings, Clock clock,
-        IEnumerable<IDeviceNotifier> device)
+        IEnumerable<IDeviceNotifier> device, IEnumerable<IChatNotifier> chats)
     {
-        _repo = repo; _ha = ha; _push = push; _settings = settings; _clock = clock; _device = device.FirstOrDefault();
+        _repo = repo; _ha = ha; _push = push; _settings = settings; _clock = clock; _device = device.FirstOrDefault(); _chats = chats.ToList();
     }
 
     /// <summary>The channel actually used: falls back to LifeHub's own push when HA has no phones set up.</summary>
@@ -70,6 +72,9 @@ public sealed class NotificationService
         var notice = new Notice { Title = title, Message = message, Level = level, Link = link, DedupeKey = dedupeKey, Category = category, Phone = phone };
         await _repo.UpsertAsync(notice);
         if (!phone) return true;
+        // Telegram too, for people who've connected a chat and want notifications there.
+        foreach (var chat in _chats)
+            try { await chat.SendAsync(notice); } catch { /* never stops the phone notification */ }
         // In the phone app the notification is shown right here; Home Assistant can still get a copy.
         if (_device is not null)
         {

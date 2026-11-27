@@ -275,7 +275,7 @@
     }), "Saved");
 
     private async Task SendTest() =>
-        await Ui.Try(() => Notices.NotifyAsync("LifeHub test", "If you can read this, notifications work.", NoticeLevel.Info), "Sent");
+        await Ui.Try(() => Notices.NotifyAsync("LifeHub test", "If you can read this, notifications work.", NoticeLevel.Info, category: "test"), "Sent");
 
     public async ValueTask DisposeAsync()
     {

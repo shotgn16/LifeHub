@@ -1,0 +1,184 @@
+@using LifeHub.Integrations.Telegram
+@implements IDisposable
+@inject TelegramService Telegram
+@inject SettingsService Settings
+@inject UserContext User
+@inject UiState Ui
+@inject AiService Ai
+
+@* Chat with LifeHub from Telegram: the admin connects a bot once, then each person connects their own chat. *@
+<div class="grid cols-2" style="align-items:start">
+    @if (User.IsAdmin)
+    {
+        <div class="card">
+            <h2 style="margin-bottom:4px">Your LifeHub bot</h2>
+            @if (!bot.IsReady)
+            {
+                <p class="small muted" style="margin-top:0">Set this up once for the household. Everyone then chats with the same bot, and each person only sees their own LifeHub.</p>
+                <ol class="steps">
+                    <li>In Telegram, open <a href="https://t.me/BotFather" target="_blank" rel="noopener">@@BotFather</a> and send <code>/newbot</code>.</li>
+                    <li>Give it a name (e.g. <em>Smith Home</em>) and a username ending in <code>bot</code>.</li>
+                    <li>BotFather sends you a token — a long code like <code>123456789:AAE…</code>. Copy it here:</li>
+                </ol>
+                <div class="field">
+                    <label>Bot token</label>
+                    <input type="password" @bind="token" @bind:event="oninput" autocomplete="off" placeholder="123456789:AAE…" />
+                    <div class="help">Kept encrypted. Anyone with the token could read the bot's messages, so don't share it.</div>
+                </div>
+                <button class="btn primary" disabled="@(busy || string.IsNullOrWhiteSpace(token))" @onclick="Connect">@(busy ? "Checking…" : "Connect")</button>
+            }
+            else
+            {
+                <p style="margin-top:0">Connected to <a href="https://t.me/@bot.BotUsername" target="_blank" rel="noopener"><strong>@@@bot.BotUsername</strong></a>@(string.IsNullOrEmpty(bot.BotName) ? "" : $" ({bot.BotName})").</p>
+                @if (!string.IsNullOrEmpty(Telegram.LastError))
+                {
+                    <div class="alert warn small"><Icon Name="alert" /> <div>@Telegram.LastError</div></div>
+                }
+                else if (!Telegram.Running)
+                {
+                    <div class="alert warn small"><Icon Name="alert" /> <div>The Telegram chat is switched off in <a href="settings?tab=background">Background tasks</a>.</div></div>
+                }
+                else
+                {
+                    <p class="small muted">Working@(Telegram.LastContactUtc is { } t ? $" — last checked {Fmt.Ago(t)}" : "").
+                        @(Ai.IsAvailable ? "" : "No AI is set up, so the bot can only add to the shopping list and tasks and show today and the shopping list.")</p>
+                }
+                <button class="btn danger sm" @onclick="Disconnect">@(confirmDisconnect ? "Really disconnect everyone?" : "Disconnect the bot")</button>
+
+                <h3 style="margin:18px 0 4px">Waiting to be connected</h3>
+                <p class="small muted" style="margin-top:0">People who've messaged the bot. Connect a chat only if you know whose it is.</p>
+                <ul class="list">
+                    @if (pairings.Count == 0) { <li class="empty small">Nobody waiting.</li> }
+                    @foreach (var p in pairings)
+                    {
+                        <li class="row" style="flex-wrap:wrap">
+                            <div class="grow">
+                                <div class="title">@p.Name @(string.IsNullOrEmpty(p.Username) ? "" : $"(@{p.Username})")</div>
+                                <div class="meta"><span>Code @p.Code</span><span>@((int)Math.Max(1, (p.ExpiresUtc - DateTime.UtcNow).TotalMinutes)) min left</span></div>
+                            </div>
+                            <select style="width:auto" @bind="approveAs[p.Code]" aria-label="Who is this?">
+                                <option value="">Who is this?</option>
+                                @foreach (var u in User.Everyone) { <option value="@u.Id">@u.Name</option> }
+                            </select>
+                            <button class="btn sm primary" disabled="@string.IsNullOrEmpty(approveAs.GetValueOrDefault(p.Code))" @onclick="() => Approve(p)">Connect</button>
+                            <button class="btn sm" @onclick="() => Telegram.Decline(p.Code)">Ignore</button>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+
+    <div class="card">
+        <h2 style="margin-bottom:4px">Your Telegram</h2>
+        @if (!bot.IsReady)
+        {
+            <p class="small muted" style="margin-top:0">Chat with LifeHub from Telegram — ask what's due, add to the shopping list, tell it you're out. @(User.IsAdmin ? "Set up the bot first." : "Someone who manages your LifeHub needs to set up the bot first (Settings → Telegram).")</p>
+        }
+        else if (me?.TelegramChatId is null)
+        {
+            <ol class="steps">
+                <li>Open <a class="btn sm" href="https://t.me/@bot.BotUsername" target="_blank" rel="noopener">@@@bot.BotUsername</a> in Telegram and press <strong>Start</strong>.</li>
+                <li>It sends you a 6-digit code. Enter it here:</li>
+            </ol>
+            <div class="memory-add">
+                <input type="text" inputmode="numeric" maxlength="7" @bind="code" @bind:event="oninput" placeholder="123456" aria-label="Code from the bot" />
+                <button class="btn primary" disabled="@(code.Count(char.IsDigit) != 6)" @onclick="Claim">Connect</button>
+            </div>
+        }
+        else
+        {
+            <p style="margin-top:0">Connected to <strong>@me.TelegramName</strong>. Try sending <em>"what's due this week?"</em></p>
+            <div class="row" style="padding:0">
+                <Toggle Value="me.TelegramNotify" ValueChanged="SetNotify" />
+                <div class="grow">
+                    <div class="title">Send my notifications here too</div>
+                    <div class="meta">Anything that goes to your phone (Settings → Notifications) also comes to Telegram, except during quiet hours.</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+                <button class="btn sm" @onclick="SendTest">Send a test message</button>
+                <button class="btn sm" @onclick="Unlink">Disconnect this chat</button>
+            </div>
+        }
+        <p class="tiny muted" style="margin:14px 0 0">LifeHub always asks before changing anything you mention in a chat. Messages go through Telegram's servers, so don't send anything you wouldn't put in a Telegram chat.</p>
+    </div>
+</div>
+
+@code {
+    private TelegramSettings bot = new();
+    private UserProfile? me;
+    private List<TelegramPairing> pairings = new();
+    private readonly Dictionary<string, string> approveAs = new();
+    private string token = "", code = "";
+    private bool busy, confirmDisconnect;
+
+    protected override void OnInitialized()
+    {
+        Load();
+        Telegram.Changed += OnChanged;
+        Settings.Changed += OnChanged;
+    }
+
+    private void Load()
+    {
+        bot = Settings.Household.Telegram;
+        me = User.Me;
+        pairings = Telegram.Pairings.ToList();
+        foreach (var p in pairings) approveAs.TryAdd(p.Code, "");
+    }
+
+    private void OnChanged() => InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    public void Dispose()
+    {
+        Telegram.Changed -= OnChanged;
+        Settings.Changed -= OnChanged;
+    }
+
+    private async Task Connect()
+    {
+        busy = true;
+        try
+        {
+            var name = await Telegram.ConnectAsync(token);
+            token = "";
+            Ui.Show($"Connected to @{name}");
+            Load();
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task Disconnect()
+    {
+        if (!confirmDisconnect) { confirmDisconnect = true; return; }
+        confirmDisconnect = false;
+        await Telegram.DisconnectBotAsync();
+        Ui.Show("Bot disconnected");
+        Load();
+    }
+
+    private async Task Claim() => await Ui.Try(async () => { await Telegram.ClaimAsync(code, User.Id); code = ""; Load(); }, "Telegram connected");
+
+    private async Task Approve(TelegramPairing p)
+    {
+        if (!Guid.TryParse(approveAs.GetValueOrDefault(p.Code), out var who)) return;
+        await Ui.Try(async () => { await Telegram.ClaimAsync(p.Code, who); Load(); }, "Connected");
+    }
+
+    private async Task SetNotify(bool on)
+    {
+        await Settings.UpdateUserAsync(User.Id, u => u.TelegramNotify = on);
+        Load();
+    }
+
+    private async Task SendTest() => await Ui.Try(() => Telegram.SendTestAsync(), "Sent — check Telegram");
+
+    private async Task Unlink()
+    {
+        await Telegram.UnlinkAsync(User.Id);
+        Ui.Show("Chat disconnected");
+        Load();
+    }
+}

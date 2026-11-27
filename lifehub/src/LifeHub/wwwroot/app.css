@@ -719,3 +719,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .ask-list .row { flex-wrap: wrap; }
 .memory-add { display: flex; gap: 8px; }
 .memory-add input { flex: 1; min-width: 0; }
+
+/* ---------- Telegram ---------- */
+.steps { padding-left: 20px; margin: 8px 0 12px; display: grid; gap: 8px; }
+.steps li { line-height: 1.5; }

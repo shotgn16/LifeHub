@@ -58,6 +58,9 @@ static WebApplication CreateLifeHub(string[] args, string? urls, bool windowsSer
     builder.Services.AddHostedService(sp => sp.GetRequiredService<HaListSyncService>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailSyncService>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationService>());
+    builder.Services.AddSingleton<LifeHub.Integrations.Telegram.TelegramService>();
+    builder.Services.AddSingleton<LifeHub.Integrations.Telegram.IChatNotifier>(sp => sp.GetRequiredService<LifeHub.Integrations.Telegram.TelegramService>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<LifeHub.Integrations.Telegram.TelegramService>());
 
     // ---------- Auth ----------
     builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

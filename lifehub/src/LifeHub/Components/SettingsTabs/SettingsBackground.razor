@@ -87,6 +87,16 @@
                 <div class="meta">Watches who's home in Home Assistant and sends the shopping list to whoever leaves. @LastRun(BackgroundJobs.Presence)</div>
             </div>
         </li>
+        @if (!AppHost.IsPhoneApp)
+        {
+            <li class="row">
+                <Toggle Value="@On(BackgroundJobs.Telegram)" ValueChanged="v => Set(BackgroundJobs.Telegram, v)" />
+                <div class="grow">
+                    <div class="title">Telegram chat</div>
+                    <div class="meta">Answers messages to your LifeHub bot (when it's set up in Settings → Telegram). @LastRun(BackgroundJobs.Telegram)</div>
+                </div>
+            </li>
+        }
     </ul>
     <p class="tiny muted">Tidying (old notifications, finished tasks, expired offers) runs hourly and can't be switched off. @LastRun(BackgroundJobs.Tidy)</p>
     <button class="btn primary" @onclick="Save">Save</button>

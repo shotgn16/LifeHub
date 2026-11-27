@@ -20,6 +20,19 @@ public sealed class AppSettings
     public List<UserProfile> Users { get; set; } = new();
     public HouseholdSettings Household { get; set; } = new();
     public BackgroundSettings Background { get; set; } = new();
+    public TelegramSettings Telegram { get; set; } = new();
+}
+
+/// <summary>The household's Telegram bot (Settings → Telegram). Each person links their own chat to it.</summary>
+public sealed class TelegramSettings
+{
+    public bool Enabled { get; set; }
+    /// <summary>From @BotFather. Anyone with it can read and send the bot's messages, so it's stored encrypted.</summary>
+    [Secret] public string BotToken { get; set; } = "";
+    /// <summary>The bot's @username and name, filled in when it's connected.</summary>
+    public string BotUsername { get; set; } = "";
+    public string BotName { get; set; } = "";
+    public bool IsReady => Enabled && !string.IsNullOrWhiteSpace(BotToken);
 }
 
 /// <summary>Names of LifeHub's background jobs (Settings → Background tasks).</summary>
@@ -34,6 +47,7 @@ public static class BackgroundJobs
     public const string Deals = "deals";
     public const string Backup = "backup";
     public const string Tidy = "tidy";
+    public const string Telegram = "telegram";
 }
 
 /// <summary>Which background jobs run, and how often (Settings → Background tasks).</summary>
@@ -96,6 +110,10 @@ public sealed class UserProfile
     public TimeOnly QuietFrom { get; set; } = new(22, 0);
     public TimeOnly QuietTo { get; set; } = new(7, 0);
     public ScheduleSettings Schedule { get; set; } = new();
+    /// <summary>Their Telegram chat with the household's bot (Settings → Telegram), and whether notifications go there too.</summary>
+    public long? TelegramChatId { get; set; }
+    public string TelegramName { get; set; } = "";
+    public bool TelegramNotify { get; set; } = true;
 
     // ---- Appearance (Settings → Appearance) ----
     /// <summary>auto (follow the device) · light · dark</summary>
