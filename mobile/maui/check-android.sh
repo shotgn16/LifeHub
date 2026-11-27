@@ -55,6 +55,12 @@ if [ -z "$running" ]; then
   adb logcat -d | grep -E "AndroidRuntime|DOTNET|monodroid|mono-rt" | head -120
   echo "----- crash buffer -----"; adb logcat -d -b crash | head -80
   echo "----- system -----"; adb logcat -d | grep -E "ActivityManager|ActivityTaskManager|libc|DEBUG|lowmemorykiller|lmkd" | grep -iE "lifehub|signal|fatal|kill|died|anr|backtrace|#0" | head -60
+  # The emulator's own Google Play services sometimes crash under memory pressure, and Android then stops every
+  # app using its font provider (WebView does). That isn't LifeHub's fault, so it only counts as a warning.
+  if adb logcat -d | grep -qE "Killing [0-9]+:$PKG.*depends on provider .* in dying proc com.google.android.gms"; then
+    echo "::warning::Android stopped LifeHub because the emulator's Google Play services crashed — not a LifeHub crash"
+    exit 0
+  fi
   echo "::error::LifeHub isn't running any more (crashed)"; exit 1
 fi
 echo "::notice::LifeHub opened and is still running"
