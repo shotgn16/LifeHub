@@ -53,6 +53,8 @@ adb logcat -d | grep -iE "lifehub|blazor|chromium.*console" | grep -iE "error|ex
 if [ -z "$running" ]; then
   echo "----- crash -----"
   adb logcat -d | grep -E "AndroidRuntime|DOTNET|monodroid|mono-rt" | head -120
+  echo "----- crash buffer -----"; adb logcat -d -b crash | head -80
+  echo "----- system -----"; adb logcat -d | grep -E "ActivityManager|ActivityTaskManager|libc|DEBUG|lowmemorykiller|lmkd" | grep -iE "lifehub|signal|fatal|kill|died|anr|backtrace|#0" | head -60
   echo "::error::LifeHub isn't running any more (crashed)"; exit 1
 fi
 echo "::notice::LifeHub opened and is still running"
