@@ -7,37 +7,42 @@
 ![Home Assistant add-on](https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5)
 
 LifeHub is a household organiser that runs on **your own computer**: Windows, Mac or Linux, Docker, or
-Home Assistant, with apps for Android, iPhone and iPad. It brings together things that usually live
-in a dozen different places:
+Home Assistant, with apps for Android, iPhone and iPad. It brings together the things that usually
+live in a dozen different places — **tasks, your week, renewals, the kitchen, shopping, meals and
+notes** — and adds an AI that **answers questions, remembers what matters to you and reads your
+email**, without your data leaving the house.
 
-- **renewals and subscriptions**
-- **tasks**
-- **kitchen stock, shopping and meal planning**
-- your **schedule**
-- quick **notes** that sort themselves
-- **deals** at supermarkets near you, turned into meal ideas
-- **Home Assistant**
-- a **local-AI email assistant**, powered by [Ollama](https://ollama.com), that turns emails into
-  tasks, calendar events, renewal updates and shopping items without your mail leaving the house
+- **Ask it anything:** *"what's due this week?"*, *"add milk and eggs"*, *"I'm out Thursday 2 till
+  4"* — in the app or on **Telegram**. It always asks before changing anything.
+- **It remembers:** tell it *"Sam is vegan"* or *"bins go out Tuesday night"*. It reminds you of bin
+  day, and when *"Sam over"* appears in your calendar it gives you a heads-up in the days before —
+  and suggests a vegan dinner for that day.
+- **It knows your week:** the days and hours you work, holidays, time out and time you keep free,
+  so **Plan my day** fits your tasks into the gaps.
+- **It reads your email** (Gmail, Outlook, iCloud, Exchange…) and turns it into tasks, events,
+  renewals and shopping — one tidy notification per check, never adverts.
+- **Your AI, your choice:** Ollama on your own computer, a model on your phone, or ChatGPT, Gemini
+  or Claude. Everything LifeHub stores is **encrypted**.
 
-Use it **on one computer**, **on your computer and your phone**, or as a **server for the whole
-household**, where everyone has their own tasks, email and notes. Food stock, meal planning and
-renewals can be shared or kept separate.
+Use it **on one computer**, **on your computer and your phone**, **on your phone on its own**, or as
+a **server for the whole household**, where everyone has their own tasks, email, schedule and
+memory. Food, meals and renewals can be shared or kept separate.
 
-It's **modular**: switch whole sections on or off, arrange the home screen, pick a theme and accent
-colour, or restyle it all with a few lines of CSS. Developers can add a section with one
-registration (see [extending.md](docs/extending.md)).
-
-It's written in **C# / ASP.NET Core 8 + Blazor Server**, with no JavaScript framework. Data is
-stored as JSON files in one folder.
+Everything is a **module** you can switch off, the home screen is yours to arrange, and it works in
+light and dark. It's written in **C# / ASP.NET Core 8 + Blazor**, with no JavaScript framework.
 
 <p align="center">
-  <img src="docs/images/dashboard.png" alt="LifeHub dashboard" width="72%">
+  <img src="docs/images/dashboard.png" alt="The Today page" width="72%">
   &nbsp;
   <img src="docs/images/scanner.png" alt="Barcode scanner on a phone" width="22%">
 </p>
 <p align="center">
-  <img src="docs/images/setup-assistant.png" alt="The setup assistant" width="48%">
+  <img src="docs/images/schedule-week.png" alt="Your week" width="48%">
+  &nbsp;
+  <img src="docs/images/memory.png" alt="Memory and heads-ups" width="48%">
+</p>
+<p align="center">
+  <img src="docs/images/ask.png" alt="Ask LifeHub" width="48%">
   &nbsp;
   <img src="docs/images/meals.png" alt="Meal planner" width="48%">
 </p>
@@ -46,33 +51,58 @@ stored as JSON files in one folder.
 
 ## Features
 
-| Area | What it does |
+### Everyday
+
+| | |
 |---|---|
-| **Today** | Shows the current period (work, free or busy), tasks due, your agenda, upcoming renewals, food to use up, and who's home. |
-| **Tasks** | Categories, priorities, recurrence, checklists and tags. Repeat issues stack onto one task with a ×N count. |
-| **Schedule** | Your usual week in plain terms (the days and hours you work, regular times you keep free) plus one-off **time off and plans** — holidays, time out, reserved time, extra shifts — even when they're not in a calendar. Day and week views. **Plan my day** slots tasks into free gaps, and runs automatically every evening. |
-| **Renewals** | Domains, hosting, subscriptions, insurance and utilities: cost, cycle, usage, auto-renew. It records price-rise history and reminds you before each date. |
-| **Kitchen** | Fridge, freezer and cupboard stock with freeze/defrost and waste tracking. **Use-by** dates count down; **best-before** food (eggs, cereal, pasta…) fades on a scale. **Add from photo** lists your groceries and reads their dates. **Staples** predict when you'll run out. |
-| **Scan** | Phone barcode scanner with three modes: stock in, use up, and add to the shopping list. It looks products up on Open Food Facts, learns them after the first scan, and lets you undo. |
-| **Shopping** | Grouped by aisle. Only you add items: typed, scanned, from the HA list you choose (two-way, so Assist works) or from the meal planner. Staples running low appear as suggestions. Ticked items go into stock when you put them away. |
-| **Meals** | Plan up to two weeks around your calendar and energy. See what to buy, and get AI ideas that move meals, use up food, meet dietary needs (gluten free etc.) and improve recipes. You apply each idea yourself. |
-| **People** | Add everyone in the household. Each person has their own tasks, email accounts, AI inbox, schedule, notes, phones, look and API key. Choose whether food stock and shopping, meal planning, and renewals are shared. In the HA app, LifeHub asks who's using it, with an optional PIN. |
-| **Notes** | Drop in bits of text (ideas, links, gift ideas, door codes). The local AI files each one into a category, reusing yours, with tags. **Tidy up** merges near-duplicate categories. Notes are private, or shared one by one. |
-| **Deals** | Optional: checks offers at supermarkets near your town or postcode (offers pages, supermarket emails, pasted offers, leaflet photos), matches them to your shopping list, staples, recipes and dietary needs, and suggests meals on days that suit plus when to shop. |
-| **Home** | Home Assistant runs the house; LifeHub gives you one place to see and nudge it. Rooms, lights, climate, scenes, who's home and energy, all shown with friendly names. Setup is automatic. |
-| **Ask LifeHub** | One box for questions (*"what's due this week?"*) and requests (*"add milk"*, *"I'm out Thursday 2–4"*). It answers from your own lists and suggests changes you confirm with one tap. |
-| **Memory** | A short list of facts the AI keeps in mind — diets, routines, people — that you add or confirm. Used when reading email, answering and planning meals. |
-| **Telegram** | Chat with LifeHub from Telegram: ask, add, tick off, with buttons to confirm. Each person connects their own chat with a one-time code. Notifications can come there too. |
-| **AI Inbox** | Reads Gmail/IMAP, Microsoft 365 and on-prem Exchange. A local Ollama model classifies each email and proposes actions. Safe actions are applied automatically and can be undone. |
-| **Promotions** | Adverts and newsletters go into their own list instead of becoming tasks or shopping items, and clear themselves when they expire. |
-| **Email ↔ task link** | Delete a task and its email moves to the Bin. Delete the email and its task goes. |
-| **Notifications** | In-app bell plus phone push through **Home Assistant or LifeHub's own web push** (or both): a morning digest, renewal and task reminders, food expiry, and a "you've left home" shopping list. |
-| **Phone apps** | One app for Android, iPhone and iPad (`mobile/maui`). **Use it on its own** — LifeHub on the phone for one person, encrypted, with email checked in the background and an AI on the phone — or **connect it to your LifeHub** with an offline copy. Tidy notifications, share menu, barcode scanner. Install it yourself or publish it to the stores. |
-| **Make it yours** | Themes (light/dark/auto), accent colour, density, a home screen you arrange, sections you switch on or off, and your own CSS on top of a small set of design tokens. |
-| **Desktop apps** | Installers for Windows, macOS and Linux with everything included. A setup assistant runs LifeHub on this computer only, on this computer + your phone, as a household server, in Docker or in Home Assistant, and can install the local AI (Ollama). |
-| **Private by design** | Everything LifeHub stores is encrypted (AES-256), with the key in Windows' DPAPI, the phone's keystore or a locked-down key file. Backups are encrypted too. |
-| **Any AI** | Ollama on your own computer (private, free), a model on the phone itself, or ChatGPT, Gemini, Claude or any OpenAI-compatible server. |
-| **REST API** | API-key endpoints for HA automations, Assist, iOS Shortcuts and USB barcode scanners. |
+| **Today** | What kind of time it is (work, free, out), tasks due, your agenda, renewals coming up, food to use up and who's home — arranged how you like. |
+| **Tasks** | Categories, priorities, repeats, checklists and tags. Repeat issues stack onto one task with a ×N count. |
+| **Schedule** | **My usual week** in plain terms — the days and hours you work, when your day starts and ends, regular times to keep free (gym, school run). **Time off and plans** for holidays, days off, time out, reserved time and extra shifts, even when they're not in a calendar. Day and week views. **Plan my day** fits tasks into free gaps, and can run every evening. |
+| **Renewals** | Domains, hosting, subscriptions, insurance and bills: cost, cycle, usage, auto-renew, price-rise history and reminders before each date. |
+| **Notes** | Drop in bits of text (ideas, links, gift ideas, door codes). The AI files each one into a category with tags; **Tidy up** merges near-duplicates. Private, or shared one by one. |
+| **Notifications** | Phone push through Home Assistant, LifeHub's own web push, the phone app or **Telegram**. Choose per kind (reminders, renewals, food, email, heads-ups, morning summary…) whether it reaches your phone, with quiet hours. |
+
+### Kitchen and food
+
+| | |
+|---|---|
+| **Kitchen** | Fridge, freezer and cupboard stock. **Use-by** dates count down; **best-before** food fades on a scale. **Add from photo** lists groceries and reads their dates. **Staples** predict when you'll run out. |
+| **Scan** | Phone barcode scanner: stock in, use up, add to shopping. Looks products up on Open Food Facts and learns them. |
+| **Shopping** | Grouped by aisle, shared two-way with a Home Assistant list (so Assist works), with staples running low as suggestions. Ticked items go into stock. |
+| **Meals** | Plan up to two weeks around your calendar and energy, see what to buy, and get AI ideas that move meals, use up food, meet dietary needs — and suit **guests**: it knows when someone vegan is coming and suggests a meal for that day. You apply each idea. |
+| **Deals** | Optional: offers at supermarkets near you, matched to your list, staples, recipes and diet, with meal ideas. |
+
+### Your AI
+
+| | |
+|---|---|
+| **Ask LifeHub** | One box for questions (*"am I free Thursday afternoon?"*) and requests (*"add milk"*, *"I'm out Thursday 2–4"*, *"I paid the council tax"*). It answers from your own lists and week, and every change waits for **Do it**. |
+| **Memory** | Its own page: everything LifeHub knows — diets, routines, people — added by you (one per line, the **Remember** button, or `/remember` on Telegram). Shared with the household or kept to yourself. Never saves passwords. |
+| **Remind me** | Turn any memory into a repeating reminder: *"bins go out Tuesday night"* → every Tuesday at 19:00. |
+| **Heads-ups** | When a calendar event mentions someone LifeHub remembers (*"Sam over"* + *"Sam is vegan"*), you're reminded on the days you choose — a week before down to the day itself — with meal ideas for their diet. |
+| **AI Inbox** | Reads Gmail/IMAP, Outlook/Microsoft 365, iCloud, Yahoo and Exchange (add a mailbox in a few clicks — **Sign in with Microsoft** or guided app passwords). Each email becomes suggested tasks, events, renewals or shopping; safe ones can apply themselves and be undone. Adverts go to **Promotions**. |
+| **Telegram** | Chat with LifeHub from Telegram: ask, add, tick off, with buttons to confirm, and get notifications there. Each person connects their own chat with a one-time code. |
+| **Any AI** | Ollama on your own computer (private, free), a model running on the phone, or ChatGPT, Gemini, Claude or any OpenAI-compatible server. |
+
+### Your home, your way
+
+| | |
+|---|---|
+| **People** | Everyone in the household has their own tasks, email, AI inbox, schedule, memory, notes, phones, look and API key. Choose what's shared. In the HA app, LifeHub asks who's using it, with an optional PIN. |
+| **Home** | Rooms, lights, climate, scenes, who's home and energy from Home Assistant, with friendly names. Set up automatically. |
+| **Modules** | Switch off anything you don't use — pages like Kitchen or Meals, and features like Ask, Memory or Telegram. |
+| **Make it yours** | Light, dark or automatic, accent colour, density, a home screen you arrange, and your own CSS on top of a small set of design tokens. |
+| **Background tasks** | Everything LifeHub does by itself (email checks, reminders, heads-ups, backups, Home Assistant sync…) can be switched off, rescheduled or run now. |
+| **Private by design** | Everything is encrypted (AES-256), with the key in Windows' DPAPI, the phone's keystore or a locked-down key file. Backups are encrypted too, with a recovery key. |
+
+### Runs anywhere
+
+| | |
+|---|---|
+| **Desktop apps** | Installers for Windows, macOS and Linux with everything included. A setup assistant runs LifeHub on this computer, for this computer + your phone, as a household server, in Docker or in Home Assistant, and can install Ollama. |
+| **Home Assistant add-on** | Install from this repository; it finds your people, calendars, phones and lists by itself. |
+| **Phone apps** | One app for Android, iPhone and iPad. **Use it on its own** (LifeHub on the phone for one person, encrypted, with email checked in the background and an AI on the phone) or **connect it to your LifeHub** with an offline copy. |
+| **REST API** | API-key endpoints for Home Assistant automations, Assist, iOS Shortcuts and USB barcode scanners — including Ask and Memory. |
 
 ## Quick start
 
@@ -101,6 +131,8 @@ everything up. New here? Start with the **[manual](docs/manual/README.md)**.
 | [Installation (advanced)](docs/installation.md) | Desktop apps, Home Assistant, Docker, Plesk/IIS, portable server, development, building the installers |
 | [Remote access & HTTPS](docs/remote-access.md) | Direct port, Cloudflare Tunnel, reverse proxies, HTTPS for the camera |
 | [Home Assistant](docs/home-assistant.md) | What's automatic, rooms, shared lists, notifications, sensors, automations |
+| [Ask, memory & Telegram](docs/manual/ask-and-telegram.md) | Ask LifeHub, Memory, reminders, heads-ups and the Telegram chat |
+| [Your schedule](docs/manual/schedule.md) | Your usual week, time off and plans, Plan my day |
 | [Email & AI](docs/email-and-ai.md) | Ollama, Gmail/IMAP, Microsoft 365, Exchange, classification, auto-apply and undo |
 | [Barcode scanner](docs/scanner.md) | Phone camera, photo, USB scanners, product learning |
 | [People & sharing](docs/people.md) | Several people, what's shared, signing in, PINs, per-person API keys |
@@ -140,9 +172,9 @@ everything up. New here? Start with the **[manual](docs/manual/README.md)**.
   macOS 12+, Linux with WebKitGTK). Or Docker, or the ASP.NET Core 8 runtime. The add-on and Docker
   image support amd64 and aarch64.
 - **For AI (optional):** an [Ollama](https://ollama.com) server (0.5 or later) on the same computer
-  or your network — the desktop app can install it for you. A 7–8B model
-  such as `qwen2.5:7b` works well. Add a vision model such as `qwen3-vl:4b-instruct` for photos and
-  handwriting.
+  or your network — the desktop app can install it for you. A 7–8B model such as `qwen2.5:7b`
+  works well; add a vision model such as `qwen3-vl:4b-instruct` for photos and handwriting. Or use
+  ChatGPT, Gemini or Claude with an API key, or the AI built into the phone app.
 - **To build:** the .NET 8 SDK.
 
 ## Contributing

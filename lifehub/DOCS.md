@@ -12,13 +12,21 @@ Full documentation: <https://github.com/shotgn16/LifeHub/tree/main/docs>
    calendars, phones, energy sensors and to-do lists. No token is needed. Review or change them in
    **Settings → Home Assistant**.
 2. **Settings → AI.** Point LifeHub at your Ollama server (for example
-   `http://192.168.1.50:11434`) and pick a model. `localhost` means the add-on container itself,
-   so use the Ollama machine's IP.
-3. **Settings → Email.** Add Gmail/IMAP, Microsoft 365 or Exchange mailboxes.
+   `http://192.168.1.50:11434`) and pick a model — `localhost` means the add-on container itself,
+   so use the Ollama machine's IP. Or choose ChatGPT, Gemini or Claude and paste an API key.
+   Then press **Ask** at the top of any page.
+3. **Settings → Email → Add mailbox.** Sign in with Microsoft, or follow the steps for a Gmail,
+   iCloud, Yahoo or other mailbox.
 4. **Settings → Notifications**: Home Assistant app, LifeHub's own notifications, or both.
 5. **Settings → People** (optional): add the rest of the household and choose what's shared
    (food & shopping, meals, renewals). Tasks, email and notes are always each person's own.
-6. **Settings → Security & API** (optional). Set your own username and password if you also want
+6. **Schedule → My usual week**: the days and hours you work. Add holidays and time out with
+   **Time off or plans**.
+7. **Memory** (in the menu): things LifeHub should keep in mind, like *"Sam is vegan"* or
+   *"bins go out Tuesday night"*. Use **Remind me** for routines; **Heads-ups** remind you before
+   calendar events involving them.
+8. **Settings → Telegram** (optional): chat with LifeHub and get notifications in Telegram.
+9. **Settings → Security & API** (optional). Set your own username and password if you also want
    to use the direct port (8099) or your own hostname. Copy **your** API key for `rest_command`s,
    Shortcuts and the phone apps.
 

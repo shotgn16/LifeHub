@@ -1,7 +1,7 @@
 name: LifeHub
 version: "3.2.2"
 slug: lifehub
-description: Household organiser — tasks, renewals, kitchen & meals, notes, schedule and a local-AI email assistant
+description: Household organiser — tasks, your week, renewals, kitchen & meals and notes, with a private AI that answers questions, remembers what matters and reads your email
 url: https://github.com/Shotgn16/LifeHub
 # Ready-made image built by .github/workflows/addon-image.yml — HA downloads it instead of compiling.
 image: "ghcr.io/shotgn16/lifehub-{arch}"
