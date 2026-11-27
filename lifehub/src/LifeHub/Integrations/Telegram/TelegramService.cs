@@ -495,5 +495,6 @@ public sealed class TelegramService : BackgroundService, IChatNotifier
         }
     }
 
-    private static string Html(string s) => WebUtility.HtmlEncode(s ?? "");
+    /// <summary>Escapes text for Telegram's HTML mode (only &amp;, &lt; and &gt; need it).</summary>
+    private static string Html(string s) => (s ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 }

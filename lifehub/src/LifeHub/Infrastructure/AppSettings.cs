@@ -21,6 +21,20 @@ public sealed class AppSettings
     public HouseholdSettings Household { get; set; } = new();
     public BackgroundSettings Background { get; set; } = new();
     public TelegramSettings Telegram { get; set; } = new();
+    public MemorySettings Memory { get; set; } = new();
+}
+
+/// <summary>Heads-ups (the Memory page): upcoming calendar events that match something LifeHub remembers.</summary>
+public sealed class MemorySettings
+{
+    /// <summary>How far ahead to look in your calendars.</summary>
+    public int LookAheadDays { get; set; } = 7;
+    /// <summary>Which days before an event to remind you (0 = on the day).</summary>
+    public List<int> RemindDaysBefore { get; set; } = new() { 6, 3, 1, 0 };
+    /// <summary>When the day's heads-ups are sent.</summary>
+    public TimeOnly HeadsUpTime { get; set; } = new(8, 0);
+    /// <summary>Suggest meals for days when someone with dietary needs is coming (needs an AI and Meals).</summary>
+    public bool SuggestMeals { get; set; } = true;
 }
 
 /// <summary>The household's Telegram bot (Settings → Telegram). Each person links their own chat to it.</summary>
@@ -48,6 +62,7 @@ public static class BackgroundJobs
     public const string Backup = "backup";
     public const string Tidy = "tidy";
     public const string Telegram = "telegram";
+    public const string HeadsUps = "headsups";
 }
 
 /// <summary>Which background jobs run, and how often (Settings → Background tasks).</summary>

@@ -155,6 +155,19 @@ Eq("note guess unsorted", NotesService.Guess("door code 1234", Array.Empty<strin
     Eq("plan covers", plan.Covers(new(2026, 3, 5)) && !plan.Covers(new(2026, 3, 8)), true);
     Eq("plan name", plan.Name, "Day off");
 }
+{
+    // 3.2.2: heads-ups and reminders from memory
+    var facts = new List<MemoryFact> { new() { Text = "Sam is vegan" }, new() { Text = "The bins go out on Tuesday night" }, new() { Text = "Grandma is diabetic" } };
+    Eq("event matches a name", string.Join(",", HeadsUpService.Match(facts, "Sam over for dinner").Select(f => f.Text)), "Sam is vegan");
+    Eq("possessive matches", HeadsUpService.Match(facts, "Grandma's birthday").Count, 1);
+    Eq("weekday words don't match", HeadsUpService.Match(facts, "Tuesday team meeting").Count, 0);
+    Eq("no false match", HeadsUpService.Match(facts, "Samuel's party").Count, 0);
+    Eq("diet detected", HeadsUpService.IsDiet("Sam is vegan") && HeadsUpService.IsDiet("Max doesn't eat pork") && !HeadsUpService.IsDiet("Sam likes football"), true);
+    var g = MemoryService.GuessReminder("The bins go out on Tuesday night");
+    Eq("bins reminder guess", $"{g.Kind} {g.Day} {g.Time:HH:mm} {g.Routine}", "Weekly Tuesday 19:00 True");
+    Eq("daily guess", MemoryService.GuessReminder("Feed the fish every morning").Kind, RecurrenceKind.Daily);
+    Eq("secrets refused", MemoryService.LooksSecret("my PIN is 1234") && !MemoryService.LooksSecret("Sam is vegan"), true);
+}
 Eq("html text", HtmlText.Extract("<html><body><p>Hello <b>world</b></p><script>x()</script></body></html>").Trim(), "Hello world");
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;

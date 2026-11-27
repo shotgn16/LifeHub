@@ -17,6 +17,14 @@ on the add-on page. That file is a shorter version of this one.
 - **Remember** button in the Ask / Add box saves what you typed straight to memory — no AI needed.
 - Telegram: `/remember …`. API: `GET`/`POST /api/v1/memory`, `DELETE /api/v1/memory/{id}`.
 
+- **Heads-ups**: when a calendar event mentions someone or something LifeHub remembers ("Sam over"
+  + "Sam is vegan"), you're reminded before it — on the days you choose, from a week before to the
+  day itself — with what to keep in mind. A new **Heads-ups** notification kind and background task.
+- **Meals for guests**: for dietary needs, LifeHub suggests meals for that day in Meals (you apply
+  them), and the meal planner's own suggestions know who's coming when. New "Add a meal" suggestion.
+- **Remind me** on any memory fact turns it into a repeating reminder (e.g. bins every Tuesday at
+  19:00), guessed from the wording and editable.
+
 ### Changed
 - Passwords, PINs and account numbers are refused however they're added to memory.
 

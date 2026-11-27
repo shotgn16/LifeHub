@@ -3,6 +3,9 @@
 @inject MemoryService Memory
 @inject AiService Ai
 @inject UiState Ui
+@inject HeadsUpService HeadsUps
+@inject SettingsService Settings
+@inject UserContext User
 
 <PageTitle>Memory · LifeHub</PageTitle>
 
@@ -30,6 +33,58 @@
     @if (Ai.IsAvailable)
     {
         <p class="tiny muted" style="margin:10px 0 0">You can also tell LifeHub — <em>"remember the window cleaner comes on Mondays"</em> — with Ask, or <code>/remember …</code> on Telegram.</p>
+    }
+</div>
+
+<div class="card" style="margin-bottom:16px">
+    <div class="card-head">
+        <h2><Icon Name="bell" /> Heads-ups</h2>
+        <div class="right"><Toggle Value="headsOn" ValueChanged="SetHeadsUps" /></div>
+    </div>
+    <p class="small muted" style="margin-top:0">When something in your calendar mentions someone or something LifeHub knows about —
+        <em>"Sam over"</em> and <em>"Sam is vegan"</em> — you get a reminder on the days you choose leading up to it.</p>
+    @if (headsOn)
+    {
+        <div class="field">
+            <label>Remind me — days before</label>
+            <div class="chips">
+                @foreach (var d in new[] { 7, 6, 5, 4, 3, 2, 1, 0 })
+                {
+                    <button class="chip @(remindDays.Contains(d) ? "on" : "")" @onclick="() => ToggleDay(d)">@(d == 0 ? "On the day" : d == 1 ? "1 day" : $"{d} days")</button>
+                }
+            </div>
+        </div>
+        <div class="usual-span">
+            <span>Each morning at</span>
+            <div class="usual-hours"><input type="time" @bind="headsTime" aria-label="Heads-up time" /></div>
+        </div>
+        @if (User.IsAdmin)
+        {
+            <label class="check"><input type="checkbox" @bind="suggestMeals" /> Suggest meals for days when someone with dietary needs is coming (needs an AI)</label>
+        }
+        <button class="btn sm primary" style="margin-top:6px" @onclick="SaveHeadsUps">Save</button>
+
+        <h3 style="margin:18px 0 4px">Coming up</h3>
+        @if (upcoming is null) { <p class="small muted">Checking your calendars…</p> }
+        else if (upcoming.Count == 0) { <p class="small muted">Nothing in the next @Lookahead days matches what LifeHub knows. Names work best — e.g. <em>"Sam is vegan"</em> and an event called <em>"Sam over"</em>.</p> }
+        else
+        {
+            <ul class="list">
+                @foreach (var h in upcoming)
+                {
+                    <li class="row">
+                        <div class="grow">
+                            <div class="title">@h.Event.Title <span class="muted small">· @HeadsUpService.When(h)</span></div>
+                            <div class="meta">@foreach (var f in h.Facts) { <span>@f.Text</span> }</div>
+                        </div>
+                        @if (h.AboutFood && h.DaysAway >= 1)
+                        {
+                            <button class="btn sm" disabled="@busyMeal" @onclick="() => SuggestMeals(h)"><Icon Name="sparkles" Size="14" /> Meal ideas</button>
+                        }
+                    </li>
+                }
+            </ul>
+        }
     }
 </div>
 
@@ -63,6 +118,15 @@
                             <span>@Fmt.Ago(f.CreatedUtc)</span>
                         </div>
                     </div>
+                    @if (mine && Memory.ReminderOf(f) is { } rt)
+                    {
+                        <span class="badge ok" title="A repeating task in Tasks">⏰ @RepeatText(rt)</span>
+                        <button class="icon-btn" title="Stop reminding me" @onclick="() => StopReminder(f)"><Icon Name="x" Size="14" /></button>
+                    }
+                    else if (mine)
+                    {
+                        <button class="btn sm @(MemoryService.GuessReminder(f.Text).Routine ? "primary" : "")" title="Get a repeating reminder for this" @onclick="() => OpenReminder(f)"><Icon Name="bell" Size="14" /> Remind me</button>
+                    }
                     @if (mine)
                     {
                         <button class="btn sm" title="@(f.Shared ? "Only use it for you" : "Let everyone in the household's AI use it")" @onclick="() => ToggleShared(f)">@(f.Shared ? "Just me" : "Share")</button>
@@ -71,6 +135,33 @@
                     }
                 }
             </li>
+            @if (reminding == f.Id)
+            {
+                <li class="reminder-form">
+                    <div class="field"><label>Reminder</label><input type="text" @bind="remTitle" maxlength="120" /></div>
+                    <div class="reminder-when">
+                        <select @bind="remKind" aria-label="How often">
+                            <option value="@RecurrenceKind.Weekly">Every week on</option>
+                            <option value="@RecurrenceKind.Daily">Every day</option>
+                            <option value="@RecurrenceKind.Weekdays">Every weekday</option>
+                            <option value="@RecurrenceKind.Monthly">Every month</option>
+                        </select>
+                        @if (remKind == RecurrenceKind.Weekly)
+                        {
+                            <select @bind="remDay" aria-label="Day">
+                                @foreach (var d in UsualWeek.Order) { <option value="@d">@d</option> }
+                            </select>
+                        }
+                        <span class="muted">at</span>
+                        <input type="time" @bind="remTime" aria-label="Time" />
+                    </div>
+                    <div class="ask-buttons">
+                        <span class="tiny muted">It goes in Tasks as a repeating task, and you get a notification when it's due.</span>
+                        <button class="btn sm right" @onclick="() => reminding = null">Cancel</button>
+                        <button class="btn sm primary" @onclick="() => SaveReminder(f)">Remind me</button>
+                    </div>
+                </li>
+            }
         }
     </ul>
 </div>
@@ -84,13 +175,96 @@
     private IEnumerable<MemoryFact> Shown => string.IsNullOrWhiteSpace(filter) ? facts
         : facts.Where(f => f.Text.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase));
 
-    protected override void OnInitialized()
+    // Heads-ups
+    private bool headsOn, suggestMeals, busyMeal;
+    private HashSet<int> remindDays = new();
+    private TimeOnly headsTime;
+    private List<HeadsUp>? upcoming;
+    private int Lookahead => Math.Max(7, remindDays.DefaultIfEmpty(0).Max());
+
+    // Remind me
+    private Guid? reminding;
+    private string remTitle = "";
+    private RecurrenceKind remKind = RecurrenceKind.Weekly;
+    private DayOfWeek remDay = DayOfWeek.Monday;
+    private TimeOnly remTime = new(9, 0);
+
+    protected override async Task OnInitializedAsync()
     {
         Watch(Memory.Repo);
         Load();
+        var h = Settings.Household;
+        headsOn = h.Background.IsOn(BackgroundJobs.HeadsUps);
+        remindDays = h.Memory.RemindDaysBefore.ToHashSet();
+        headsTime = h.Memory.HeadsUpTime;
+        suggestMeals = h.Memory.SuggestMeals;
+        if (headsOn) upcoming = await HeadsUps.UpcomingAsync(Lookahead);
     }
 
-    protected override void OnDataChanged() => Load();
+    private void ToggleDay(int d) { if (!remindDays.Remove(d)) remindDays.Add(d); }
+
+    private async Task SetHeadsUps(bool on)
+    {
+        headsOn = on;
+        await Settings.UpdateAsync(s => { if (on) s.Background.Disabled.Remove(BackgroundJobs.HeadsUps); else s.Background.Disabled.Add(BackgroundJobs.HeadsUps); });
+        if (on) upcoming = await HeadsUps.UpcomingAsync(Lookahead);
+    }
+
+    private async Task SaveHeadsUps()
+    {
+        await Ui.Try(() => Settings.UpdateAsync(s =>
+        {
+            s.Memory.RemindDaysBefore = remindDays.OrderByDescending(x => x).ToList();
+            s.Memory.LookAheadDays = Lookahead;
+            s.Memory.HeadsUpTime = headsTime;
+            if (User.IsAdmin) s.Memory.SuggestMeals = suggestMeals;
+        }), "Saved");
+        upcoming = await HeadsUps.UpcomingAsync(Lookahead);
+    }
+
+    private async Task SuggestMeals(HeadsUp h)
+    {
+        busyMeal = true;
+        try
+        {
+            var n = await HeadsUps.SuggestMealsAsync(h);
+            Ui.Show(n == 0 ? "No meal ideas this time — is an AI set up and Meals switched on?" : $"{n} meal idea{(n == 1 ? "" : "s")} waiting in Meals");
+        }
+        catch (Exception ex) { Ui.Error(ex); }
+        finally { busyMeal = false; }
+    }
+
+    private void OpenReminder(MemoryFact f)
+    {
+        var g = MemoryService.GuessReminder(f.Text);
+        reminding = f.Id; remTitle = f.Text; remKind = g.Kind; remDay = g.Day; remTime = g.Time;
+    }
+
+    private async Task SaveReminder(MemoryFact f)
+    {
+        await Ui.Try(async () => { await Memory.AddReminderAsync(f, remTitle, remKind, remDay, remTime); reminding = null; Load(); }, "Reminder set — it's in Tasks");
+    }
+
+    private async Task StopReminder(MemoryFact f)
+    {
+        await Memory.RemoveReminderAsync(f);
+        Ui.Show("Reminder removed");
+        Load();
+    }
+
+    private static string RepeatText(TaskItem t) => t.Recurrence.Kind switch
+    {
+        RecurrenceKind.Daily => $"daily {t.DueTime:HH:mm}",
+        RecurrenceKind.Weekdays => $"weekdays {t.DueTime:HH:mm}",
+        RecurrenceKind.Monthly => $"monthly, {t.DueDate:d}th {t.DueTime:HH:mm}".Replace("1th", "1st").Replace("2th", "2nd").Replace("3th", "3rd").Replace("11st", "11th").Replace("12nd", "12th").Replace("13rd", "13th"),
+        _ => $"{t.DueDate?.DayOfWeek.ToString()[..3]} {t.DueTime:HH:mm}"
+    };
+
+    protected override void OnDataChanged()
+    {
+        Load();
+        if (headsOn) _ = InvokeAsync(async () => { upcoming = await HeadsUps.UpcomingAsync(Lookahead); StateHasChanged(); });
+    }
 
     private void Load() => facts = Memory.All().ToList();
 

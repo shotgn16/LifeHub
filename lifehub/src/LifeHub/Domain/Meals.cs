@@ -64,12 +64,14 @@ public sealed class MealDayNote : Entity
 [Owned(OwnScope.Meals)]
 public sealed class MealSuggestion : Entity
 {
-    /// <summary>move · tweak · use-up · diet · tip</summary>
+    /// <summary>move · tweak · use-up · diet · add (a meal for an empty slot) · tip</summary>
     public string Kind { get; set; } = "tip";
     public string Title { get; set; } = "";
     public string Body { get; set; } = "";
     public Guid? EntryId { get; set; }
     public DateOnly? NewDate { get; set; }
+    /// <summary>For "add": which meal of the day.</summary>
+    public string Slot { get; set; } = "";
     public Guid? RecipeId { get; set; }
     /// <summary>For tweaks: the adapted recipe (saved as a variant when applied).</summary>
     public Recipe? Proposed { get; set; }

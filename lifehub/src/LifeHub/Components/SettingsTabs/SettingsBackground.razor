@@ -88,6 +88,16 @@
                 <div class="meta">Watches who's home in Home Assistant and sends the shopping list to whoever leaves. @LastRun(BackgroundJobs.Presence)</div>
             </div>
         </li>
+        @if (Modules.IsOn(ModuleKeys.Memory))
+        {
+            <li class="row">
+                <Toggle Value="@On(BackgroundJobs.HeadsUps)" ValueChanged="v => Set(BackgroundJobs.HeadsUps, v)" />
+                <div class="grow">
+                    <div class="title">Heads-ups</div>
+                    <div class="meta">Reminds you before calendar events that match something in Memory (choose when on the Memory page). @LastRun(BackgroundJobs.HeadsUps)</div>
+                </div>
+            </li>
+        }
         @if (!AppHost.IsPhoneApp && Modules.IsOn(ModuleKeys.Telegram))
         {
             <li class="row">

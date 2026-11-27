@@ -41,6 +41,7 @@ public sealed class MealService
     private readonly CalendarService _calendar;
     private readonly AiClient _ollama;
     private readonly MemoryService _memory;
+    private readonly IServiceProvider _sp;
     private readonly SettingsService _settings;
     private readonly Clock _clock;
     private readonly ILogger<MealService> _log;
@@ -50,9 +51,9 @@ public sealed class MealService
 
     public MealService(IRepository<Recipe> recipes, IRepository<MealPlanEntry> entries, IRepository<MealDayNote> notes,
         IRepository<MealSuggestion> suggestions, KitchenService kitchen, ScheduleService schedule, CalendarService calendar,
-        AiClient ollama, SettingsService settings, Clock clock, ILogger<MealService> log, IRepository<DealOffer> deals, MemoryService memory)
+        AiClient ollama, SettingsService settings, Clock clock, ILogger<MealService> log, IRepository<DealOffer> deals, MemoryService memory, IServiceProvider sp)
     {
-        _deals = deals; _memory = memory;
+        _deals = deals; _memory = memory; _sp = sp;
         _recipes = recipes; _entries = entries; _notes = notes; _suggestions = suggestions; _kitchen = kitchen;
         _schedule = schedule; _calendar = calendar; _ollama = ollama; _settings = settings; _clock = clock; _log = log;
     }
@@ -477,10 +478,13 @@ public sealed class MealService
         var recipes = entries.Where(e => e.RecipeId is not null).Select(e => _recipes.Get(e.RecipeId!.Value)).Where(r => r is not null).Select(r => r!)
             .DistinctBy(r => r.Id).ToList();
 
+        var guests = await _sp.GetRequiredService<HeadsUpService>().MealNotesAsync(from, to);
         var sb = new StringBuilder();
         sb.AppendLine("DAYS (energy = how much time/energy that day leaves for cooking):");
         foreach (var d in days)
-            sb.AppendLine($"- {d.Date:yyyy-MM-dd} {d.Date.DayOfWeek}: energy {d.Energy}; {d.Summary}{(d.Events.Count > 0 ? "; events: " + string.Join(", ", d.Events.Take(4)) : "")}");
+            sb.AppendLine($"- {d.Date:yyyy-MM-dd} {d.Date.DayOfWeek}: energy {d.Energy}; {d.Summary}{(d.Events.Count > 0 ? "; events: " + string.Join(", ", d.Events.Take(4)) : "")}" +
+                          (guests.TryGetValue(d.Date, out var g) ? $"; KEEP IN MIND (from the user's memory): {g}" : ""));
+        sb.AppendLine($"\nMEAL SLOTS: {string.Join(", ", _settings.Current.Meals.Slots)}");
         sb.AppendLine("\nPLANNED MEALS (entry number, date, slot, meal):");
         for (var i = 0; i < entries.Count; i++)
         {
@@ -519,11 +523,12 @@ public sealed class MealService
                         ["type"] = "object",
                         ["properties"] = new JsonObject
                         {
-                            ["kind"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("move", "tweak", "use-up", "diet", "tip") },
+                            ["kind"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("move", "tweak", "use-up", "diet", "add", "tip") },
                             ["title"] = new JsonObject { ["type"] = "string" },
                             ["reason"] = new JsonObject { ["type"] = "string" },
                             ["entry"] = new JsonObject { ["type"] = "integer" },
                             ["new_date"] = new JsonObject { ["type"] = "string" },
+                            ["slot"] = new JsonObject { ["type"] = "string" },
                             ["recipe"] = new JsonObject { ["type"] = "integer" },
                             ["adapted_recipe"] = RecipeSchema()
                         },
@@ -541,6 +546,9 @@ public sealed class MealService
               use-up  = adapt recipe R<n> to use food that needs using up (recipe = n, adapted_recipe = the new version)
               diet    = recipe R<n> doesn't meet a dietary requirement — give the adapted version
               tweak   = a genuine improvement to recipe R<n> (flavour, simplicity, nutrition) with the adapted version
+              add     = a meal for an empty slot (title = the meal, new_date = YYYY-MM-DD, slot = one of the MEAL SLOTS) —
+                        especially on days marked KEEP IN MIND: make what's eaten that day suit those people (e.g. a vegan
+                        dinner when a vegan guest is coming); use "diet" instead when a meal is already planned
               tip     = anything else useful (batch cooking, leftovers for lunch, freezing portions…), no changes
             Never invent meals that aren't in the plan for move suggestions. Keep the reason to one or two sentences.
             {Household()}
@@ -564,6 +572,13 @@ public sealed class MealService
                     if (nd < from || nd > to || nd < _clock.Today || nd == entries[idx].Date) continue;
                     s.EntryId = entries[idx].Id;
                     s.NewDate = nd;
+                }
+                else if (kind == "add")
+                {
+                    if (!DateOnly.TryParseExact(S("new_date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var ad)) continue;
+                    if (ad < from || ad > to || ad < _clock.Today) continue;
+                    s.NewDate = ad;
+                    s.Slot = SlotOrDinner(S("slot"));
                 }
                 else if (kind is "tweak" or "use-up" or "diet")
                 {
@@ -603,6 +618,12 @@ public sealed class MealService
             if (other is not null) { other.Date = oldDate; await _entries.UpsertAsync(other); }
             result = other is null ? $"Moved {TitleOf(entry)} to {nd:ddd d MMM}" : $"Swapped {TitleOf(entry)} and {TitleOf(other)}";
         }
+        else if (s.Kind == "add" && s.NewDate is { } addDate)
+        {
+            var recipe = _recipes.Where(r => r.Name.Equals(s.Title, StringComparison.OrdinalIgnoreCase)).FirstOrDefault();
+            await _entries.UpsertAsync(new MealPlanEntry { Date = addDate, Slot = SlotOrDinner(s.Slot), Title = s.Title, RecipeId = recipe?.Id });
+            result = $"Added {s.Title} on {addDate:ddd d MMM}";
+        }
         else if (s.Proposed is { } proposed && s.RecipeId is { } rid)
         {
             var variant = await SaveVariantAsync(proposed, rid, s.PlanFrom, s.PlanTo);
@@ -611,6 +632,102 @@ public sealed class MealService
         else result = "Noted";
         s.Status = "applied";
         await _suggestions.UpsertAsync(s);
+        return result;
+    }
+
+    private string SlotOrDinner(string slot)
+    {
+        var slots = _settings.Current.Meals.Slots;
+        return slots.FirstOrDefault(x => x.Equals(slot?.Trim(), StringComparison.OrdinalIgnoreCase))
+            ?? slots.FirstOrDefault(x => x.Contains("dinner", StringComparison.OrdinalIgnoreCase) || x.Contains("tea", StringComparison.OrdinalIgnoreCase))
+            ?? slots.LastOrDefault() ?? "Dinner";
+    }
+
+    /// <summary>
+    /// Meal ideas for one day with guests (from a heads-up): dishes for empty slots, or versions of planned recipes that
+    /// suit them. Added to the suggestions in Meals without replacing the others; nothing changes until you apply one.
+    /// </summary>
+    public async Task<List<MealSuggestion>> SuggestForDayAsync(DateOnly date, string guestNote, CancellationToken ct = default)
+    {
+        if (!_ollama.IsConfigured) return new();
+        var planned = EntriesFor(date, date).Where(e => !e.Cooked).ToList();
+        var recipes = planned.Where(e => e.RecipeId is not null).Select(e => _recipes.Get(e.RecipeId!.Value)).Where(r => r is not null).Select(r => r!).DistinctBy(r => r.Id).ToList();
+        var known = _recipes.All().Where(r => r.VariantOf is null).Take(40).Select(r => r.Name).ToList();
+        var sb = new StringBuilder();
+        sb.AppendLine($"DAY: {date:yyyy-MM-dd} {date.DayOfWeek}");
+        sb.AppendLine($"KEEP IN MIND: {guestNote}");
+        sb.AppendLine($"MEAL SLOTS: {string.Join(", ", _settings.Current.Meals.Slots)}");
+        sb.AppendLine("PLANNED THAT DAY:" + (planned.Count == 0 ? " nothing" : ""));
+        foreach (var e in planned)
+            sb.AppendLine($"- {e.Slot}: {TitleOf(e)}{(e.RecipeId is { } id && recipes.FindIndex(r => r.Id == id) is var i and >= 0 ? $" [recipe R{i + 1}]" : "")}");
+        for (var i = 0; i < recipes.Count; i++) sb.AppendLine($"R{i + 1}. {Describe(recipes[i])}");
+        sb.AppendLine($"RECIPES WE KNOW: {(known.Count == 0 ? "none" : string.Join(", ", known))}");
+        sb.AppendLine($"IN THE KITCHEN: {StockList(50)}");
+        var schema = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["suggestions"] = new JsonObject
+                {
+                    ["type"] = "array",
+                    ["items"] = new JsonObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new JsonObject
+                        {
+                            ["kind"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("add", "diet") },
+                            ["title"] = new JsonObject { ["type"] = "string" },
+                            ["reason"] = new JsonObject { ["type"] = "string" },
+                            ["slot"] = new JsonObject { ["type"] = "string" },
+                            ["recipe"] = new JsonObject { ["type"] = "integer" },
+                            ["adapted_recipe"] = RecipeSchema()
+                        },
+                        ["required"] = new JsonArray("kind", "title", "reason")
+                    }
+                }
+            },
+            ["required"] = new JsonArray("suggestions")
+        };
+        var system = $"""
+            Someone with dietary needs is around on this day (see KEEP IN MIND). Suggest 1–3 meals so everyone can eat together:
+              add  = a meal for a slot with nothing planned (title = the meal's name, slot = one of the MEAL SLOTS; prefer a
+                     recipe we know, or something simple using what's in the kitchen)
+              diet = recipe R<n> is planned that day but doesn't suit them — give the adapted version (recipe = n)
+            Favour the main meal of the day (usually dinner) unless the event's time says otherwise. Keep each reason to one sentence
+            and say who it's for.
+            {Household()}
+            """;
+        var json = await _ollama.ChatJsonAsync(system, sb.ToString(), schema, ct);
+        var result = new List<MealSuggestion>();
+        if (json.TryGetProperty("suggestions", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            foreach (var x in arr.EnumerateArray())
+            {
+                string S(string n) => x.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()!.Trim() : "";
+                int I(string n) => x.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
+                var s = new MealSuggestion { Kind = S("kind"), Title = S("title"), Body = S("reason"), PlanFrom = date, PlanTo = date };
+                if (s.Title.Length == 0) continue;
+                if (s.Kind == "add")
+                {
+                    s.NewDate = date;
+                    s.Slot = SlotOrDinner(S("slot"));
+                    if (planned.Any(e => e.Slot == s.Slot)) continue;   // that slot already has a meal
+                }
+                else if (s.Kind == "diet")
+                {
+                    var idx = I("recipe") - 1;
+                    if (idx < 0 || idx >= recipes.Count) continue;
+                    if (!x.TryGetProperty("adapted_recipe", out var ar) || ParseRecipe(ar, out var summary) is not { } adapted) continue;
+                    s.RecipeId = recipes[idx].Id;
+                    adapted.VariantOf = recipes[idx].Id;
+                    adapted.VariantNote = string.IsNullOrWhiteSpace(summary) ? s.Body : summary;
+                    if (string.Equals(adapted.Name, recipes[idx].Name, StringComparison.OrdinalIgnoreCase)) adapted.Name = $"{recipes[idx].Name} (adapted)";
+                    s.Proposed = adapted;
+                }
+                else continue;
+                result.Add(s);
+            }
+        if (result.Count > 0) await _suggestions.UpsertManyAsync(result);
         return result;
     }
 

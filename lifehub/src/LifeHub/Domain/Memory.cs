@@ -12,4 +12,6 @@ public sealed class MemoryFact : Entity, IShareable
     public bool Shared { get; set; }
     /// <summary>Where it came from: "you", "ask", "telegram".</summary>
     public string Source { get; set; } = "you";
+    /// <summary>The repeating task made with "Remind me" on the Memory page, if any.</summary>
+    public Guid? ReminderTaskId { get; set; }
 }

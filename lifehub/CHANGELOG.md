@@ -3,6 +3,9 @@
 ## 3.2.2
 - **Memory** is now in the menu: add things and see everything LifeHub knows.
 - A **Remember** button in the Ask box, and `/remember` on Telegram, save things straight to memory.
+- **Heads-ups**: reminders before calendar events that involve someone LifeHub knows about ("Sam
+  over" + "Sam is vegan"), on the days you choose — with meal ideas for guests' diets.
+- **Remind me** turns a memory (like bin day) into a repeating reminder.
 
 ## 3.2.1
 - Reopening LifeHub after the phone or tab was asleep no longer freezes: it reconnects (or reloads

@@ -35,6 +35,33 @@ suggests meals.
   refuses things that look like passwords or bank details.
 - Emails can't add to your memory or change your schedule — only you can.
 
+### Reminders from memory
+
+Next to each fact on the **Memory** page is **Remind me** (highlighted when a fact sounds like a
+routine, such as *"bins go out Tuesday night"*). It suggests when — here every Tuesday at 19:00 —
+and you can change the wording, how often and the time. It becomes a repeating task in **Tasks**,
+so you get a notification when it's due. Remove it with the × next to ⏰.
+
+### Heads-ups
+
+When something in your calendar mentions someone or something LifeHub knows about — an event
+called *"Sam over for dinner"* and the fact *"Sam is vegan"* — LifeHub reminds you before it:
+*"Sam over for dinner — Monday (in 3 days). Remember: Sam is vegan."*
+
+- On the **Memory** page, under **Heads-ups**, choose which days before to be reminded — any of 7
+  days down to the day itself (6, 3 and 1 days before and on the day to start with) — and the
+  time of day. **Coming up** shows what it has found.
+- When the fact is about food (vegan, vegetarian, allergies, diabetic, doesn't eat…) and an AI is
+  set up, LifeHub also suggests meals for that day in **Meals**, the first time it tells you. Apply
+  the one you like. **Meal ideas** next to an event asks for them straight away.
+- Names work best: *"Sam is vegan"* matches *"Sam over"* and *"Sam's birthday"*. Days of the week
+  and ordinary words don't count as names.
+- Heads-ups come as notifications (choose where in **Settings → Notifications → Heads-ups**, so they
+  can go to Telegram too). Switch them off with the switch on the card, or in
+  **Settings → Background tasks**.
+
+When you ask the meal planner for suggestions, it also knows who's coming on which day.
+
 ## Telegram
 
 Chat with LifeHub from Telegram: ask the same questions and tell it the same things. It replies

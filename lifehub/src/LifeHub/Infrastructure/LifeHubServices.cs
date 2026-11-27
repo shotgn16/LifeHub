@@ -40,6 +40,7 @@ public static class LifeHubServices
         services.AddSingleton<PeopleService>();
         services.AddSingleton<NotesService>();
         services.AddSingleton<MemoryService>();
+        services.AddSingleton<HeadsUpService>();
         services.AddSingleton<AskService>();
         services.AddSingleton<DealsService>();
         services.AddSingleton<SyncService>();

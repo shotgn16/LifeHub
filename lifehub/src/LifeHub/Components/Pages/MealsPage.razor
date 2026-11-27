@@ -66,6 +66,10 @@ else if (tab == "plan")
                             @if (Meals.EntriesFor(nd, nd).FirstOrDefault(x => x.Slot == me.Slot) is { } other) { <span class="muted">(swaps with @Meals.TitleOf(other))</span> }
                         </p>
                     }
+                    @if (s.Kind == "add" && s.NewDate is { } ad)
+                    {
+                        <p class="small"><Icon Name="plus" Size="13" /> <strong>@ad.ToString("ddd d MMM")</strong> · @s.Slot</p>
+                    }
                     @if (s.Proposed is { } pr && s.RecipeId is { } rid && Meals.Recipes.Get(rid) is { } orig)
                     {
                         <details><summary class="small">See the changes to @orig.Name</summary>@Diff(orig, pr)</details>
@@ -375,7 +379,7 @@ else
 
     private static string SuggestionLabel(string k) => k switch
     {
-        "move" => "Move a meal", "tweak" => "Recipe idea", "use-up" => "Use it up", "diet" => "Dietary needs", _ => "Tip"
+        "move" => "Move a meal", "tweak" => "Recipe idea", "use-up" => "Use it up", "diet" => "Dietary needs", "add" => "Add a meal", _ => "Tip"
     };
 
     private async Task Suggest()

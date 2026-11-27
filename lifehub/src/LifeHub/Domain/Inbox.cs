@@ -131,6 +131,7 @@ public static class NoticeCategories
     public const string Deals = "deals";
     public const string Shopping = "shopping";
     public const string System = "system";
+    public const string HeadsUp = "headsup";
 
     public static readonly (string Key, string Title, string Help, NoticeRoute Default)[] All =
     {
@@ -139,6 +140,7 @@ public static class NoticeCategories
         (Food, "Food to use up", "Food in the kitchen nearing its date", NoticeRoute.Phone),
         (Email, "From your email", "What the AI added from your email (offers are never notified)", NoticeRoute.Phone),
         (Digest, "Morning summary", "Your day at a glance, at the time you choose", NoticeRoute.Phone),
+        (HeadsUp, "Heads-ups", "Coming up in your calendar, with what LifeHub remembers about it", NoticeRoute.Phone),
         (Deals, "Deals", "Offers that suit your meal plan and list", NoticeRoute.InApp),
         (Shopping, "Shopping list", "When LifeHub tidies the shopping list", NoticeRoute.InApp),
         (System, "LifeHub itself", "Backups, updates and problems that need you", NoticeRoute.InApp),
@@ -146,7 +148,7 @@ public static class NoticeCategories
 
     public static string Icon(string category) => category switch
     {
-        Reminders => "⏰", Renewals => "🔁", Food => "🥛", Email => "📬", Digest => "☀️", Deals => "🏷", Shopping => "🛒", _ => "ℹ️"
+        Reminders => "⏰", Renewals => "🔁", Food => "🥛", Email => "📬", Digest => "☀️", HeadsUp => "💡", Deals => "🏷", Shopping => "🛒", _ => "ℹ️"
     };
 }
 

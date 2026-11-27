@@ -47,6 +47,7 @@ public sealed class AutomationService : BackgroundService
             if (bg.IsOn(BackgroundJobs.Reminders)) await EachPerson(BackgroundJobs.Reminders, RemindersAsync);
             if (bg.IsOn(BackgroundJobs.Presence)) await Step(BackgroundJobs.Presence, PresenceAsync);
             if (bg.IsOn(BackgroundJobs.AutoPlan)) await EachPerson(BackgroundJobs.AutoPlan, AutoPlanAsync);
+            if (bg.IsOn(BackgroundJobs.HeadsUps) && S<MemoryService>().IsOn) await EachPerson(BackgroundJobs.HeadsUps, () => S<HeadsUpService>().RunAsync(ct));
             if (bg.IsOn(BackgroundJobs.HaSensors)) await Step(BackgroundJobs.HaSensors, () => PublishSensorsAsync(force: false));
         }
     }
