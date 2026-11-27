@@ -9,14 +9,13 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
-## [3.2.2] – Unreleased
+## [3.2.2] – 2026-11-27
 
 ### Added
 - **Memory has its own page in the menu**: add things (one per line) and see everything LifeHub
   knows, with search, edit, share and forget. Old links to AI Inbox → Memory go there.
 - **Remember** button in the Ask / Add box saves what you typed straight to memory — no AI needed.
 - Telegram: `/remember …`. API: `GET`/`POST /api/v1/memory`, `DELETE /api/v1/memory/{id}`.
-
 - **Heads-ups**: when a calendar event mentions someone or something LifeHub remembers ("Sam over"
   + "Sam is vegan"), you're reminded before it — on the days you choose, from a week before to the
   day itself — with what to keep in mind. A new **Heads-ups** notification kind and background task.
@@ -24,6 +23,7 @@ on the add-on page. That file is a shorter version of this one.
   them), and the meal planner's own suggestions know who's coming when. New "Add a meal" suggestion.
 - **Remind me** on any memory fact turns it into a repeating reminder (e.g. bins every Tuesday at
   19:00), guessed from the wording and editable.
+- Phone app 2.1.2.
 
 ### Changed
 - Passwords, PINs and account numbers are refused however they're added to memory.
@@ -604,7 +604,8 @@ and existing Shortcuts and automations keep working.
   - Nightly backups.
 - Runs as a Home Assistant add-on (ingress), with Docker, or on Plesk (Docker, .NET Toolkit or IIS).
 
-[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v3.2.1...HEAD
+[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v3.2.2...HEAD
+[3.2.2]: https://github.com/Shotgn16/LifeHub/compare/v3.2.1...v3.2.2
 [3.2.1]: https://github.com/Shotgn16/LifeHub/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/Shotgn16/LifeHub/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/Shotgn16/LifeHub/compare/v3.0.0...v3.1.0
