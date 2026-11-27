@@ -7,6 +7,7 @@
 - **Telegram**: chat with LifeHub and get notifications there (Settings → Telegram).
 - **Schedule**: set the days and hours you work, add holidays, time out and time you keep free —
   even if they're not in a calendar — and see the whole week at a glance.
+- Phone app 2.1.0 with Ask LifeHub, memory and the new Schedule.
 
 ## 3.1.0
 - **Easier email set-up**: Settings → Email → **Add mailbox**. Sign in with Microsoft, or follow

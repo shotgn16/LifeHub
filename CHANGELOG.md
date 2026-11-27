@@ -9,7 +9,7 @@ on the add-on page. That file is a shorter version of this one.
 
 ## [Unreleased]
 
-## [3.2.0] – Unreleased
+## [3.2.0] – 2026-11-27
 
 Ask LifeHub anything, chat with it on Telegram, give its AI a memory, and set up your week properly.
 
@@ -32,6 +32,8 @@ Ask LifeHub anything, chat with it on Telegram, give its AI a memory, and set up
 - **Schedule: week view** with each day's hours, time out, events and planned tasks.
 - New AI actions for things you say (never from email): schedule changes, remembering, and
   ticking off tasks and shopping. All can be undone from AI Inbox → History.
+- **Phone app 2.1.0** with Ask LifeHub, memory and the new Schedule (Telegram needs a LifeHub
+  server, so it isn't in the phone app on its own).
 - **Send a test message** in Settings → Telegram; the test notification in Settings →
   Notifications now always goes to your phone.
 
@@ -568,7 +570,8 @@ and existing Shortcuts and automations keep working.
   - Nightly backups.
 - Runs as a Home Assistant add-on (ingress), with Docker, or on Plesk (Docker, .NET Toolkit or IIS).
 
-[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/Shotgn16/LifeHub/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/Shotgn16/LifeHub/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/Shotgn16/LifeHub/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/Shotgn16/LifeHub/releases/tag/v3.0.0
 [1.5.0]: https://github.com/Shotgn16/LifeHub/compare/v1.4.0...v1.5.0
